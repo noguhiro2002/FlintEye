@@ -14,16 +14,17 @@
 
 **Publish tested release** は次のチャネルをサポートしています：
 
-| Requirement | `private-test` | `public-preview` | `stable` |
+| 要件 | `private-test` | `public-preview` | `stable` |
 | --- | --- | --- | --- |
-| Repository | Private | Public | Public |
-| Successful complete manual build, same default-branch commit | Required | Required | Required |
-| Repository variable | None | `PUBLIC_PREVIEW_ENABLED=true` | `PUBLIC_RELEASE_ENABLED=true` |
-| Device acceptance and license/source review | May be pending | Required | Required |
-| Embedded channel | Internal test | `preview` | `stable` |
-| GitHub release | Normal testing release | **Pre-release**, not Latest | Normal release, Latest |
-| Image tags | Exact preview only | Exact preview only | Version and `latest` |
-| Command installers | Excluded | Included, pinned preview | Included, pinned stable version |
+| リポジトリ | プライベート | パブリック | パブリック |
+| 同一のデフォルトブランチのコミットで手動ビルドが成功すること | 必須 | 必須 | 必須 |
+| リポジトリ変数 | なし | `PUBLIC_PREVIEW_ENABLED=true` | `PUBLIC_RELEASE_ENABLED=true` |
+| デバイスの受け入れおよびライセンス/ソースのレビュー | 保留中の場合あり | 必須 | 必須 |
+| 組み込みチャンネル | 内部テスト | `preview` | `stable` |
+| GitHubリリース | 通常のテスト用リリース | **Pre-release**（Latestにはしない） | 通常リリース、Latest |
+| イメージタグ | 正確なプレビューのみ | 正確なプレビューのみ | バージョンおよび `latest` |
+| コマンドインストーラー | 除外 | 含まれる、固定されたプレビュー | 含まれる、固定された安定版 |
+
 
 両方のパブリックフラグは `false` として始まります。まだ行われていないチェックを確認しないでください。パブリックプレビューの受け入れには、Windows x64、M1 Mac、Linux x64 が必要です（カメラキャプチャ、録画/再生、GUI 終了による所有プロセスの停止、バンドルされたプログラムを削除しつつデータを保持する Windows アンインストール）。その他のハードウェアの組み合わせは保留中として記録してください。[acceptance checks](ACCEPTANCE.ja.md) を参照してください。
 

@@ -1,0 +1,2 @@
+# Independent YAML parser used to validate generated MediaMTX configuration.
+PyYAML==6.0.3

@@ -10,6 +10,7 @@ FlintEye は UNDER DEVELOPMENT です。作業を開始する前に、[既知の
 提出する前に、該当するチェックを実行してください：
 
 ```sh
+python -m pip install -c packaging/constraints.txt -r requirements.txt -r tests/requirements.txt
 python -m unittest discover -s tests -v
 python packaging/check_docs.py
 npm --prefix frontend ci

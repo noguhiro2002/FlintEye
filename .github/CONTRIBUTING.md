@@ -9,6 +9,7 @@ For a change, describe the user-visible problem, make a focused pull request, an
 Run the applicable checks before submitting:
 
 ```sh
+python -m pip install -c packaging/constraints.txt -r requirements.txt -r tests/requirements.txt
 python -m unittest discover -s tests -v
 python packaging/check_docs.py
 npm --prefix frontend ci
