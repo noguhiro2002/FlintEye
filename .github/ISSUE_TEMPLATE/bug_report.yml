@@ -1,0 +1,42 @@
+name: Bug report
+description: Report a reproducible problem in this development version
+body:
+  - type: markdown
+    attributes:
+      value: |
+        FlintEye is under development. Check the known issues first. Do not include passwords, setup tokens, private camera URLs or footage. Report vulnerabilities privately through the Security tab.
+  - type: input
+    id: version
+    attributes:
+      label: Version or source commit
+      placeholder: 1.1.2-preview.1 or commit SHA
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Operating system and CPU
+      placeholder: Windows 11 x64 / macOS on M1 / Ubuntu 24.04 ARM64
+    validations:
+      required: true
+  - type: dropdown
+    id: installation
+    attributes:
+      label: Installation method
+      options:
+        - Source checkout
+        - Local installer build
+        - GitHub Actions artifact
+        - Published preview installer
+        - Docker
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps, expected result and actual result
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Redacted error messages or screenshots
+      description: Remove secrets, personal information and private camera addresses.

@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "sources": {
+    "ffmpeg": {
+      "version": "9.0.2",
+      "url": "https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz",
+      "filename": "ffmpeg-9.0.2.tar.xz",
+      "sha256": "8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e"
+    },
+    "x264": {
+      "version": "c24e06c2e184345ceb33eb20a15d1024d9fd3497",
+      "url": "https://codeload.github.com/mirror/x264/tar.gz/c24e06c2e184345ceb33eb20a15d1024d9fd3497",
+      "filename": "x264-c24e06c2e184345ceb33eb20a15d1024d9fd3497.tar.gz",
+      "sha256": "090d730e867fc63631782a1287974635d1237d0fa7c6fd1d09fd543620a56689"
+    },
+    "freetype": {
+      "version": "2.14.1",
+      "url": "https://codeload.github.com/freetype/freetype/tar.gz/refs/tags/VER-2-14-1",
+      "filename": "freetype-2.14.1.tar.gz",
+      "sha256": "44bd69d1f0750603410cfd4f26f1c5523c5a3a087a2dfa8639b757dc7c6677be"
+    },
+    "harfbuzz": {
+      "version": "15.1.0",
+      "url": "https://github.com/harfbuzz/harfbuzz/releases/download/15.1.0/harfbuzz-15.1.0.tar.xz",
+      "filename": "harfbuzz-15.1.0.tar.xz",
+      "sha256": "0fc7c565443a5f4be7da65ac5ee5bd737d9b158dc908708b7689a0a5796b0c8d"
+    },
+    "mediamtx": {
+      "version": "1.21.2",
+      "url": "https://codeload.github.com/bluenviron/mediamtx/tar.gz/refs/tags/v1.21.2",
+      "filename": "mediamtx-1.21.2.tar.gz",
+      "sha256": "46677eed3c31fbfd58b1092356f3160125fbd75d3cb7a413fef16c2aa3c13499"
+    },
+    "python": {
+      "version": "3.13.18",
+      "url": "https://www.python.org/ftp/python/3.13.18/Python-3.13.18.tar.xz",
+      "filename": "python-3.13.18.tar.xz",
+      "sha256": "abb0102e6d4ae027509bcb82327d9dd85515b44a3ba8ad538cfc5e9847029f68"
+    }
+  },
+  "assets": {
+    "hls_license": {
+      "version": "v1.7.3",
+      "url": "https://raw.githubusercontent.com/video-dev/hls.js/v1.7.3/LICENSE",
+      "filename": "hls-v1.7.3-LICENSE.txt",
+      "sha256": "ca8773cf798c7ed997d4dd7c8e23c348699f8d5b7462636694cc14de6cda12db"
+    }
+  }
+}

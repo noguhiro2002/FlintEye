@@ -1,0 +1,86 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+simpleCCTVgem/
+*.egg-info/
+.pytest_cache/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+
+# Output & Recordings
+output/
+recordings/
+
+# Sensitive files
+camera.json
+token.json
+cctv.db
+
+# Dependency directories
+/test_aiortc/aiortc/
+
+# mdiamtx
+mediamtx/
+
+# logs
+logs/
+logs/runtime/
+
+# runtime
+runtime.*
+
+# frontend
+frontend/dist
+frontend/node_modules
+
+# Local agent and visual-QA artifacts
+.tmp/
+.codex/
+.agents/
+design-qa.md
+design-qa.blocked.md
+qa-artifacts/
+playwright-ptz-qa.mjs
+frontend/ptz-visual-qa.mjs
+live-full-desktop.png
+playwright-report/
+test-results/
+*.trace.zip
+
+# specific files
+.env
+.env_*
+
+# Distribution artifacts
+/build/
+/dist/
+*.spec
+/vendor/
+/release-bundle/
+/build-artifacts/
+
+# TypeScript/Vite generated files
+frontend/*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+
+/distribution/
+/distribution-body.md

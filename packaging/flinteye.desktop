@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=FlintEye
+Comment=Camera monitoring and recording
+Exec=/opt/flinteye/FlintEye
+Icon=flinteye
+Terminal=false
+Categories=AudioVideo;Video;

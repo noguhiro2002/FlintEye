@@ -1,0 +1,60 @@
+import { useEffect, useState } from 'react';
+import { ApiClient } from '../api/client';
+import type { PageKey } from './Sidebar';
+
+export function SetupAccount({ api, onDone }: { api: ApiClient; onDone: () => void }) {
+  const [token, setToken] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  return <form onSubmit={async e => {
+    e.preventDefault(); setError('');
+    if (password !== confirm) { setError('Passwords do not match.'); return; }
+    setBusy(true);
+    try { await api.setup(token, password); await api.login('admin', password); onDone(); }
+    catch (err) { setError(String(err)); } finally { setBusy(false); }
+  }}>
+    <h2>Welcome to FlintEye</h2>
+    <p>Create your administrator account. The username is <strong>admin</strong>.</p>
+    <label>Server setup token<input required value={token} onChange={e => setToken(e.target.value)} autoComplete="off" /></label>
+    <p>For Docker or systemd, read the setup-token file in the server data directory.</p>
+    <label>Password<input type="password" required minLength={12} maxLength={1024} value={password} onChange={e => setPassword(e.target.value)} autoComplete="new-password" /></label>
+    <label>Confirm password<input type="password" required minLength={12} value={confirm} onChange={e => setConfirm(e.target.value)} autoComplete="new-password" /></label>
+    {error && <p role="alert">{error}</p>}
+    <button disabled={busy}>{busy ? 'Creating account…' : 'Create administrator account'}</button>
+  </form>;
+}
+
+const steps: { title: string; body: string; page: PageKey }[] = [
+  { title: 'Welcome to FlintEye', body: 'Closing this browser does not stop recording. Use the FlintEye tray menu to stop monitoring. Manual sleep, logout, or shutdown stops monitoring.', page: 'dashboard' },
+  { title: 'Add your first camera', body: 'In Settings, find USB cameras to detect a connected device, or add an IP camera using its address and credentials. You can add cameras later.', page: 'settings' },
+  { title: 'Choose where to save recordings', body: 'Open Settings → Recording to choose a recording folder on the computer running FlintEye. The suggested limit is half its free space, up to 50 GB. Choose Save changes to apply your choices.', page: 'settings' },
+  { title: 'Understand loop recording', body: 'FlintEye deletes the oldest completed recordings when either the retention period (7 days by default) or storage limit is reached. Storage limits can shorten the actual history. Previous recording locations are also cleaned even when hidden.', page: 'settings' },
+  { title: 'View your cameras', body: 'Open Live View to watch cameras and Recordings to play saved footage. Other devices on your LAN must sign in. Set the viewer password in Settings → Runtime & access before sharing access.', page: 'live' },
+];
+
+export function FirstRun({ api, navigate, onClose }: { api: ApiClient; navigate: (page: PageKey) => void; onClose: () => void }) {
+  const [step, setStep] = useState(0);
+  useEffect(() => {
+    const element = document.querySelector(`[data-tour-nav="${steps[step].page}"]`);
+    element?.classList.add('tour-highlight');
+    return () => element?.classList.remove('tour-highlight');
+  }, [step]);
+  const [error, setError] = useState('');
+  const close = async () => {
+    try { await api.patchRuntimeConfig({ ui: { onboarding_done: true } }); onClose(); }
+    catch (err) { setError(String(err)); }
+  };
+  const go = (index: number) => { setStep(index); navigate(steps[index].page); };
+  return <aside className="first-run" aria-label="Getting started">
+    <strong>{step + 1} / {steps.length} — {steps[step].title}</strong>
+    <p>{steps[step].body}</p>
+    {error && <p role="alert">{error}</p>}
+    <div className="first-run-actions">
+      <button onClick={() => void close()}>Skip for now</button>
+      {step > 0 && <button onClick={() => go(step - 1)}>Back</button>}
+      {step < steps.length - 1 ? <button onClick={() => go(step + 1)}>Next</button> : <button onClick={() => void close()}>Finish</button>}
+    </div>
+  </aside>;
+}

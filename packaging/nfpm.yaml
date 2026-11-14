@@ -1,0 +1,46 @@
+name: flinteye
+arch: ${ARCH}
+platform: linux
+version: ${VERSION}
+maintainer: FlintEye Community
+section: video
+priority: optional
+description: Camera monitoring with a browser UI and bundled runtime
+vendor: FlintEye Community
+homepage: https://github.com/noguhiro2002/FlintEye
+license: LicenseRef-FlintEye-SUL-Additional-Permission
+overrides:
+  deb:
+    depends:
+      - libc6 (>= 2.35)
+      - libx11-6
+      - libxext6
+      - libxrender1
+      - libxft2
+      - libxss1
+      - fonts-dejavu-core
+  rpm:
+    depends:
+      - glibc >= 2.34
+      # Updated Rocky 9 backports these symbols without changing version 2.34.
+      # Require the capability so dnf upgrades older installations as needed.
+      - libc.so.6(GLIBC_2.35)(64bit)
+      - libX11
+      - libXext
+      - libXrender
+      - libXft
+      - libXScrnSaver
+      - dejavu-sans-fonts
+contents:
+  - src: ./dist/FlintEye/
+    dst: /opt/flinteye
+  - src: ./packaging/flinteye.desktop
+    dst: /usr/share/applications/flinteye.desktop
+  - src: ./packaging/flinteye.service
+    dst: /usr/lib/systemd/system/flinteye.service
+  - src: ./images/FlintEyeLogo.png
+    dst: /usr/share/pixmaps/flinteye.png
+  - src: ./LICENSE
+    dst: /usr/share/licenses/flinteye/LICENSE
+# Service activation/user creation is an explicit administrator action.
+# Desktop installs run as the logged-in user and preserve their data on removal.

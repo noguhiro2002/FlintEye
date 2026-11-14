@@ -1,0 +1,36 @@
+name: Distribution checks
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13.18'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: python -m pip install -c packaging/constraints.txt -r requirements.txt
+      - run: python -m unittest discover -s tests -v
+      - run: python packaging/check_docs.py
+      - run: bash -n packaging/install.sh packaging/build_vendor.sh packaging/smoke_bundle.sh
+      - run: npm ci && npm run build
+        working-directory: frontend
+      - name: Frontend build leaves tracked sources clean
+        run: git diff --exit-code -- frontend
+      - run: npm audit --audit-level=high
+        working-directory: frontend
+      - run: docker build -t flinteye:check .
+      - run: docker run --rm -i --network none --tmpfs /data:rw,uid=10001,gid=10001 --entrypoint python flinteye:check - < packaging/smoke_container.py
+      - run: docker run --rm -i --network none --entrypoint python flinteye:check - --mediamtx /opt/flinteye/bin/mediamtx < packaging/smoke_private_input.py

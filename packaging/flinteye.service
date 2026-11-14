@@ -1,0 +1,22 @@
+[Unit]
+Description=FlintEye camera monitoring
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=flinteye
+Group=flinteye
+SupplementaryGroups=video
+StateDirectory=flinteye
+Environment=FLINTEYE_DATA_DIR=/var/lib/flinteye
+ExecStart=/opt/flinteye/FlintEye --headless
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=45
+KillMode=mixed
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

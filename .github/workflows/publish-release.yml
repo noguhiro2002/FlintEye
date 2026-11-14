@@ -1,0 +1,104 @@
+name: Publish tested release
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Public development preview, private testing, or stable distribution
+        type: choice
+        options: [public-preview, private-test, stable]
+        default: public-preview
+      phase:
+        description: Prepare verified images and a draft, or publish that draft after checking GHCR visibility
+        type: choice
+        options: [prepare, publish]
+        default: prepare
+      build_run_id:
+        description: Successful complete Build release run for this exact commit
+        required: true
+        type: string
+      preview_number:
+        description: Preview number embedded in the tested build (preview channels)
+        type: string
+        default: '1'
+      device_tests_confirmed:
+        description: Required for public distribution; Windows x64, M1 Mac and Linux x64 acceptance completed
+        default: false
+        type: boolean
+      license_review_confirmed:
+        description: Required for public distribution; licenses and corresponding sources reviewed
+        default: false
+        type: boolean
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: publish-flinteye
+  cancel-in-progress: false
+
+env:
+  BUILD_RUN_ID: ${{ inputs.build_run_id }}
+  RELEASE_CHANNEL: ${{ inputs.channel }}
+  PREVIEW_NUMBER: ${{ inputs.preview_number }}
+  PUBLIC_RELEASE_ENABLED: ${{ vars.PUBLIC_RELEASE_ENABLED }}
+  PUBLIC_PREVIEW_ENABLED: ${{ vars.PUBLIC_PREVIEW_ENABLED }}
+  DISTRIBUTION_PHASE: ${{ inputs.phase }}
+  DEVICE_TESTS_CONFIRMED: ${{ inputs.device_tests_confirmed }}
+  LICENSE_REVIEW_CONFIRMED: ${{ inputs.license_review_confirmed }}
+
+jobs:
+  guard:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13.18'
+      - name: Verify selected channel and exact successful build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python packaging/release.py guard --run-id "$BUILD_RUN_ID" --channel "$RELEASE_CHANNEL"
+
+  publish:
+    needs: guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: write
+      actions: read
+      packages: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13.18'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-bundle
+          path: release-bundle
+          run-id: ${{ inputs.build_run_id }}
+          github-token: ${{ github.token }}
+      - name: Verify tested archives before authenticating to GHCR
+        run: python packaging/release.py verify --commit "$GITHUB_SHA"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Distribute existing tested images and installers without rebuilding
+        run: python packaging/publish_release.py --channel "$RELEASE_CHANNEL" --phase "$DISTRIBUTION_PHASE" --run-id "$BUILD_RUN_ID" --preview-number "$PREVIEW_NUMBER"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: distribution-receipt
+          path: |
+            distribution/distribution-manifest.json
+            distribution/SHA256SUMS
+          if-no-files-found: warn
+          retention-days: 30

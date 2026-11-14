@@ -1,0 +1,17 @@
+# Build from this checkout; never publishes an image.
+# Preserve the original FlintEye checkout project/volume name after moving this file.
+name: flinteye
+services:
+  flinteye:
+    build:
+      context: ..
+      additional_contexts:
+        vendor-downloads: ${FLINTEYE_VENDOR_CACHE:-../packaging/empty-cache}
+    image: flinteye:development
+    init: true
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - flinteye-data:/data
+volumes:
+  flinteye-data:

@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Questions and ideas
+    url: https://github.com/noguhiro2002/FlintEye/discussions
+    about: Discuss setup, usage and proposed improvements
+  - name: Security vulnerability
+    url: https://github.com/noguhiro2002/FlintEye/security/advisories/new
+    about: Report vulnerabilities privately
