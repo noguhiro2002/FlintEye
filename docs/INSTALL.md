@@ -4,7 +4,7 @@
 
 [Documentation](README.md)
 
-**UNDER DEVELOPMENT.** The public repository currently provides source code. Public installers are being prepared; the first planned release is `v1.1.3-preview.1`. Use [source setup](MANUAL_INSTALL.md), [local M1 DMG build](LOCAL_MACOS_BUILD.md), or [development Docker](DOCKER.md#build-the-development-image) now. Follow [Releases](https://github.com/noguhiro2002/FlintEye/releases) for tested downloads. The instructions below describe packaged installation once a public preview is available. See [acceptance checks](ACCEPTANCE.md) and [known issues](KNOWN_ISSUES.md).
+**UNDER DEVELOPMENT.** Install the [1.1.3 development preview](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.1.3-preview.1) using a package or the [Quick Install command](../README.md#quick-install). Downloads are ready when the linked release lists its assets. They are provided for installation-path and physical-device testing, not as a stable release. Automated checks passed; real-device acceptance is still in progress. [Source setup](MANUAL_INSTALL.md), [local M1 DMG builds](LOCAL_MACOS_BUILD.md) and [development Docker](DOCKER.md#build-the-development-image) remain available. See [acceptance checks](ACCEPTANCE.md) and [known issues](KNOWN_ISSUES.md).
 
 ## Choose a package
 
@@ -43,7 +43,7 @@ For these existing installers:
 
 Do not delete `runtime.json` or the data directory to recover: they contain your accounts and settings. Logs are under `~/Library/Application Support/FlintEye/logs/` unless you chose another data directory. If startup still fails, inspect `orchestrator.log` and, if present, `mediamtx.log` for the new error.
 
-The source fix resolves the bundled executable from the current app location on every launch and preserves user settings. It also stops saving a temporary executable path for login autostart. The existing release DMGs have **not** been rebuilt or replaced; those automatic fixes require a new installer. Native macOS and physical-camera checks remain pending.
+The source fix resolves the bundled executable from the current app location on every launch and preserves user settings. It also stops saving a temporary executable path for login autostart. These fixes are included in the 1.1.3 preview installers. Native automated package checks passed; physical-camera and quarantined first-launch acceptance remain separate checks. Old private installer files are unchanged.
 
 To test the updated source on your own M1 Mac without GitHub Actions, follow the [local DMG build guide](LOCAL_MACOS_BUILD.md). It includes the startup repair and consolidated Settings interface, and keeps existing release downloads unchanged.
 
@@ -59,7 +59,7 @@ Managed computers may require help from their administrator.
 
 ## Install a specific version
 
-When a public preview is available, download the installer or command script directly from that exact release. Preview releases are not returned by GitHub’s `releases/latest` URL.
+Download the installer or command script directly from the exact preview release. Preview releases are not returned by GitHub’s `releases/latest` URL.
 
 Download `install.sh` or `install.ps1` from that release and run it locally.
 Each generated script pins its own release version. Optional `--version 1.1.3-preview.1` (shell) or `-Version 1.1.3-preview.1` (PowerShell) selects that exact development release; `X.Y.Z` selects a stable release when available. The tag includes the preview suffix, while installer filenames use the numeric application version (`1.1.3`). `--no-start` / `-NoStart` installs without launching the application.

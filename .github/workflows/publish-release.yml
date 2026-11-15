@@ -13,7 +13,7 @@ on:
         options: [prepare, publish]
         default: prepare
       build_run_id:
-        description: Successful complete Build release run for this exact commit
+        description: Successful complete Build release run; app and build inputs must be unchanged
         required: true
         type: string
       preview_number:
@@ -21,7 +21,7 @@ on:
         type: string
         default: '1'
       device_tests_confirmed:
-        description: Required for public distribution; Windows x64, M1 Mac and Linux x64 acceptance completed
+        description: Required for stable; leave false for a preview still undergoing real-device acceptance
         default: false
         type: boolean
       license_review_confirmed:
@@ -48,17 +48,25 @@ env:
 jobs:
   guard:
     runs-on: ubuntu-24.04
+    outputs:
+      build_commit: ${{ steps.verify.outputs.build_commit }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.13.18'
       - name: Verify selected channel and exact successful build
+        id: verify
         env:
           GH_TOKEN: ${{ github.token }}
         run: python packaging/release.py guard --run-id "$BUILD_RUN_ID" --channel "$RELEASE_CHANNEL"
+      - name: Check publication guards and documentation
+        run: |
+          python -m unittest discover -s tests -p test_release_packaging.py -v
+          python packaging/check_docs.py
 
   publish:
     needs: guard
@@ -74,6 +82,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.13.18'
@@ -84,7 +93,9 @@ jobs:
           run-id: ${{ inputs.build_run_id }}
           github-token: ${{ github.token }}
       - name: Verify tested archives before authenticating to GHCR
-        run: python packaging/release.py verify --commit "$GITHUB_SHA"
+        env:
+          BUILD_COMMIT: ${{ needs.guard.outputs.build_commit }}
+        run: python packaging/release.py verify --commit "$BUILD_COMMIT"
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:

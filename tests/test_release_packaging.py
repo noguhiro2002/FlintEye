@@ -117,7 +117,7 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             release.validate_publish_context(repo, {**run, 'head_sha': 'b'*40}, **kwargs)
 
-    def test_public_preview_requires_all_publication_confirmations(self):
+    def test_public_preview_can_be_published_for_device_acceptance(self):
         repo = {'full_name': REPOSITORY, 'private': False, 'visibility': 'public', 'default_branch': 'main'}
         run = {'path': '.github/workflows/build-release.yml', 'event': 'workflow_dispatch',
                'conclusion': 'success', 'head_sha': self.commit, 'head_branch': 'main',
@@ -125,9 +125,32 @@ class ReleaseTests(unittest.TestCase):
         arguments = dict(commit=self.commit, enabled=True, tested=True, licenses_reviewed=True,
                          ref='refs/heads/main', channel='public-preview')
         release.validate_publish_context(repo, run, **arguments)
-        for field in ('enabled', 'tested', 'licenses_reviewed'):
+        release.validate_publish_context(repo, run, **{**arguments, 'tested': False})
+        for field in ('enabled', 'licenses_reviewed'):
             with self.subTest(field=field), self.assertRaises(ValueError):
                 release.validate_publish_context(repo, run, **{**arguments, field: False})
+
+    def test_publication_can_update_docs_but_cannot_replace_tested_application(self):
+        release.validate_publication_revision(self.commit, 'b'*40,
+                                             ['README.md', 'docs/INSTALL.md', 'packaging/publish_release.py'])
+        for name in ('flinteye_app/cli.py', 'frontend/src/App.tsx', 'requirements.txt',
+                     'Dockerfile', 'packaging/windows.iss', 'packaging/install.sh',
+                     'LICENSE', 'images/demo.gif', 'docs/../flinteye_app/cli.py'):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                release.validate_publication_revision(self.commit, 'b'*40, [name])
+
+    def test_documentation_is_identical_across_publication_phases(self):
+        from unittest.mock import patch
+        source = self.root/'docs-source'; (source/'docs').mkdir(parents=True)
+        (source/'images').mkdir(); (source/'.github').mkdir()
+        for name in ('README.md', 'README.ja.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'docs/INSTALL.md'):
+            (source/name).write_text('Retained text: '+name)
+        with patch('release.ROOT', source):
+            release.write_documentation(self.root/'first.zip')
+            for path in source.rglob('*.md'):
+                os.utime(path, (1_700_000_000, 1_700_000_000))
+            release.write_documentation(self.root/'second.zip')
+        self.assertEqual((self.root/'first.zip').read_bytes(), (self.root/'second.zip').read_bytes())
 
     def test_preview_distribution_matches_embedded_build_identity(self):
         from publish_release import prepare, finalize
@@ -143,6 +166,8 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(metadata['tag'], 'v'+version()+'-preview.2')
         self.assertIn(version()+'-preview.2', (selected/'install.sh').read_text())
         self.assertIn('UNDER DEVELOPMENT', (selected/'RELEASE-NOTES.en.md').read_text())
+        self.assertIn('Real-device acceptance is still in progress', (selected/'RELEASE-NOTES.en.md').read_text())
+        self.assertTrue(metadata['device_acceptance_pending'])
         self.assertEqual(release.verify(self.output, self.commit), original)
 
     def test_public_preview_cannot_publish_with_private_package_or_changed_assets(self):

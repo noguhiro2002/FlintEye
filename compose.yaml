@@ -1,6 +1,6 @@
-# Planned public preview: available only after its GitHub Release is published.
-# For a source build now, use deploy/compose.dev.yaml.
-# Private testing image. Sign in to ghcr.io before pulling; see docs/DOCKER.md.
+# Development preview; requires the public GHCR version named below.
+# No login is needed once public; see docs/DOCKER.md.
+# For a source build, use deploy/compose.dev.yaml.
 services:
   flinteye:
     image: ${FLINTEYE_IMAGE:-ghcr.io/noguhiro2002/flinteye:1.1.3-preview.1}

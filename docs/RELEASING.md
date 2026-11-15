@@ -15,15 +15,16 @@ Normal pushes run **Distribution checks**. **Build release** is manual and creat
 | Requirement | `private-test` | `public-preview` | `stable` |
 | --- | --- | --- | --- |
 | Repository | Private | Public | Public |
-| Successful complete manual build, same default-branch commit | Required | Required | Required |
+| Successful complete manual build, unchanged application/build inputs | Required | Required | Required |
 | Repository variable | None | `PUBLIC_PREVIEW_ENABLED=true` | `PUBLIC_RELEASE_ENABLED=true` |
-| Device acceptance and license/source review | May be pending | Required | Required |
+| License/source review | May be pending | Required | Required |
+| Complete real-device acceptance | May be pending | May be pending; disclose it | Required |
 | Embedded channel | Internal test | `preview` | `stable` |
 | GitHub release | Normal testing release | **Pre-release**, not Latest | Normal release, Latest |
 | Image tags | Exact preview only | Exact preview only | Version and `latest` |
 | Command installers | Excluded | Included, pinned preview | Included, pinned stable version |
 
-Both public flags start as `false`. Do not confirm checks that have not happened. Public preview acceptance requires Windows x64, an M1 Mac and Linux x64: camera capture, recording/playback, GUI quit stopping owned processes, and Windows uninstall removing bundled programs while retaining data. Record other hardware combinations as pending. See [acceptance checks](ACCEPTANCE.md).
+Public flags default to `false`; enable only the requested distribution channel. A public preview can be published so users can test its installation routes and physical devices. Leave `device_tests_confirmed` false while acceptance is pending: the release notes and distribution manifest must say so. Never describe CI checks as completed physical-device acceptance. Stable publication still requires Windows x64, an M1 Mac and Linux x64: camera capture, recording/playback, GUI quit stopping owned processes, and Windows uninstall removing bundled programs while retaining data. See [acceptance checks](ACCEPTANCE.md).
 
 ## GHCR setup
 
@@ -32,7 +33,7 @@ Images use `ghcr.io/noguhiro2002/flinteye`. Only the distribution job receives `
 GitHub initially creates packages as private; repository visibility and package visibility are separate. Publication is therefore split into two explicit phases:
 
 1. **prepare:** upload tested image archives without rebuilding and create a draft release. Verify its checksums, source commit, architecture and image digests. The first GHCR package may still be private at this stage.
-2. In the package settings, verify the repository association and change the intended public package to **Public**. This exposes the verified container, so device/license acceptance is required before the prepare phase too. Leave private-test packages private.
+2. In the package settings, verify the repository association and change the intended public package to **Public**. This exposes the verified container, so license/source review and the selected channel’s acceptance requirements apply before the prepare phase too. Leave private-test packages private.
 3. **publish:** rerun with the same build run ID, source commit, channel and preview number. Recheck the uploaded assets and container receipt, then publish the draft. This phase refuses a private package for public channels and never rebuilds or replaces artifacts.
 
 The workflow does not change visibility automatically. Public images allow anonymous pulls; private testing needs authorized `read:packages` credentials. Standard GitHub-hosted runners are used; no larger paid runner is configured. Check current storage limits and runner availability before building.
@@ -57,7 +58,7 @@ Refresh dependencies deliberately, then run tests and a new release build.
 
 1. Update all three version/channel fields when preparing a new release, and commit the change.
 2. Run **Distribution checks**, then **Build release** from the default branch.
-3. Download **release-bundle** and perform the [acceptance checks](ACCEPTANCE.md).
+3. Download **release-bundle**, review the licenses/corresponding sources, and record the completed and pending [acceptance checks](ACCEPTANCE.md).
 4. Keep the build run ID and commit SHA. Publication uses those archived artifacts; it does not rebuild.
 
 The native matrix builds Windows x64/ARM64 and macOS Intel/ARM64 on matching runners. Windows runs the actual EXE installer and uninstaller with an active API, verifying shutdown, bundled-file removal and default data retention. This automated check does not replace physical-camera acceptance.
@@ -123,7 +124,9 @@ Do not put credentials, runtime configuration or recordings in that cache.
 
 ## Publish the tested build
 
-Run **Publish tested release** on the exact default-branch commit of the successful complete build. Select `public-preview`, preview number `1`, and the two phases described above. Keep the build run ID unchanged. Both public acceptance checkboxes and the matching repository enable flag must be true. Stable publication additionally requires a new stable identity and a complete build; it is not an in-place rename of a preview.
+Run **Publish tested release** from the current default branch. Select the successful complete build run, `public-preview`, preview number `1`, and the two phases described above. Keep the build run ID and publication commit unchanged between phases. License/source review and the matching enable flag are required. Leave the device-acceptance checkbox false for a preview undergoing testing; stable publication requires it to be true.
+
+The build commit remains the source of truth for installers, container labels and the release tag. A newer publication commit may only change README files, Markdown under `docs/`, Compose, the release-publishing scripts/workflow, or their focused tests. Changes to application code, dependencies, native build inputs, command installer scripts, images or LICENSE require a new complete build. Both commit identities are recorded in the distribution manifest. Updated documentation is packaged reproducibly so the prepare and publish checksums agree. Stable publication also requires a stable embedded identity and a complete build; a preview is not renamed into a stable release.
 
 The workflow verifies every archived file, loads the tested amd64/arm64 container archives, checks CPU and source identity, creates a multi-platform manifest and records registry digests. Release assets include installers, corresponding source/licenses, bilingual guides/notes, Compose, original build information, distribution metadata, checksums and (for public channels) pinned command installers.
 

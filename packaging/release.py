@@ -13,6 +13,44 @@ import zipfile
 from release_lib import ARCHES, REPOSITORY, ROOT, digest, package_names, version, release_identity
 
 
+def write_documentation(destination: Path) -> None:
+    """Keep publication notes current, with reproducible bytes across both phases."""
+    paths = [ROOT / name for name in ('README.md', 'README.ja.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md')]
+    paths += sorted((ROOT / 'docs').rglob('*.md'))
+    paths += sorted((ROOT / '.github').glob('*.md'))
+    paths += sorted(p for p in (ROOT / 'images').iterdir() if p.is_file())
+    with zipfile.ZipFile(destination, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+        for path in sorted(paths):
+            if path.is_symlink():
+                raise ValueError(f'Documentation must not contain symlinks: {path}')
+            info = zipfile.ZipInfo(path.relative_to(ROOT).as_posix(), date_time=(1980, 1, 1, 0, 0, 0))
+            info.create_system = 3
+            info.external_attr = 0o100644 << 16
+            info.compress_type = zipfile.ZIP_DEFLATED
+            archive.writestr(info, path.read_bytes(), compresslevel=9)
+
+
+def validate_publication_revision(build_commit: str, publication_commit: str, changed_paths: list[str]) -> None:
+    """A tested binary can accompany newer distribution instructions, never newer app code."""
+    if not all(re.fullmatch('[0-9a-f]{40}', value) for value in (build_commit, publication_commit)):
+        raise ValueError('Expected full build and publication commit hashes')
+    allowed = {'README.md', 'README.ja.md', 'compose.yaml',
+               'packaging/release.py', 'packaging/publish_release.py',
+               '.github/workflows/publish-release.yml', 'tests/test_release_packaging.py'}
+    for name in changed_paths:
+        path = Path(name)
+        if path.is_absolute() or '..' in path.parts or not (
+            name in allowed or (name.startswith('docs/') and name.endswith('.md'))
+        ):
+            raise ValueError('Application/build inputs changed; rebuild before publication: ' + name)
+
+
+def check_publication_revision(build_commit: str, publication_commit: str) -> None:
+    changed = subprocess.check_output(
+        ['git', 'diff', '--name-only', '--no-renames', '-z', build_commit, publication_commit], text=True)
+    validate_publication_revision(build_commit, publication_commit, [p for p in changed.split('\0') if p])
+
+
 def required_assets(v: str) -> set[str]:
     names = set(package_names(v))
     for arch in ARCHES:
@@ -58,15 +96,7 @@ def assemble(source: Path, destination: Path, commit: str) -> None:
         text = re.sub(r'\]\(([^)\s]+\.md(?:#[^)\s]+)?)\)',
                       lambda m: f'](https://github.com/{REPOSITORY}/blob/{commit}/docs/{m[1]})', text)
         (public / name).write_text(text)
-    documentation = [ROOT / name for name in ('README.md', 'README.ja.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md')]
-    documentation += sorted((ROOT / 'docs').rglob('*.md'))
-    documentation += sorted((ROOT / '.github').glob('*.md'))
-    documentation += sorted(p for p in (ROOT / 'images').iterdir() if p.is_file())
-    with zipfile.ZipFile(public / 'documentation.zip', 'w', compression=zipfile.ZIP_DEFLATED) as archive:
-        for path in documentation:
-            if path.is_symlink():
-                raise ValueError(f'Documentation must not contain symlinks: {path}')
-            archive.write(path, path.relative_to(ROOT).as_posix())
+    write_documentation(public / 'documentation.zip')
     (public / 'RELEASE-NOTES.md').write_text(
         f'# FlintEye {v}\n\nSource commit: `{commit}`\n\n'
         'Desktop installers include Python, the browser UI, FFmpeg and MediaMTX.\n'
@@ -122,8 +152,8 @@ def validate_publish_context(repo: dict, run: dict, *, commit: str, enabled: boo
     elif channel in {'stable', 'public-preview'}:
         if repo.get('private', True) or repo.get('visibility') != 'public':
             raise ValueError('Public publishing requires a public repository')
-        if not (enabled and tested and licenses_reviewed):
-            raise ValueError('Enable publishing and confirm device testing and license/source review first')
+        if not (enabled and licenses_reviewed) or (channel == 'stable' and not tested):
+            raise ValueError('Enable publishing and review licenses/sources; stable releases also require device acceptance')
     else:
         raise ValueError('Unknown publication channel')
     branch = repo['default_branch']
@@ -159,14 +189,19 @@ def main() -> None:
             return json.loads(subprocess.check_output(['gh', 'api', endpoint], text=True))
         repo = api('repos/' + REPOSITORY)
         run = api(f'repos/{REPOSITORY}/actions/runs/{args.run_id}')
-        validate_publish_context(repo, run, commit=args.commit,
+        build_commit = run['head_sha']
+        check_publication_revision(build_commit, args.commit)
+        validate_publish_context(repo, run, commit=build_commit,
             enabled=os.environ.get('PUBLIC_PREVIEW_ENABLED' if args.channel == 'public-preview' else 'PUBLIC_RELEASE_ENABLED') == 'true',
             tested=os.environ.get('DEVICE_TESTS_CONFIRMED') == 'true',
             licenses_reviewed=os.environ.get('LICENSE_REVIEW_CONFIRMED') == 'true',
             ref=os.environ.get('GITHUB_REF', ''), channel=args.channel)
         head = api(f'repos/{REPOSITORY}/commits/{repo["default_branch"]}')
         if head['sha'] != args.commit:
-            raise ValueError('Default branch moved; build and publish the current default-branch commit')
+            raise ValueError('Default branch moved; rerun publication from its current commit')
+        if os.environ.get('GITHUB_OUTPUT'):
+            with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+                output.write('build_commit=' + build_commit + '\n')
         print('Publication prerequisites verified; no remote state changed.')
 
 

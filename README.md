@@ -1,6 +1,6 @@
 # 🚧 UNDER DEVELOPMENT
 
-**FlintEye is under active development. This is a source-first preview, not a stable release. Public installers and container images are being prepared.**
+**FlintEye is under active development. This is a development preview, not a stable release. Use development previews for testing.**
 
 [Known issues](docs/KNOWN_ISSUES.md) · [Report a bug](https://github.com/noguhiro2002/FlintEye/issues) · [Questions and ideas](https://github.com/noguhiro2002/FlintEye/discussions)
 
@@ -27,14 +27,7 @@ Monitor USB and IP cameras, watch live video, and find recordings in your browse
 
 ## Quick Install
 
-**Available now:** [run from source](docs/MANUAL_INSTALL.md), [build a local M1 Mac DMG](docs/LOCAL_MACOS_BUILD.md), or [build the development Docker image](docs/DOCKER.md#build-the-development-image).
-
-Public installers are not available yet. The first planned download is **`v1.1.3-preview.1`**, after automated and real-device checks. It will be marked **Pre-release**, not Latest. Follow [Releases](https://github.com/noguhiro2002/FlintEye/releases) for availability. [Testing checklist →](docs/ACCEPTANCE.md)
-
-<details>
-<summary><strong>Planned one-command installation — available after the public preview is published</strong></summary>
-
-These commands are examples for the planned preview and **do not work until that release is published**. They install a fixed development version, not an automatically selected stable version.
+**Development preview: [v1.1.3-preview.1](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.1.3-preview.1).** The commands below work once that release lists its download assets. Real-device acceptance is still in progress. Run the command for your computer and follow setup. Python, FFmpeg, FFprobe and MediaMTX are included; no Git checkout or compilation is needed.
 
 **Windows — PowerShell**
 
@@ -56,13 +49,11 @@ bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap clean
 
 You can also download the script from the selected release, inspect it, and run it locally. Packaged builds include Python, FFmpeg, FFprobe and MediaMTX. No separate copies are required. Windows/macOS packages are unsigned/not notarized; see [OS confirmation screens](docs/INSTALL.md#unsigned-packages).
 
-</details>
-
 <details>
 <summary><strong>Other Install Options</strong> — binary packages, Docker, manual installation</summary>
 
-- **Planned binary packages:** Windows EXE, macOS DMG, Linux DEB/RPM. [Installation guide →](docs/INSTALL.md)
-- **Docker Compose:** build locally now; versioned public GHCR images are planned for Linux x86-64 and ARM64. [Docker guide →](docs/DOCKER.md)
+- **Binary packages:** Windows EXE, macOS DMG, Linux DEB/RPM. [Installation guide →](docs/INSTALL.md)
+- **Docker Compose:** use the versioned GHCR image for Linux x86-64 and ARM64. [Docker guide →](docs/DOCKER.md)
 - **systemd:** run continuously on a Linux server, without desktop login. [Server guide →](docs/DISTRIBUTION.md#systemd)
 - **Manual install:** run from source for development or customization. [Developer setup →](docs/MANUAL_INSTALL.md)
 

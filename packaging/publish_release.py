@@ -10,7 +10,7 @@ import shutil
 import subprocess
 import time
 
-from release import verify, validate_publish_context
+from release import verify, validate_publish_context, check_publication_revision, write_documentation
 from release_lib import ARCHES, IMAGE, REPOSITORY, ROOT, digest, version
 from check_release_order import check_order
 
@@ -54,7 +54,8 @@ def check_visibility(channel: str, *, require_package: bool = False, staging: bo
     return package
 
 
-def prepare(bundle: Path, output: Path, commit: str, run_id: str, channel: str, number: str) -> dict:
+def prepare(bundle: Path, output: Path, commit: str, run_id: str, channel: str, number: str,
+            *, tested: bool = False, publication_commit: str | None = None) -> dict:
     manifest = verify(bundle, commit)
     if str(manifest['run_id']) != run_id:
         raise ValueError('Build manifest run ID differs from the selected run')
@@ -78,8 +79,15 @@ def prepare(bundle: Path, output: Path, commit: str, run_id: str, channel: str, 
             text = (ROOT / 'packaging' / name).read_text().replace('@RELEASE_VERSION@', image_version)
             (output / name).write_text(text, encoding='utf-8', newline='\n')
     shutil.copy2(bundle / 'build-manifest.json', output / 'build-manifest.json')
+    write_documentation(output / 'documentation.zip')
+    for language in ('', '.ja'):
+        name = 'ACCEPTANCE' + language + '.md'
+        text = (ROOT / 'docs' / name).read_text()
+        text = re.sub(r'\]\(([^)\s]+\.md(?:#[^)\s]+)?)\)',
+                      lambda m: f'](https://github.com/{REPOSITORY}/blob/{publication_commit or commit}/docs/{m[1]})', text)
+        (output / name).write_text(text)
     # The attached Compose pins this distribution, even for a later preview number.
-    compose = (output / 'compose.yaml').read_text()
+    compose = (ROOT / 'compose.yaml').read_text()
     compose = re.sub(r'ghcr\.io/noguhiro2002/flinteye:[\w.-]+', IMAGE + ':' + image_version, compose)
     (output / 'compose.yaml').write_text(compose)
     for language in ('en', 'ja'):
@@ -90,6 +98,8 @@ def prepare(bundle: Path, output: Path, commit: str, run_id: str, channel: str, 
         if channel == 'public-preview':
             status = 'UNDER DEVELOPMENT — Public preview' if language == 'en' else 'UNDER DEVELOPMENT — Public preview'
             validation = ('This is a public development preview, not a stable release. Automated checks and the required Windows x64, M1 Mac and Linux x64 device checks have been confirmed. Other hardware combinations still require real-device validation.' if language == 'en' else 'これはパブリック開発プレビューであり、安定版リリースではありません。自動チェックおよび必須のWindows x64、M1 Mac、Linux x64デバイスチェックは確認済みです。その他のハードウェアの組み合わせについては、引き続き実機での検証が必要です。')
+            if not tested:
+                validation = ('Automated package checks passed. This development preview is published for installation-path and physical-device testing. Real-device acceptance is still in progress; this is not a stable release.' if language == 'en' else '自動パッケージチェックが合格しました。この開発プレビューは、配布URLからのインストールおよび実機テスト用に公開されています。実機での受け入れテストは現在も進行中であるため、安定版ではありません。')
         for key, value in {'TAG':tag, 'STATUS':status, 'VERSION':version(), 'COMMIT':commit,
                            'RUN_ID':run_id, 'IMAGE_VERSION':image_version, 'VALIDATION':validation}.items():
             text = text.replace('@' + key + '@', value)
@@ -100,7 +110,8 @@ def prepare(bundle: Path, output: Path, commit: str, run_id: str, channel: str, 
         (output / f'RELEASE-NOTES.{language}.md').write_text(text)
     return {'schema':1, 'channel':channel, 'tag':tag, 'application_version':version(),
             'commit':commit, 'build_run_id':run_id, 'build_manifest_sha256':digest(bundle/'build-manifest.json'),
-            'image':IMAGE+':'+image_version, 'device_acceptance_pending':channel=='private-test'}
+            'image':IMAGE+':'+image_version, 'device_acceptance_pending':not tested,
+            'publication_commit':publication_commit or commit}
 
 
 def finalize(output: Path, metadata: dict) -> None:
@@ -177,18 +188,21 @@ def finish_publication(args, metadata: dict, commit: str) -> None:
 
 
 def publish(args) -> None:
-    commit = os.environ['GITHUB_SHA']
+    publication_commit = os.environ['GITHUB_SHA']
     repo = api('repos/'+REPOSITORY)
     build = api(f'repos/{REPOSITORY}/actions/runs/{args.run_id}')
+    commit = build['head_sha']
+    check_publication_revision(commit, publication_commit)
     flag = 'PUBLIC_PREVIEW_ENABLED' if args.channel == 'public-preview' else 'PUBLIC_RELEASE_ENABLED'
     validate_publish_context(repo, build, commit=commit, ref=os.environ['GITHUB_REF'], channel=args.channel,
                              enabled=os.environ.get(flag)=='true',
                              tested=os.environ.get('DEVICE_TESTS_CONFIRMED')=='true',
                              licenses_reviewed=os.environ.get('LICENSE_REVIEW_CONFIRMED')=='true')
-    if api(f'repos/{REPOSITORY}/commits/{repo["default_branch"]}')['sha'] != commit:
-        raise ValueError('Default branch moved; rebuild before distributing')
+    if api(f'repos/{REPOSITORY}/commits/{repo["default_branch"]}')['sha'] != publication_commit:
+        raise ValueError('Default branch moved; rerun publication from its current commit')
     package = check_visibility(args.channel, staging=args.phase == 'prepare')
-    metadata = prepare(args.bundle, args.output, commit, args.run_id, args.channel, args.preview_number)
+    metadata = prepare(args.bundle, args.output, commit, args.run_id, args.channel, args.preview_number,
+                       tested=os.environ.get('DEVICE_TESTS_CONFIRMED')=='true', publication_commit=publication_commit)
     tag, image = metadata['tag'], metadata['image']
     if args.phase == 'publish':
         remote = args.output.parent / (args.output.name+'-receipt')
@@ -235,7 +249,7 @@ def publish(args) -> None:
     description='FlintEye UNDER DEVELOPMENT; public preview' if args.channel=='public-preview' else 'FlintEye camera monitoring and recording'
     subprocess.run(['docker','buildx','imagetools','create','--annotation','index:org.opencontainers.image.description='+description,
                     '--annotation','index:org.opencontainers.image.source=https://github.com/'+REPOSITORY,
-                    '--annotation','index:org.opencontainers.image.documentation=https://github.com/'+REPOSITORY+'/blob/'+commit+'/docs/DOCKER.md',
+                    '--annotation','index:org.opencontainers.image.documentation=https://github.com/'+REPOSITORY+'/blob/'+publication_commit+'/docs/DOCKER.md',
                     '-t',image,*references],check=True)
     index=json.loads(run('docker','buildx','imagetools','inspect',image,'--raw'))
     platforms={m['platform']['architecture']:m for m in index['manifests']}
