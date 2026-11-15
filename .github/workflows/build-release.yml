@@ -10,10 +10,14 @@ on:
         description: Diagnose only the Windows ARM64 installer
         type: boolean
         default: false
+      windows_only:
+        description: Build both Windows installers when diagnosing Windows packaging
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
-  group: build-release-${{ github.ref }}-${{ inputs.desktop_only }}-${{ inputs.windows_arm_only }}
+  group: build-release-${{ github.ref }}-${{ inputs.desktop_only }}-${{ inputs.windows_arm_only }}-${{ inputs.windows_only }}
   cancel-in-progress: false
 
 jobs:
@@ -28,6 +32,9 @@ jobs:
       matrix:
         include: >-
           ${{ fromJSON(inputs.windows_arm_only && '[
+            {"os":"windows","arch":"arm64","runner":"windows-11-arm","python_arch":"arm64","msystem":"CLANGARM64","prefix":"mingw-w64-clang-aarch64","compiler":"clang"}
+          ]' || inputs.windows_only && '[
+            {"os":"windows","arch":"amd64","runner":"windows-2022","python_arch":"x64","msystem":"UCRT64","prefix":"mingw-w64-ucrt-x86_64","compiler":"gcc"},
             {"os":"windows","arch":"arm64","runner":"windows-11-arm","python_arch":"arm64","msystem":"CLANGARM64","prefix":"mingw-w64-clang-aarch64","compiler":"clang"}
           ]' || '[
             {"os":"windows","arch":"amd64","runner":"windows-2022","python_arch":"x64","msystem":"UCRT64","prefix":"mingw-w64-ucrt-x86_64","compiler":"gcc"},
@@ -131,7 +138,7 @@ jobs:
           retention-days: 30
 
   linux:
-    if: ${{ !inputs.desktop_only && !inputs.windows_arm_only }}
+    if: ${{ !inputs.desktop_only && !inputs.windows_arm_only && !inputs.windows_only }}
     needs: checks
     timeout-minutes: 180
     strategy:
@@ -171,7 +178,7 @@ jobs:
           retention-days: 30
 
   containers:
-    if: ${{ !inputs.desktop_only && !inputs.windows_arm_only }}
+    if: ${{ !inputs.desktop_only && !inputs.windows_arm_only && !inputs.windows_only }}
     needs: checks
     timeout-minutes: 120
     strategy:

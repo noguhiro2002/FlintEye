@@ -3,7 +3,19 @@ $ErrorActionPreference = 'Stop'
 if ($env:GITHUB_ACTIONS -ne 'true') { throw 'Run this check only on a disposable GitHub Actions runner.' }
 $version = python packaging/release.py version
 $testDataRoot = Join-Path $env:LOCALAPPDATA 'FlintEye'
-if (Test-Path -LiteralPath $testDataRoot) { throw 'Refusing to use an existing FlintEye profile.' }
+if (Test-Path -LiteralPath $testDataRoot) {
+    # The preceding frozen-bundle smoke checks use isolated profiles, but their
+    # discovery index can leave this one empty directory in the default root.
+    # Accept only that exact empty skeleton, never settings or a live index.
+    $rootItem=Get-Item -LiteralPath $testDataRoot -Force
+    $entries=@(Get-ChildItem -LiteralPath $testDataRoot -Force)
+    if (-not $rootItem.PSIsContainer -or ($rootItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
+        $entries.Count -ne 1 -or $entries[0].Name -ne 'running' -or -not $entries[0].PSIsContainer -or
+        ($entries[0].Attributes -band [IO.FileAttributes]::ReparsePoint) -or
+        @(Get-ChildItem -LiteralPath $entries[0].FullName -Force).Count -ne 0) {
+        throw 'Refusing to use an existing FlintEye profile.'
+    }
+}
 $installDir = Join-Path $env:RUNNER_TEMP ('FlintEye installed test ' + [guid]::NewGuid().ToString('N'))
 $installer = (Resolve-Path "dist/FlintEye-$version-windows-${env:APP_ARCH}-setup.exe").Path
 $process = $null
