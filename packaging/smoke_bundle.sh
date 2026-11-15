@@ -13,14 +13,14 @@ trap 'code=$?; printf "FAIL: bundle smoke test at line %s (exit %s)\n" "$LINENO"
 cd "$profile"
 : > "$profile/startup.log"
 for worker in uvc_to_rtsp ip_camera_to_rtsp multiview_input_to_rtsp multiview_buffer_to_rtsp multiview_raw_compositor multiview_to_rtsp; do
-  timeout 30 "$app" --worker "$worker" --help > /dev/null
+  timeout 30 "$app" --worker "$worker" --help < /dev/null > /dev/null
 done
 libraries="$(dirname "$app")/_internal"
 # Run as an ordinary user: licenses must remain readable after package install.
 find "$libraries/licenses" -type f -exec cat {} + > /dev/null
-LD_LIBRARY_PATH="$libraries" "$libraries/bin/ffmpeg" -v error -f lavfi -i testsrc2=s=160x120:r=2 -t 1 -c:v libx264 "$profile/test.mp4"
-LD_LIBRARY_PATH="$libraries" "$libraries/bin/ffprobe" -v error -show_entries stream=codec_name -of csv=p=0 "$profile/test.mp4" | grep -q h264
-"$app" --headless --data-dir "$profile" --port 18481 >"$profile/startup.log" 2>&1 &
+LD_LIBRARY_PATH="$libraries" "$libraries/bin/ffmpeg" -nostdin -v error -f lavfi -i testsrc2=s=160x120:r=2 -t 1 -c:v libx264 "$profile/test.mp4"
+LD_LIBRARY_PATH="$libraries" "$libraries/bin/ffprobe" -v error -show_entries stream=codec_name -of csv=p=0 "$profile/test.mp4" < /dev/null | grep -q h264
+"$app" --headless --data-dir "$profile" --port 18481 < /dev/null >"$profile/startup.log" 2>&1 &
 pid=$!
 base=http://127.0.0.1:18481
 ready=0
@@ -52,7 +52,7 @@ for attempt in $(seq 1 60); do
   sleep 1
 done
 [ "$media_ready" = 1 ] || { printf 'MediaMTX did not start\n' >&2; exit 1; }
-LD_LIBRARY_PATH="$libraries" "$libraries/bin/ffmpeg" -hide_banner -loglevel error -re -f lavfi -i testsrc2=s=160x120:r=5 -t 4 -c:v libx264 -pix_fmt yuv420p -g 5 -f rtsp rtsp://127.0.0.1:8554/bundle-smoke
+LD_LIBRARY_PATH="$libraries" "$libraries/bin/ffmpeg" -nostdin -hide_banner -loglevel error -re -f lavfi -i testsrc2=s=160x120:r=5 -t 4 -c:v libx264 -pix_fmt yuv420p -g 5 -f rtsp rtsp://127.0.0.1:8554/bundle-smoke
 
 curl --silent --show-error --fail --max-time 45 --cookie "$profile/cookies" -H "Origin: $base" -X POST "$base/api/v1/control/stop" > /dev/null
 curl --silent --show-error --fail "$base/api/v1/health" > /dev/null
@@ -63,7 +63,7 @@ curl --silent --show-error --fail --cookie "$profile/cookies" "$base/api/v1/stat
 # Confirm that at least one completed segment exists and decode every segment.
 segments=0
 while IFS= read -r -d '' segment; do
-  LD_LIBRARY_PATH="$libraries" "$libraries/bin/ffmpeg" -v error -xerror -i "$segment" -f null -
+  LD_LIBRARY_PATH="$libraries" "$libraries/bin/ffmpeg" -nostdin -v error -xerror -i "$segment" -f null -
   segments=$((segments + 1))
 done < <(find "$profile/recordings/bundle-smoke" -type f \( -name '*.mp4' -o -name '*.ts' \) -print0)
 [ "$segments" -gt 0 ] || { printf 'No completed synthetic recording found\n' >&2; exit 1; }
@@ -85,10 +85,25 @@ curl --silent --show-error --fail --max-time 45 --cookie "$profile/cookies" -H "
 curl --silent --show-error --fail --cookie "$profile/cookies" "$base/api/v1/status/monitoring" | grep -Eq '"desired_running"[[:space:]]*:[[:space:]]*true'
 curl --silent --show-error --fail --cookie "$profile/cookies" "$base/api/v1/status/mediamtx" | grep -Eq '"running"[[:space:]]*:[[:space:]]*true'
 curl --silent --show-error --fail --max-time 45 --cookie "$profile/cookies" -H "Origin: $base" -X POST "$base/api/v1/control/stop" > /dev/null
-kill "$pid"
+# Ask the owning instance to quit without delivering a signal to Uvicorn.
+control=$(<"$profile/instance-control.json")
+if [[ ! $control =~ \"token\"[[:space:]]*:[[:space:]]*\"([0-9a-f]{64})\" ]]; then
+  printf 'Could not read instance shutdown token\n' >&2
+  exit 1
+fi
+printf '{"token":"%s"}\n' "${BASH_REMATCH[1]}" > "$profile/stop-request.json"
+unset control
+for attempt in $(seq 1 45); do
+  if ! kill -0 "$pid" 2>/dev/null; then break; fi
+  sleep 1
+done
+if kill -0 "$pid" 2>/dev/null; then
+  printf 'Application did not exit within 45 seconds\n' >&2
+  exit 1
+fi
 wait "$pid"
 pid=''
-"$app" --headless --data-dir "$profile" --port 18481 >>"$profile/startup.log" 2>&1 &
+"$app" --headless --data-dir "$profile" --port 18481 < /dev/null >>"$profile/startup.log" 2>&1 &
 pid=$!
 ready=0
 for attempt in $(seq 1 60); do
