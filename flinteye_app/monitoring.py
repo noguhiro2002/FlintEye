@@ -182,8 +182,18 @@ class MonitoringController:
                 applied = _apply_mediamtx_config(self.context, config)
                 self.started = True
                 self.context.supervisor.set_monitoring_enabled(True)
-                self.started_mono = time.monotonic()
-                self.samples.clear()
+                with self.lock:
+                    self.started_mono = time.monotonic()
+                    self.samples.clear()
+                    # A completed Start/Restart is not yet proof of reception.
+                    # Do not reuse the previous session's green health snapshot.
+                    self._snapshot = {
+                        'state': 'starting', 'color': 'amber', 'label': 'Starting',
+                        'message': 'Waiting for fresh camera video',
+                        'counts': {'configured': len(config.cameras),
+                                   'targets': sum(camera.enabled for camera in config.cameras),
+                                   'receiving': 0, 'recording': 0}, 'cameras': []}
+                    self.last_poll = self.started_mono
                 mtx = {'ok': True}
                 if not startup or config.mediamtx.autostart_on_api_start:
                     mtx = self.context.supervisor.mediamtx_start(config)
@@ -357,7 +367,7 @@ class MonitoringController:
             elif receiving < len(targets):
                 color, state, label, reason = ('amber', 'starting', 'Starting', 'Waiting for camera video') if now - self.started_mono < STALL_SECONDS else (
                     ('amber', 'warning', 'Some cameras unavailable', 'Check camera connections.') if receiving else ('red', 'error', 'No camera video', 'Check camera connections and logs.'))
-            if self.context.storage_problem and self.desired:
+            if self.context.storage_problem and self.desired and state != 'error':
                 color, state, label, reason = 'amber', 'warning', 'Recording paused', self.context.storage_problem
             if self.phase == 'finalizing' or self.busy:
                 color, state, label, reason = 'amber', self.phase, 'Finishing recordings' if self.phase == 'finalizing' else 'Starting' if self.phase == 'starting' else 'Stopping', self.error or 'Please wait for the operation to finish.'

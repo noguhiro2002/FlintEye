@@ -146,6 +146,27 @@ class MonitoringTests(unittest.TestCase):
         self.assertEqual(status['counts']['receiving'], 0)
         self.assertFalse(status['cameras'][0]['receiving'])
 
+    def test_restart_waits_for_fresh_reception_evidence(self):
+        self.controller.phase = 'running'
+        for count in (1, 10):
+            self.controller.refresh(items=[{'name': 'cam', 'ready': True, 'bytesReceived': count}])
+        self.assertEqual(self.controller.status()['color'], 'green')
+        with patch.object(self.context.supervisor, 'mediamtx_start', return_value={'ok': True}):
+            self.assertTrue(self.controller.perform('restart')['ok'])
+        self.assertEqual(self.controller.status()['state'], 'starting')
+        self.assertEqual(self.controller.status()['counts']['receiving'], 0)
+        self.controller.refresh(items=[{'name': 'cam', 'ready': True, 'bytesReceived': 100}])
+        self.assertNotEqual(self.controller.status()['color'], 'green')
+        self.controller.refresh(items=[{'name': 'cam', 'ready': True, 'bytesReceived': 101}])
+        self.assertEqual(self.controller.status()['color'], 'green')
+
+    def test_storage_warning_does_not_hide_a_media_server_failure(self):
+        self.context.storage_problem = 'Recording storage is unavailable'
+        with patch('flinteye_app.monitoring.media_paths', side_effect=OSError), patch.object(self.context.supervisor, 'mediamtx_status', return_value={'running': False}):
+            self.controller.refresh()
+        self.assertEqual(self.controller.status()['state'], 'error')
+        self.assertEqual(self.controller.status()['color'], 'red')
+
     def test_no_camera_and_intentional_stop_are_distinct(self):
         self.controller.perform('stop')
         self.controller.refresh(items=[])
