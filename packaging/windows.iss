@@ -34,8 +34,7 @@ Name: "{autoprograms}\FlintEye"; Filename: "{app}\FlintEye.exe"
 Name: "{autodesktop}\FlintEye"; Filename: "{app}\FlintEye.exe"
 [Run]
 Filename: "{app}\FlintEye.exe"; Parameters: "--setup"; Description: "Open FlintEye"; Flags: nowait postinstall skipifsilent; Check: ShouldStart
-[Registry]
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "FlintEye"; ValueData: """{app}\FlintEye.exe"" --background"; Flags: uninsdeletevalue
+; The desktop launcher registers login startup after first setup, with ownership checks.
 ; User recordings/configuration are outside {app}; intentionally not in UninstallDelete.
 
 [Code]
@@ -43,12 +42,23 @@ function InitializeUninstall: Boolean;
 var
   ResultCode: Integer;
   Arguments: String;
+  StartupValue, OwnExecutable, QuotedExecutable: String;
 begin
   Arguments := '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' +
-    ExpandConstant('{app}\stop_windows.ps1') + '" -InstallDir "' + ExpandConstant('{app}') + '"';
+    ExpandConstant('{app}\stop_windows.ps1') + '" -InstallDir "' + ExpandConstant('{app}') + '" -Force';
   Result := Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
     Arguments, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   if Result then Result := ResultCode = 0;
+  if Result and RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', 'FlintEye', StartupValue) then
+  begin
+    OwnExecutable := ExpandConstant('{app}\FlintEye.exe');
+    QuotedExecutable := '"' + OwnExecutable + '"';
+    if (CompareText(StartupValue, QuotedExecutable) = 0) or
+       (CompareText(Copy(StartupValue, 1, Length(QuotedExecutable) + 1), QuotedExecutable + ' ') = 0) or
+       (CompareText(StartupValue, OwnExecutable) = 0) or
+       (CompareText(Copy(StartupValue, 1, Length(OwnExecutable) + 1), OwnExecutable + ' ') = 0) then
+      RegDeleteValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', 'FlintEye');
+  end;
   if not Result then
     MsgBox('FlintEye could not be stopped. Restart Windows and try uninstalling again. Your files have not been removed.', mbError, MB_OK);
 end;

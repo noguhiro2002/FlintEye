@@ -13,6 +13,17 @@ This route is for developers. General users should use the [desktop installer](I
 - MediaMTX 1.21.2 on PATH, or at `bin/mediamtx` (`bin/mediamtx.exe` on Windows)
 - Tk for the desktop launcher; Linux packages commonly call it `python3-tk`
 
+### Linux Python prerequisites
+
+Install virtual-environment support for the Python interpreter you actually use before running `-m venv`. Debian/Ubuntu split this into a separate package: `python3-venv` for the distribution's default Python, or a matching version such as `python3.13-venv`. Install the matching Tk package for desktop setup as well. If `ensurepip` is unavailable, install that venv package and recreate the incomplete environment; installing application requirements cannot repair it.
+
+The interpreter still needs to meet the Python version requirement above. A distribution's default Python may be older; use a separately installed supported interpreter and its matching venv/Tk components. Do not replace or remove the operating system's Python. For example, with packaged Python 3.13 on Debian:
+
+```sh
+sudo apt-get install python3.13-venv python3-tk
+python3.13 -m venv .venv
+```
+
 Clone the repository and run commands from its root:
 
 ```sh

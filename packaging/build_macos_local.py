@@ -119,9 +119,11 @@ def collect_artifacts(source: Path, destination: Path, commit: str,
     for suffix in ('.dmg', '-sources.tar.gz', '-licenses.zip'):
         shutil.copy2(source / 'dist' / (base + suffix), destination / (local + suffix))
     shutil.copy2(source / 'dist/vendor-sha256.json', destination)
+    shutil.copy2(source / 'dist' / (base + '-signature.json'), destination / (local + '-signature.json'))
     receipt = {'version': app_version, 'commit': commit, 'platform': 'macos-arm64',
                'channel': 'local-test', 'toolchain': toolchain,
                'verified': ['media-startup-regressions', 'native-private-media-input',
+                            'final-dmg-signature-integrity-and-tamper-rejection',
                             'installed-dmg-setup-auth-recording', 'moved-app-same-profile'],
                'pending': ['physical-camera-live-view-recording-playback', 'desktop-settings', 'login-autostart']}
     (destination / 'build-info.json').write_text(json.dumps(receipt, indent=2) + '\n')

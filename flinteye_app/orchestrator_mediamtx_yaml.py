@@ -213,7 +213,7 @@ def _resolve_auto_managed_globals(config: RuntimeConfig) -> dict[str, Any]:
     }
 
 
-def apply_managed_mediamtx_config(config: RuntimeConfig, *, workspace_dir: str) -> ManagedApplyResult:
+def apply_managed_mediamtx_config(config: RuntimeConfig, *, workspace_dir: str, before_write=None) -> ManagedApplyResult:
     managed = config.mediamtx.managed
     auto_global = _resolve_auto_managed_globals(config)
     if not managed.enabled and not auto_global:
@@ -255,6 +255,8 @@ def apply_managed_mediamtx_config(config: RuntimeConfig, *, workspace_dir: str) 
 
     backup_path = config_path.with_suffix(config_path.suffix + ".bak")
     if changed:
+        if before_write is not None:
+            before_write()
         shutil.copy2(config_path, backup_path)
         out_text = "\n".join(lines)
         if lines and lines[-1] != "":
@@ -271,9 +273,9 @@ def apply_managed_mediamtx_config(config: RuntimeConfig, *, workspace_dir: str) 
     )
 
 
-def apply_mediamtx_yaml(config: RuntimeConfig, *, workspace_dir: str) -> MediamtxYamlApplyResult:
-    recording = apply_recording_config(config, workspace_dir=workspace_dir)
-    managed = apply_managed_mediamtx_config(config, workspace_dir=workspace_dir)
+def apply_mediamtx_yaml(config: RuntimeConfig, *, workspace_dir: str, before_write=None) -> MediamtxYamlApplyResult:
+    recording = apply_recording_config(config, workspace_dir=workspace_dir, before_write=before_write)
+    managed = apply_managed_mediamtx_config(config, workspace_dir=workspace_dir, before_write=before_write)
     ok = recording.ok and managed.ok
     changed = recording.changed or managed.changed
     if not ok:

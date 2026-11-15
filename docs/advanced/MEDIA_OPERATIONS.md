@@ -88,7 +88,7 @@ Recommended mitigation order:
 Raw wall-clock compositor behavior:
 
 - Every selected input has an independent FFmpeg decoder and a bounded in-memory RGB frame ring.
-- Frames are timestamped with the Orchestrator host clock. One worker selects the newest frame at or before `now - delay_sec` for every tile, then copies those frames into one canvas.
+- Frames are timestamped with the FlintEye host clock. One worker selects the newest frame at or before `now - delay_sec` for every tile, then copies those frames into one canvas.
 - One FFmpeg encoder per final view receives only completed raw canvases and publishes `multiview_*`; there are no intermediate `__mv_buffer/*` H.264 publishers, RTSP readers, second decodes, or `xstack` process.
 - If one input disconnects, only that decoder reconnects. Its tile holds the last frame up to `max_hold_sec` and then becomes black while the other tiles and final output continue.
 - The status file is written by the same worker that selects and composes frames, so source health cannot overwrite final-compositor health.

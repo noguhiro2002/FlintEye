@@ -16,6 +16,7 @@ from release_lib import ARCHES, REPOSITORY, ROOT, digest, package_names, version
 def required_assets(v: str) -> set[str]:
     names = set(package_names(v))
     for arch in ARCHES:
+        names.add(f'FlintEye-{v}-macos-{arch}-signature.json')
         for target in ('windows', 'macos', 'linux'):
             names.update([f'FlintEye-{v}-{target}-{arch}-sources.tar.gz',
                           f'FlintEye-{v}-{target}-{arch}-licenses.zip'])

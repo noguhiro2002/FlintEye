@@ -62,6 +62,11 @@ class UiConfig(BaseModel):
     sidebar_title: str = "FlintEye"
     footer_text: str = "© 2026 Noguhiro. Sustainable Use License + additional permission."
 
+    @field_validator("app_title", "sidebar_title")
+    @classmethod
+    def replace_legacy_product_label(cls, value: str) -> str:
+        return "FlintEye" if value.strip() in {"Unified Camera Orchestrator", "Orchestrator UI"} else value
+
     @field_validator("app_title", "sidebar_title", "footer_text")
     @classmethod
     def validate_non_empty_text(cls, value: str) -> str:

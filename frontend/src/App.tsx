@@ -32,6 +32,7 @@ export default function App(): JSX.Element {
   const sessionRequest = useRef(0);
 
   const api = useMemo(() => new ApiClient(), []);
+  useEffect(() => { document.title = appTitle; }, [appTitle]);
 
   const refreshSession = async (): Promise<void> => {
     const request = ++sessionRequest.current;

@@ -50,7 +50,7 @@ class LocalMacBuildTests(unittest.TestCase):
             root = Path(temporary)
             source = root / 'source'
             (source / 'dist').mkdir(parents=True)
-            for suffix in ('.dmg', '-sources.tar.gz', '-licenses.zip'):
+            for suffix in ('.dmg', '-sources.tar.gz', '-licenses.zip', '-signature.json'):
                 (source / f'dist/FlintEye-1.1.1-macos-arm64{suffix}').write_bytes(suffix.encode())
             (source / 'dist/vendor-sha256.json').write_text('{}')
             artifacts = root / 'artifacts'

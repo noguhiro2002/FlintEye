@@ -20,6 +20,10 @@ FlintEye is **UNDER DEVELOPMENT**, not a stable release. The 2026-11-15 Terra br
 | 11, 12 — Accessible state and contrast | Navigation exposes its current page; camera and Multiview selectors expose their selected state. Camera controls are separate from the selection button. Small PTZ explanatory text has stronger contrast. |
 | 14, 15 — Guidance and empty states | Opening the guide no longer decorates a different page as if it were active. Empty camera/output/recording states explain the situation; empty recording lists omit pagination. |
 
+## Physical-device follow-up
+
+The later Windows/Mac/Linux review adds packaging, startup and shutdown findings. See the [device QA follow-up](DEVICE_QA_FOLLOWUP.md) for fixes, evidence boundaries and the remaining acceptance checks. Windows media-child termination and macOS Developer ID/notarization remain explicit limits.
+
 ## Validation and remaining limits
 
 The regression suite uses a built frontend, Chromium and synthetic API responses. It exercises delayed and failed requests, draft protection, camera switching, keyboard interaction and narrow layouts. It blocks requests to external hosts and does not connect to physical cameras. See [Contributing](../.github/CONTRIBUTING.md) for the test commands.

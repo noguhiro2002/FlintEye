@@ -157,6 +157,10 @@ export class ApiClient {
     return this.request("/api/v1/status");
   }
 
+  getListener(): Promise<{ host?: string; port?: number; source?: string }> {
+    return this.request("/api/v1/status/listener");
+  }
+
   getCameras(): Promise<{ items: CameraItem[] }> {
     return this.request("/api/v1/cameras");
   }

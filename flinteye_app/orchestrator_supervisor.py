@@ -1,4 +1,5 @@
 from __future__ import annotations
+from contextlib import contextmanager
 
 from flinteye_app.flinteye_runtime import worker_command
 
@@ -271,8 +272,24 @@ class OrchestratorSupervisor:
         self._stop_event.set()
         self._monitor_thread.join(timeout=2.0)
         with self._lock:
-            for proc in list(self._processes.values()):
+            # Keep the recorder alive until its publishers have disconnected.
+            for proc in sorted(self._processes.values(), key=lambda item: item.key.startswith('mediamtx:')):
                 self._stop_process(proc)
+
+    @contextmanager
+    def media_update(self, *, pause=True):
+        """Pause publishers before changing their media server, under its monitor lock."""
+        with self._lock:
+            if pause:
+                self.pause_media_publishers()
+            yield
+
+    def pause_media_publishers(self):
+        with self._lock:
+            for proc in self._processes.values():
+                if not proc.key.startswith('mediamtx:'):
+                    self._stop_process(proc)
+            logger.info('publishers stopped for a planned media configuration change')
 
     def _monitor_loop(self) -> None:
         while not self._stop_event.is_set():
@@ -1289,6 +1306,15 @@ class OrchestratorSupervisor:
         return {"ok": False, "stdout": "", "stderr": f"unsupported control_mode: {mode}"}
 
     def mediamtx_restart(self, config: RuntimeConfig) -> dict[str, Any]:
+        if config.mediamtx.control_mode == 'external':
+            return self._restart_mediamtx(config)
+        with self.media_update():
+            try:
+                return self._restart_mediamtx(config)
+            finally:
+                self.reconcile(config)
+
+    def _restart_mediamtx(self, config: RuntimeConfig) -> dict[str, Any]:
         mode = config.mediamtx.control_mode
         service_name = config.mediamtx.service_name
         if mode == "systemd":
@@ -1324,14 +1350,15 @@ class OrchestratorSupervisor:
 
     def stop_all(self, config: RuntimeConfig) -> dict[str, Any]:
         with self._lock:
-            for proc in self._processes.values():
+            for proc in sorted(self._processes.values(), key=lambda item: item.key.startswith('mediamtx:')):
                 self._stop_process(proc)
         mtx = self.mediamtx_stop(config)
         return {"mediamtx": mtx}
 
     def restart_all(self, config: RuntimeConfig) -> dict[str, Any]:
         mtx = self.mediamtx_restart(config)
-        self.reconcile(config, force_restart=True)
+        if config.mediamtx.control_mode == 'external':
+            self.reconcile(config, force_restart=True)
         return {"mediamtx": mtx}
 
     def restart_camera(self, config: RuntimeConfig, camera_id: str) -> bool:

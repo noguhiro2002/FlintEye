@@ -1,0 +1,68 @@
+# Only synthetic processes on a disposable native Windows CI runner.
+$ErrorActionPreference='Stop'
+if ($env:GITHUB_ACTIONS -ne 'true') { throw 'Use a disposable CI runner.' }
+$root=Join-Path $env:RUNNER_TEMP ('FlintEye stop test '+[guid]::NewGuid().ToString('N'))
+$profile=Join-Path $root 'custom profile'
+New-Item -ItemType Directory -Path $profile -Force | Out-Null
+$source=@'
+using System;
+using System.IO;
+using System.Diagnostics;
+using System.Threading;
+using System.Collections.Generic;
+using System.Web.Script.Serialization;
+public class SyntheticFlintEye {
+ public static void Main(string[] args) {
+  if(args.Length > 0 && args[0] == "--worker") { Thread.Sleep(60000); return; }
+  string profile=args[0]; string exe=Process.GetCurrentProcess().MainModule.FileName;
+  var start=new ProcessStartInfo(Path.Combine(Path.GetDirectoryName(exe), "ffmpeg.exe"), "--worker");
+  start.UseShellExecute=false; start.CreateNoWindow=true;
+  var child=Process.Start(start);
+  var control=new Dictionary<string,object>{{"token",new string('a',64)},{"pid",Process.GetCurrentProcess().Id},{"executable",exe}};
+  File.WriteAllText(Path.Combine(profile,"instance-control.json"),new JavaScriptSerializer().Serialize(control));
+  File.WriteAllText(Path.Combine(profile,"child.pid"),child.Id.ToString());
+  while(!File.Exists(Path.Combine(profile,"stop-request.json"))) Thread.Sleep(50);
+  // A child created while shutdown is requested must also be discovered.
+  var late=Process.Start(start);
+  File.WriteAllText(Path.Combine(profile,"late-child.pid"),late.Id.ToString());
+  Thread.Sleep(400);
+  // Reproduce an old launcher exiting while its child remains alive.
+ }
+}
+'@
+$exe=Join-Path $root 'FlintEye.exe'
+Add-Type -TypeDefinition $source -ReferencedAssemblies 'System.dll','System.Web.Extensions.dll' -OutputAssembly $exe -OutputType ConsoleApplication
+Copy-Item $exe (Join-Path $root 'ffmpeg.exe')
+$parent=$null; $unrelated=$null; $childId=$null
+try {
+    $parent=Start-Process -FilePath $exe -ArgumentList ('"'+$profile+'"') -PassThru
+    $unrelated=Start-Process -FilePath (Join-Path $root 'ffmpeg.exe') -ArgumentList '--worker' -PassThru
+    for($attempt=0;$attempt -lt 60;$attempt++) {
+        if(Test-Path -LiteralPath (Join-Path $profile 'child.pid')) { break }
+        Start-Sleep -Milliseconds 100
+    }
+    $childId=[int](Get-Content -LiteralPath (Join-Path $profile 'child.pid'))
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File packaging/stop_windows.ps1 -InstallDir $root -DataDir $profile -Force -TimeoutSeconds 2
+    if($LASTEXITCODE -ne 0) { throw 'Scoped helper failed.' }
+    if(-not $parent.WaitForExit(5000)) { throw 'Parent survived.' }
+    if(Get-Process -Id $childId -ErrorAction SilentlyContinue) { throw 'Orphaned media child survived.' }
+    $lateId=[int](Get-Content -LiteralPath (Join-Path $profile 'late-child.pid'))
+    if(Get-Process -Id $lateId -ErrorAction SilentlyContinue) { throw 'Child created during shutdown survived.' }
+    if($unrelated.HasExited) { throw 'Unrelated process was stopped.' }
+    $receipt=Get-Content -LiteralPath (Join-Path $profile 'last-stop-result.json') -Raw | ConvertFrom-Json
+    if($receipt.mode -ne 'forced') { throw 'Forced media cleanup was reported as normal shutdown.' }
+    if(-not (Test-Path -LiteralPath (Join-Path $profile 'instance-control.json'))) { throw 'Retained synthetic profile was removed.' }
+    Write-Host 'PASS: scoped stop reaps an orphaned child, preserves an unrelated process and reports force accurately.'
+} finally {
+    foreach($candidate in @($parent,$unrelated)) {
+        if($candidate -and -not $candidate.HasExited) { $candidate.Kill(); $candidate.WaitForExit() }
+    }
+    $cleanupIds=@($childId)
+    if(Test-Path -LiteralPath (Join-Path $profile 'late-child.pid')) { $cleanupIds+= [int](Get-Content -LiteralPath (Join-Path $profile 'late-child.pid')) }
+    foreach($cleanupId in $cleanupIds) {
+        if(-not $cleanupId) { continue }
+        $child=Get-CimInstance Win32_Process -Filter "ProcessId=$cleanupId"
+        if($child -and $child.ExecutablePath -eq (Join-Path $root 'ffmpeg.exe')) { Stop-Process -Id $cleanupId -Force -ErrorAction SilentlyContinue }
+    }
+    Remove-Item -LiteralPath $root -Recurse -Force
+}

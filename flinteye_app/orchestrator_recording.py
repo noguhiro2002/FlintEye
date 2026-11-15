@@ -220,7 +220,7 @@ def _upsert_recording_for_path(
     return lines, changed, "updated"
 
 
-def apply_recording_config(config: RuntimeConfig, *, workspace_dir: str) -> RecordingApplyResult:
+def apply_recording_config(config: RuntimeConfig, *, workspace_dir: str, before_write=None) -> RecordingApplyResult:
     if not config.recording.auto_apply:
         return RecordingApplyResult(
             ok=True,
@@ -301,6 +301,8 @@ def apply_recording_config(config: RuntimeConfig, *, workspace_dir: str) -> Reco
 
     backup_path = config_path.with_suffix(config_path.suffix + ".bak")
     if changed:
+        if before_write is not None:
+            before_write()
         shutil.copy2(config_path, backup_path)
         out_text = "\n".join(lines)
         if lines and lines[-1] != "":

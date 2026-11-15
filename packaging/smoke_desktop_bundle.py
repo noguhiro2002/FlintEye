@@ -36,9 +36,27 @@ def installed_executable(directory: Path):
                    check=True, timeout=120)
     installed = directory / 'Applications first/FlintEye.app'
     try:
+        from verify_macos import verify_app, assess_gatekeeper
+        verify_app(mount/'FlintEye.app')
         shutil.copytree(mount/'FlintEye.app', installed, symlinks=True)
     finally:
         subprocess.run(['hdiutil', 'detach', str(mount)], check=True, timeout=60)
+    verify_app(installed)
+    assess_gatekeeper(installed, ROOT/f'dist/FlintEye-{version()}-macos-{architecture}-signature.json')
+    # A real integrity check must reject modified final-bundle resources.
+    info = installed/'Contents/Info.plist'
+    original = info.read_bytes()
+    try:
+        info.write_bytes(original + b'\n')
+        try:
+            verify_app(installed)
+        except subprocess.CalledProcessError:
+            print('PASS: final DMG signature rejects changed bundle metadata')
+        else:
+            raise AssertionError('Modified bundle unexpectedly passed signature verification')
+    finally:
+        info.write_bytes(original)
+    verify_app(installed)
     yield installed / 'Contents/MacOS/FlintEye'
 
 
@@ -87,6 +105,9 @@ def check_application(executable: Path, profile: Path, cwd: Path, *, first_run: 
                 assert result.status_code == 200, result.text
                 runtime = client.get('/api/v1/config/effective')
                 assert runtime.status_code == 200
+                active_listener = client.get('/api/v1/status/listener').json()
+                assert active_listener['port'] == port and active_listener['source'] == 'command line'
+                assert runtime.json()['api']['port'] == 18080, 'CLI override must not change saved settings'
                 result = client.patch('/api/v1/config/runtime', headers={'If-Match':runtime.headers['etag']}, json={
                     'recording': {'record_paths':['bundle-smoke'], 'record_all_cameras':False,
                                   'include_multiview':False, 'record_segment_duration':'1s'}})

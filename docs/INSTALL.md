@@ -52,7 +52,7 @@ To test the updated source on your own M1 Mac without GitHub Actions, follow the
 Initial Windows packages have no publisher signature. Check that you downloaded the expected package from this repository.
 If Windows permits it, use the per-application confirmation presented by SmartScreen.
 
-macOS packages use an ad-hoc integrity signature, without Developer ID notarization.
+macOS preview packages use an ad-hoc integrity signature, without Developer ID notarization. The build now rejects invalid bundle signatures, including the test/debug binaries accidentally copied into older license bundles. A valid ad-hoc signature still does not establish a trusted publisher: a Gatekeeper rejection is expected on a clean machine. A downloaded app's first launch remains an explicit acceptance check. See [Apple's explanation of app checks](https://support.apple.com/102445) and [signature verification](https://developer.apple.com/library/archive/technotes/tn2206/).
 After attempting to open the app, macOS may require **System Settings → Privacy & Security → Open Anyway**.
 Do not disable Gatekeeper globally or remove quarantine attributes in an installer script.
 Managed computers may require help from their administrator.

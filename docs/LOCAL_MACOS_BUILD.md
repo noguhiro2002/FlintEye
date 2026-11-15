@@ -68,7 +68,7 @@ It performs these steps in order:
 1. Extract the committed source into a fresh build directory and install constrained Python dependencies in a separate environment.
 2. Run the MediaMTX startup regression tests, compile the pinned media tools, and test authenticated media input.
 3. Rebuild the shared web interface and package it with Python and the media tools into an ARM64 app and DMG. Apply the same local ad-hoc signature as the regular build; no Apple developer account is required.
-4. Mount the DMG, copy the app with its internal links preserved, and eject the DMG before testing. Check setup, authentication, worker loading, MediaMTX, synthetic recording and playback download.
+4. Mount the DMG, verify the final app with `codesign --verify --deep --strict`, copy the app with its internal links preserved, and eject the DMG. Verify the copied app and prove that a deliberately modified copy fails verification before restoring it. Record the Gatekeeper assessment separately; an ad-hoc signature does not imply Developer ID trust or notarization. Then test setup and media. Check setup, authentication, worker loading, MediaMTX, synthetic recording and playback download.
 5. Move that test app to a different directory and restart it with the same temporary profile. This checks the saved-path repair that addresses the macOS startup failure.
 
 The automated test uses temporary accounts and generated video. It does not open your cameras, use your saved password, or modify your existing recordings.
@@ -77,7 +77,7 @@ Success ends with **Local DMG verified:** and the exact file path. Open the `art
 
 - `FlintEye-VERSION-local-<commit>-macos-arm64.dmg`
 - Corresponding media sources and licenses
-- `vendor-sha256.json`, `build-info.json`, and `SHA256SUMS`
+- `vendor-sha256.json`, `build-info.json`, the `-signature.json` integrity/Gatekeeper report, and `SHA256SUMS`
 
 The application reports the numeric version from the selected source; the filename and build information identify the new source commit. This is not a replacement for an existing release. To check file integrity, open Terminal in the `artifacts` folder and run:
 

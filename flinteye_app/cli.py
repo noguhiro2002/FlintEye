@@ -13,7 +13,7 @@ import threading
 import time
 import urllib.request
 import webbrowser
-from flinteye_app.flinteye_runtime import application_dir, data_dir, launch_command
+from flinteye_app.flinteye_runtime import application_dir, data_dir, default_data_dir, launch_command
 
 WORKERS = {'uvc_to_rtsp', 'ip_camera_to_rtsp', 'multiview_input_to_rtsp',
            'multiview_buffer_to_rtsp', 'multiview_raw_compositor', 'multiview_to_rtsp'}
@@ -128,28 +128,119 @@ def setup_dialog(runtime: Path) -> None:
         raise SystemExit(0)
 
 
-def enable_autostart() -> None:
-    import shlex
-    command = launch_command()
+def _startup_command() -> list[str]:
+    if sys.platform == 'darwin' and getattr(sys, 'frozen', False):
+        return ['/usr/bin/open', '-a', str(Path(sys.executable).resolve().parents[2]), '--args']
+    return launch_command()
+
+
+def _read_startup():
     if sys.platform == 'win32':
         import winreg
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'Software\Microsoft\Windows\CurrentVersion\Run') as key:
+                return winreg.QueryValueEx(key, 'FlintEye')[0]
+        except FileNotFoundError:
+            return None
+    path = (Path.home()/'Library/LaunchAgents/community.flinteye.plist' if sys.platform == 'darwin'
+            else Path.home()/'.config/autostart/flinteye.desktop')
+    if not path.exists():
+        return None
+    # Preserve an unfamiliar or binary registration rather than replacing it.
+    return path.read_text(encoding='utf-8', errors='replace')
+
+
+def _owns_startup(existing, *, allow_legacy_bundle_id: bool = False) -> bool:
+    if existing is None:
+        return True
+    owner = default_data_dir()/'autostart-owner.json'
+    if owner.exists():
+        try:
+            record = json.loads(owner.read_text())
+        except (OSError, ValueError):
+            return False
+        if not isinstance(record, dict):
+            return False
+        return (record.get('profile') == str(data_dir())
+                and record.get('registration') == existing
+                and record.get('installation') == launch_command())
+    # Earlier versions had a single default-profile entry. Never remove a
+    # different installation's command or guess ownership for a custom profile.
+    if data_dir() != default_data_dir():
+        return False
+    command = _startup_command() + ['--background']
+    if sys.platform == 'win32':
+        return existing == subprocess.list2cmdline(command)
+    if sys.platform == 'darwin':
+        import plistlib
+        try:
+            registration = plistlib.loads(existing.encode())
+            legacy = ['/usr/bin/open', '-b', 'community.flinteye', '--args', '--background']
+            return isinstance(registration, dict) and (registration.get('ProgramArguments') == command
+                or (allow_legacy_bundle_id and registration.get('ProgramArguments') == legacy))
+        except (ValueError, plistlib.InvalidFileException):
+            return False
+    return ('Exec=' + _desktop_command(command) + '\n' in existing
+            or 'Exec=' + _desktop_command(command[:-1]) + ' --background\n' in existing)
+
+
+def _desktop_command(command):
+    return ' '.join('"' + arg.replace('\\', '\\\\').replace('"', '\\"').replace('`', '\\`').replace('$', '\\$').replace('%', '%%') + '"' for arg in command)
+
+
+def enable_autostart() -> bool:
+    if sys.platform == 'darwin' and '/AppTranslocation/' in sys.executable:
+        # A temporary Gatekeeper path cannot be used at the next login.
+        return False
+    if (data_dir()/'autostart-disabled').exists() or not _owns_startup(_read_startup()):
+        return False
+    command = _startup_command() + ['--background', '--data-dir', str(data_dir())]
+    if sys.platform == 'win32':
+        import winreg
+        registration = subprocess.list2cmdline(command)
         with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r'Software\Microsoft\Windows\CurrentVersion\Run') as key:
-            winreg.SetValueEx(key, 'FlintEye', 0, winreg.REG_SZ, subprocess.list2cmdline(command + ['--background']))
+            winreg.SetValueEx(key, 'FlintEye', 0, winreg.REG_SZ, registration)
     elif sys.platform == 'darwin':
         import plistlib
-        if getattr(sys, 'frozen', False):
-            # LaunchServices resolves the installed app; sys.executable may be
-            # inside a temporary AppTranslocation directory that expires.
-            command = ['/usr/bin/open', '-b', 'community.flinteye', '--args']
-        dest = Path.home() / 'Library/LaunchAgents/community.flinteye.plist'
+        dest = Path.home()/'Library/LaunchAgents/community.flinteye.plist'
         dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(plistlib.dumps({'Label': 'community.flinteye', 'ProgramArguments': command + ['--background'], 'RunAtLoad': True}))
+        registration = plistlib.dumps({'Label': 'community.flinteye', 'ProgramArguments': command, 'RunAtLoad': True}).decode()
+        dest.write_text(registration, encoding='utf-8')
     else:
-        dest = Path.home() / '.config/autostart/flinteye.desktop'
+        dest = Path.home()/'.config/autostart/flinteye.desktop'
         dest.parent.mkdir(parents=True, exist_ok=True)
-        # Desktop Entry Exec uses double quotes, not shell single-quote escaping.
-        quoted = ' '.join('"' + arg.replace('\\', '\\\\').replace('"', '\\"').replace('`', '\\`').replace('$', '\\$').replace('%', '%%') + '"' for arg in command)
-        dest.write_text('[Desktop Entry]\nType=Application\nName=FlintEye\nExec=' + quoted + ' --background\n', encoding='utf-8')
+        registration = '[Desktop Entry]\nType=Application\nName=FlintEye\nExec=' + _desktop_command(command) + '\n'
+        dest.write_text(registration, encoding='utf-8')
+    owner = default_data_dir()/'autostart-owner.json'
+    owner.parent.mkdir(parents=True, exist_ok=True)
+    owner.write_text(json.dumps({'profile':str(data_dir()), 'registration':registration,
+                                'installation':launch_command()}), encoding='utf-8')
+    return True
+
+
+def disable_autostart() -> None:
+    """Remove this profile's login registration; preserve other installations/data."""
+    root = data_dir()
+    root.mkdir(parents=True, exist_ok=True)
+    # Explicit removal may also clean the old default-profile, shared bundle-ID
+    # registration. Automatic startup must never take over that ambiguous entry.
+    if _owns_startup(_read_startup(), allow_legacy_bundle_id=True):
+        if sys.platform == 'win32':
+            import winreg
+            try:
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'Software\Microsoft\Windows\CurrentVersion\Run',
+                                    0, winreg.KEY_SET_VALUE) as key:
+                    winreg.DeleteValue(key, 'FlintEye')
+            except FileNotFoundError:
+                pass
+        elif sys.platform == 'darwin':
+            (Path.home()/'Library/LaunchAgents/community.flinteye.plist').unlink(missing_ok=True)
+            subprocess.run(['/bin/launchctl', 'bootout', f'gui/{os.getuid()}/community.flinteye'],
+                           capture_output=True, check=False, timeout=10)
+        else:
+            (Path.home()/'.config/autostart/flinteye.desktop').unlink(missing_ok=True)
+        (default_data_dir()/'autostart-owner.json').unlink(missing_ok=True)
+    (root/'autostart-disabled').write_text('Disabled by the user.\n', encoding='utf-8')
 
 
 def main() -> int:
@@ -180,11 +271,25 @@ def main() -> int:
     parser.add_argument('--setup', action='store_true')
     parser.add_argument('--setup-only', action='store_true')
     parser.add_argument('--background', action='store_true')
+    startup = parser.add_mutually_exclusive_group()
+    startup.add_argument('--disable-autostart', action='store_true', help='Remove FlintEye login startup and exit; preserve data')
+    startup.add_argument('--enable-autostart', action='store_true', help='Enable FlintEye login startup and exit')
     parser.add_argument('--data-dir', type=Path, default=data_dir())
-    parser.add_argument('--port', type=int, default=18080)
+    parser.add_argument('--port', type=int, help='Override the saved API port for this launch only')
     args = parser.parse_args()
+    if args.port is not None and not 1 <= args.port <= 65535:
+        parser.error('--port must be between 1 and 65535')
     root = args.data_dir.expanduser().resolve()
     os.environ['FLINTEYE_DATA_DIR'] = str(root)
+    if args.disable_autostart:
+        disable_autostart()
+        return 0
+    if args.enable_autostart:
+        if not _owns_startup(_read_startup()):
+            print('Start at login belongs to another FlintEye installation or profile; it was preserved.', file=sys.stderr)
+            return 1
+        (root/'autostart-disabled').unlink(missing_ok=True)
+        return 0 if enable_autostart() else 1
     os.environ['FLINTEYE_PACKAGED'] = '1'
     os.environ['PATH'] = str(application_dir() / 'bin') + os.pathsep + os.environ.get('PATH', '')
     # Keep a process-owned lock; OS releases it after crashes. Never kill unrelated processes.
@@ -200,7 +305,10 @@ def main() -> int:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
         if not args.headless:
-            webbrowser.open(f'http://127.0.0.1:{args.port}')
+            from flinteye_app.orchestrator_store import RuntimeStore
+            existing = RuntimeStore(env_file='', runtime_file=str(root/'runtime.json'), use_env=False)
+            from flinteye_app.instance_control import active_listener_port
+            webbrowser.open(f'http://127.0.0.1:{active_listener_port(root, existing.get_effective().api.port)}')
         return 0
     runtime = initialize(root)
     if not args.headless:
@@ -219,14 +327,18 @@ def main() -> int:
         with os.fdopen(fd, 'w') as stream: stream.write(token)
         print(f'Initial setup: open the web UI and enter the token from {token_file}', flush=True)
     install_routes(app, context, setup_token=token, desktop=not args.headless)
-    url = f'http://127.0.0.1:{args.port}'
+    host = context.store.get_effective().api.host
+    port = args.port or context.store.get_effective().api.port
+    context.listener = {'host': host, 'port': port,
+                        'source': 'command line' if args.port else 'saved configuration'}
+    url = f'http://127.0.0.1:{port}'
     import uvicorn
-    server = uvicorn.Server(uvicorn.Config(app, host=context.store.get_effective().api.host,
-                                          port=args.port, log_config=None, proxy_headers=True,
+    server = uvicorn.Server(uvicorn.Config(app, host=host,
+                                          port=port, log_config=None, proxy_headers=True,
                                           timeout_graceful_shutdown=5,
                                           forwarded_allow_ips='127.0.0.1,::1'))
     from flinteye_app.instance_control import InstanceControl
-    control = InstanceControl(root, lambda: setattr(server, 'should_exit', True))
+    control = InstanceControl(root, lambda: setattr(server, 'should_exit', True), port=port)
     thread = None
     try:
         if args.headless:

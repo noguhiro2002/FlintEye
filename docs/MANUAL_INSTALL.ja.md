@@ -5,17 +5,29 @@
 
 [Documentation](README.ja.md)
 
-この手順は開発者向けです。一般ユーザーは、リリースされたら[デスクトップインストーラー](INSTALL.ja.md)を使用してください。
+この手順は開発者向けです。一般ユーザーはリリースされたら[デスクトップインストーラー](INSTALL.ja.md)を使用してください。
 
 <a id="requirements"></a>
-## 要件
+## 必要条件
 
 - Python 3.13または3.14（Windows/macOSでは3.14.10を使用）、Node.js 22.12+、npm
-- `libx264`、`drawtext`、HTTP/HTTPS/RTSP、concat-demuxerをサポートするFFmpeg/FFprobe
+- `libx264`、`drawtext`、HTTP/HTTPS/RTSP、およびconcat-demuxerをサポートするFFmpeg/FFprobe
 - PATH上の、または`bin/mediamtx`（Windowsでは`bin/mediamtx.exe`）にあるMediaMTX 1.21.2
 - デスクトップランチャー用のTk。Linuxパッケージでは一般的に`python3-tk`と呼ばれます
 
-リポジトリをクローンし、ルートからコマンドを実行します：
+<a id="linux-python-prerequisites"></a>
+### Linux Pythonの前提条件
+
+`-m venv`を実行する前に、実際に使用するPythonインタープリターの仮想環境サポートをインストールしてください。Debian/Ubuntuでは、これは別のパッケージに分割されています。ディストリビューションのデフォルトPythonの場合は`python3-venv`、または`python3.13-venv`などの一致するバージョンです。デスクトップ設定用に一致するTkパッケージもインストールしてください。`ensurepip`が利用できない場合は、そのvenvパッケージをインストールして不完全な環境を再作成してください。アプリケーション要件のインストールでは修復できません。
+
+インタープリターは、上記のPythonのバージョン要件を引き続き満たす必要があります。ディストリビューションのデフォルトのPythonは古い可能性があるため、個別にインストールされたサポート対象のインタープリターと、一致するvenv/Tkコンポーネントを使用してください。オペレーティングシステムのPythonを置き換えたり削除したりしないでください。たとえば、Debianでパッケージ版Python 3.13を使用する場合：
+
+```sh
+sudo apt-get install python3.13-venv python3-tk
+python3.13 -m venv .venv
+```
+
+リポジトリをクローンし、そのルートからコマンドを実行します：
 
 ```sh
 git clone https://github.com/noguhiro2002/FlintEye.git
@@ -28,17 +40,17 @@ npm --prefix frontend run build
 python flinteye.py
 ```
 
-Windowsでは`python`の代わりに`py -3.14 -m venv .venv`を使用し、次に`.venv\Scripts\python.exe`を使用します。
-公開ソースはGitHub認証なしでクローンできます。以前のプライベートリポジトリを使用していた場合は、関連のない履歴をマージするのではなく、新しくチェックアウトを作成してください。
+Windowsでは`py -3.14 -m venv .venv`を使用し、`python`の代わりに`.venv\Scripts\python.exe`を使用してください。
+パブリックソースはGitHub認証なしでクローンできます。以前のプライベートリポジトリを使用していた場合は、関連のない履歴をマージするのではなく、新しくチェックアウトを作成してください。
 
 ランチャーは、パッケージと同じパスワード設定、ローカルデータディレクトリ、ブラウザUIを使用します。
-デスクトップなしで実行するには、`python flinteye.py --headless`を使用します。生成された`setup-token`ファイルを読み取り、ローカルブラウザまたはSSHトンネルを通じて設定を完了します。
+デスクトップなしで実行するには、`python flinteye.py --headless`を使用します。生成された`setup-token`ファイルを読み込み、ローカルブラウザまたはSSHトンネルを通じて設定を完了します。
 プロセス引数にパスワードを指定しないでください。
 
 <a id="develop-the-frontend"></a>
 ## フロントエンドの開発
 
-ホットリロードには、個別の開発スタックを使用します：
+ホットリロード用の個別の開発スタックを使用します：
 
 ```sh
 cp config/examples/.env.example.linux .env
@@ -46,9 +58,9 @@ python -m tools.manage_auth init-local --runtime-file runtime.json
 python -m tools.start_orchestrator_stack --env-file .env --runtime-file runtime.json
 ```
 
-該当するシステムでは、macOS/Windows環境のテンプレートを選択してください。
+それらのシステムでは、macOS/Windows環境のテンプレートを選択してください。
 開発では独自の`runtime.json`を使用します。デスクトップアプリケーションと同じポートで実行しないでください。
-APIとViteリスナーをループバックに維持します。
+APIおよびViteリスナーをループバックに維持してください。
 
 [API reference](advanced/API.ja.md) · [Camera tools](advanced/CAMERA_TOOLS.ja.md) · [Frontend details](advanced/DEVELOPMENT.ja.md)
 
@@ -62,4 +74,4 @@ npm --prefix frontend run build
 python packaging/check_docs.py
 ```
 
-pipを通じたアプリケーションの配布は後回しにされています。`requirements.txt`のインストールは、スタンドアロンのFlintEyeアプリケーションではなく依存関係をインストールします。
+pipを通したアプリケーションの配布は後回しにされています。`requirements.txt`のインストールでは、スタンドアロンのFlintEyeアプリケーションではなく依存関係がインストールされます。

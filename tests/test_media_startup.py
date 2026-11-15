@@ -107,15 +107,21 @@ class BundledMediaTests(unittest.TestCase):
         binary.write_bytes(b'restored executable')
         self.assertTrue(self.launch(self.new).is_file())
 
-    def test_mac_autostart_does_not_persist_translocated_executable(self):
+    def test_mac_autostart_uses_specific_installed_app(self):
         with patch('sys.platform', 'darwin'), patch('sys.frozen', True, create=True), \
              patch('flinteye_app.cli.Path.home', return_value=self.root), \
-             patch('sys.executable', str(self.old.parent/'MacOS/FlintEye')):
+             patch('flinteye_app.cli.data_dir', return_value=self.profile), \
+             patch('sys.executable', str(self.new.parent/'MacOS/FlintEye')):
             enable_autostart()
         data = plistlib.loads((self.root/'Library/LaunchAgents/community.flinteye.plist').read_bytes())
         self.assertEqual(data['ProgramArguments'],
-                         ['/usr/bin/open', '-b', 'community.flinteye', '--args', '--background'])
+                         ['/usr/bin/open', '-a', str(self.new.parent.parent), '--args', '--background', '--data-dir', str(self.profile)])
         self.assertTrue(data['RunAtLoad'])
+
+    def test_translocated_app_does_not_register_temporary_startup_path(self):
+        with patch('sys.platform', 'darwin'), patch('sys.frozen', True, create=True), \
+             patch('sys.executable', str(self.old.parent/'MacOS/FlintEye')):
+            self.assertFalse(enable_autostart())
 
 
 class MediaFailureTests(unittest.TestCase):

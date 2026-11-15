@@ -22,7 +22,7 @@ The usual locations are:
 | `%LOCALAPPDATA%\FlintEye` | Accounts, settings, logs, recording index and default recordings | Kept |
 | A recording folder you selected elsewhere | Recordings | Kept |
 
-FastAPI is part of the bundled Python application; it is not a separate Windows service installed by the desktop installer. You do not need to uninstall Python, FastAPI or FFmpeg globally. The Windows login-start entry and shortcuts are removed with the app. The optional data-deletion question defaults to **No**; silent uninstall always keeps data. External recording folders are never removed by this uninstaller.
+FastAPI is part of the bundled Python application; it is not a separate Windows service installed by the desktop installer. You do not need to uninstall Python, FastAPI or FFmpeg globally. The Windows login-start entry for this installation and its shortcuts are removed with the app; a registration pointing at another installation is preserved. Login startup is registered by the desktop app after first setup, not by a silent installer. The optional data-deletion question defaults to **No**; silent uninstall always keeps data. External recording folders are never removed by this uninstaller.
 
 ## Recover an older Windows installation
 
@@ -39,15 +39,27 @@ For administrators who want to stop the old installation without rebooting, the 
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\packaging\stop_windows.ps1 -InstallDir "$env:LOCALAPPDATA\Programs\FlintEye"
 ```
 
-This invocation changes the execution policy only for that PowerShell process. The helper checks executable paths and ownership; it does not delete files. If the API still responds afterward, identify the process listening on that port: it may be another installation, a manually started server, Docker, or a cached page. Do not indiscriminately terminate every `python.exe` or `ffmpeg.exe` process.
+This invocation changes the execution policy only for that PowerShell process. The helper checks executable paths and ownership; it does not delete files. It discovers `--data-dir` arguments and requests shutdown for each current-user instance in the selected installation. To target one profile, add `-DataDir "C:\path\to\profile"`; this also handles a profile chosen through an environment variable. Without `-Force`, a timeout is an error. Use `-Force` only when you intend to terminate the matching processes after the timeout. The uninstaller uses that bounded fallback for its own installation.
+
+`last-stop-result.json` in the selected data directory (or `%LOCALAPPDATA%\FlintEye` for installation-wide stops) distinguishes `already-stopped`, `requested-shutdown-completed`, `forced`, and `incomplete`. Exit 0 means the selected processes are gone; exit 1 means stopping was incomplete. A successful parent shutdown request does not prove that an in-progress recording was finalized: Windows currently uses process-tree termination for media children. Check the final recording and recording index when testing a stop during recording. If the API still responds afterward, identify the process listening on that port: it may be another installation, a manually started server, Docker, or a cached page. Do not indiscriminately terminate every `python.exe` or `ffmpeg.exe` process.
 
 ## macOS and Linux
 
-Stop monitoring before replacing or deleting the app. On macOS, remove the installed `FlintEye.app`; on Linux, remove the package through the package manager. Keep the data directories listed in [Recording lifecycle](DISTRIBUTION.md#recording-lifecycle) unless you deliberately want to erase them. A manually configured systemd service or Docker container is administered separately and must be stopped through its own deployment tools.
+On macOS, choose **Disable start at login and quit** from the FlintEye menu-bar icon before moving `FlintEye.app` to Trash. This removes `~/Library/LaunchAgents/community.flinteye.plist` when it belongs to the current installation/profile, unloads that login registration, and remembers that autostart is disabled. This explicit action can also remove the older default-profile registration that used only the shared bundle ID. Automatic startup does not replace that ambiguous legacy entry. Dragging an app to Trash by itself does not run an uninstaller or remove its LaunchAgent.
+
+If the app is already stopped, run this command before removing it:
+
+```sh
+/Applications/FlintEye.app/Contents/MacOS/FlintEye --disable-autostart
+```
+
+Adjust the app path if installed elsewhere, and add `--data-dir` for a custom profile. This command changes login startup only; it does not stop another running instance or delete settings/recordings. To restore login startup later, run the same app with `--enable-autostart`. New Mac registrations target the specific installed app copy; first move the app to Applications, because temporary App Translocation paths are not registered. A registration owned by another installation/profile is preserved, and the enable command reports failure instead of replacing it. If the app was already deleted, remove only the FlintEye LaunchAgent named above, then log out and back in to verify it no longer starts.
+
+On Linux, stop monitoring and remove the package through the package manager. Keep the data directories listed in [Recording lifecycle](DISTRIBUTION.md#recording-lifecycle) unless you deliberately want to erase them. A manually configured systemd service or Docker container is administered separately and must be stopped through its own deployment tools.
 
 ## Which builds contain this change?
 
-These fixes require a rebuilt installer. Previously downloaded 1.1.0/1.1.1 installers are unchanged; a local build still reports 1.1.1, so check the source commit in its build information. The [M1 build guide](LOCAL_MACOS_BUILD.md) builds the current committed source without GitHub Actions.
+These fixes require a rebuilt installer. Previously downloaded installers are unchanged. Check the source commit in the build information: the application version alone does not identify these changes. The [M1 build guide](LOCAL_MACOS_BUILD.md) builds the current committed source without GitHub Actions.
 
 Automated checks cover owned-process cleanup, an exited worker with a surviving child, Windows job ownership under Wine, and the installed-bundle shutdown request. Wine does not replace a real Windows uninstall test. Verify quit, camera release and restart on each target device; check that unrelated applications remain running and that uninstall retains accounts and recordings.
 

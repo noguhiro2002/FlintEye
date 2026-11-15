@@ -78,8 +78,13 @@ if sys.platform == 'darwin':
                     'CFBundleShortVersionString': app_version, 'CFBundleVersion': app_version})
     info.write_bytes(plistlib.dumps(payload))
     # Ad-hoc signing is required for local ARM64 executable integrity; no Developer ID/notarization.
-    subprocess.run(['codesign', '--force', '--deep', '--sign', '-', str(ROOT / 'dist/FlintEye.app')], check=True)
+    # PyInstaller signs nested native code. Only the outer seal changed above.
+    subprocess.run(['codesign', '--force', '--sign', '-', str(ROOT / 'dist/FlintEye.app')], check=True)
+    from verify_macos import verify_app
+    verify_app(ROOT / 'dist/FlintEye.app')
     dmg_contents = ROOT / 'build/dmg-contents'
+    if dmg_contents.exists():
+        shutil.rmtree(dmg_contents)
     dmg_contents.mkdir(parents=True, exist_ok=True)
     shutil.copytree(ROOT / 'dist/FlintEye.app', dmg_contents / 'FlintEye.app', dirs_exist_ok=True, symlinks=True)
     if not (dmg_contents / 'Applications').is_symlink():

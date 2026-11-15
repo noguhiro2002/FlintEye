@@ -83,6 +83,7 @@ class AppContext:
         self.ptz_controller = OnvifPtzController()
         self.storage_problem = None
         self.started_at = time.time()
+        self.listener: dict[str, Any] | None = None
         self.lock = threading.RLock()
         self._recording_cache_cleanup_stop = threading.Event()
         self._recording_cache_cleanup_thread: threading.Thread | None = None
@@ -178,9 +179,7 @@ class AppContext:
                 problem = storage_problem(config)
                 if problem != self.storage_problem:
                     self.storage_problem = problem
-                    result = _apply_mediamtx_config(self, config)
-                    if result.ok and result.changed:
-                        self.supervisor.mediamtx_restart(config)
+                    _apply_running_media_config(self, config)
             except (OSError, ValueError, ValidationError) as e:
                 logger.warning("recording playback cache cleanup failed: %s", e)
             if self._recording_cache_cleanup_stop.wait(RECORDING_PLAYBACK_CACHE_CLEANUP_INTERVAL_SEC):
@@ -1054,21 +1053,27 @@ def _restart_affected(context: AppContext, old_cfg: RuntimeConfig, new_cfg: Runt
             context.ptz_controller.invalidate(camera_id)
     context.reconfigure_logging(new_cfg)
     context.cleanup_recording_playback_cache(new_cfg)
-    mediamtx_apply_result = _apply_mediamtx_config(context, new_cfg)
-    mediamtx_needs_restart = old_cfg.mediamtx != new_cfg.mediamtx
-    if mediamtx_apply_result.ok and mediamtx_apply_result.changed:
-        mediamtx_needs_restart = True
-    if mediamtx_needs_restart:
-        context.supervisor.mediamtx_restart(new_cfg)
-    context.supervisor.reconcile(new_cfg)
+    _apply_running_media_config(context, new_cfg, force_restart=old_cfg.mediamtx != new_cfg.mediamtx)
 
 
-def _apply_mediamtx_config(context: AppContext, config: RuntimeConfig) -> MediamtxYamlApplyResult:
+def _apply_running_media_config(context: AppContext, config: RuntimeConfig, *, force_restart=False) -> MediamtxYamlApplyResult:
+    with context.supervisor.media_update(pause=False):
+        try:
+            callback = context.supervisor.pause_media_publishers if config.mediamtx.control_mode != 'external' else None
+            result = _apply_mediamtx_config(context, config, before_write=callback)
+            if force_restart or (result.ok and result.changed):
+                context.supervisor.mediamtx_restart(config)
+            return result
+        finally:
+            context.supervisor.reconcile(config)
+
+
+def _apply_mediamtx_config(context: AppContext, config: RuntimeConfig, *, before_write=None) -> MediamtxYamlApplyResult:
     from flinteye_app.flinteye_storage import storage_problem
     context.storage_problem = storage_problem(config)
     if context.storage_problem:
         config = config.model_copy(update={"recording": config.recording.model_copy(update={"enabled": False})})
-    result = apply_mediamtx_yaml(config, workspace_dir=context.workspace_dir)
+    result = apply_mediamtx_yaml(config, workspace_dir=context.workspace_dir, before_write=before_write)
     if not result.ok:
         logger.warning("mediamtx config apply failed: %s", result.message)
         return result
@@ -1446,6 +1451,17 @@ def get_status(request: Request) -> dict[str, Any]:
     }
 
 
+@app.get("/api/v1/status/listener", dependencies=[Depends(require_admin)])
+def get_listener_status(request: Request) -> dict[str, Any]:
+    context = get_context(request)
+    if context.listener is not None:
+        return context.listener
+    # External ASGI runners own the binding. Report the actual connection, not
+    # configuration defaults or an untrusted forwarded Host header.
+    server = request.scope.get("server")
+    return {"host": server[0], "port": server[1], "source": "ASGI connection"} if server else {}
+
+
 @app.get("/api/v1/status/processes", dependencies=[Depends(require_viewer)])
 def get_status_processes(request: Request) -> dict[str, Any]:
     context = get_context(request)
@@ -1535,8 +1551,7 @@ def patch_config_runtime(request: Request, response: Response, payload: dict[str
 def post_config_apply(request: Request) -> dict[str, Any]:
     context = get_context(request)
     config = context.store.get_effective()
-    _apply_mediamtx_config(context, config)
-    context.supervisor.reconcile(config, force_restart=False)
+    _apply_running_media_config(context, config)
     return {"ok": True, "applied": True}
 
 
@@ -1729,9 +1744,7 @@ def patch_mediamtx_config(request: Request, payload: dict[str, Any]) -> dict[str
 def post_mediamtx_config_apply(request: Request) -> dict[str, Any]:
     context = get_context(request)
     config = context.store.get_effective()
-    result = _apply_mediamtx_config(context, config)
-    if result.changed and config.mediamtx.control_mode != "external":
-        context.supervisor.mediamtx_restart(config)
+    result = _apply_running_media_config(context, config)
     return {
         "ok": result.ok,
         "changed": result.changed,
@@ -2568,6 +2581,7 @@ def main(argv: list[str] | None = None) -> int:
     effective = context.store.get_effective()
     host = args.host or effective.api.host
     port = args.port or effective.api.port
+    context.listener = {"host": host, "port": port, "source": "command line" if args.port or args.host else "saved configuration"}
     _configure_cors(env_file=args.env_file, api_host=host)
 
     import uvicorn

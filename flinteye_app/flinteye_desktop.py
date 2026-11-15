@@ -64,9 +64,14 @@ def run_desktop(url, server, root: Path):
         # Explicit action; closing the browser never stops recording.
         server.should_exit = True
         icon.stop()
+    def prepare_removal(icon, item):
+        from flinteye_app.cli import disable_autostart
+        disable_autostart()
+        stop(icon, item)
     icon = pystray.Icon('FlintEye', icon_image, 'FlintEye — monitoring', menu=pystray.Menu(
         pystray.MenuItem('Open FlintEye', lambda: webbrowser.open(url), default=True),
         pystray.MenuItem('Open logs', lambda: webbrowser.open((root / 'logs').as_uri())),
+        pystray.MenuItem('Disable start at login and quit', prepare_removal),
         pystray.MenuItem('Stop monitoring and quit', stop)))
     watcher_done = threading.Event()
     def ready(icon):

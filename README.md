@@ -21,6 +21,10 @@ Monitor USB and IP cameras, watch live video, and find recordings in your browse
 </p>
 <p align="center"><a href="README.ja.md">日本語</a> · <a href="docs/README.md">Documentation</a> · <a href="https://github.com/noguhiro2002/FlintEye/releases">Downloads</a></p>
 
+![Live View, two-camera Multiview, and recording playback](images/camera-workflow.gif)
+
+*Two real USB cameras: **Live View → Multiview → Recordings**. Captured on Linux from the current development build. [Watch/download the MP4](images/camera-workflow.mp4?raw=true).*
+
 ## Quick Install
 
 **Available now:** [run from source](docs/MANUAL_INSTALL.md), [build a local M1 Mac DMG](docs/LOCAL_MACOS_BUILD.md), or [build the development Docker image](docs/DOCKER.md#build-the-development-image).
@@ -41,13 +45,13 @@ irm https://github.com/noguhiro2002/FlintEye/releases/download/v1.1.2-preview.1/
 **macOS — Terminal**
 
 ```sh
-curl -fsSL https://github.com/noguhiro2002/FlintEye/releases/download/v1.1.2-preview.1/install.sh | bash
+bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.1.2-preview.1/install.sh
 ```
 
 **Linux — Terminal**
 
 ```sh
-curl -fsSL https://github.com/noguhiro2002/FlintEye/releases/download/v1.1.2-preview.1/install.sh | bash
+bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.1.2-preview.1/install.sh
 ```
 
 You can also download the script from the selected release, inspect it, and run it locally. Packaged builds include Python, FFmpeg, FFprobe and MediaMTX. No separate copies are required. Windows/macOS packages are unsigned/not notarized; see [OS confirmation screens](docs/INSTALL.md#unsigned-packages).
@@ -76,15 +80,21 @@ A pip application package is not part of the first release.
 2. **Add a camera in Settings.** Follow the English getting-started tour to register a USB or IP camera.
 3. **Open Live View.** Enable recording for the camera in Settings, then open **Recordings** to play saved footage.
 
+<details>
+<summary>Five-step first-run guide</summary>
+
 ![FlintEye's five-step English first-run guide](images/getting-started.gif)
 
-*The five-step first-run tour plays above. [Download the full-resolution MP4](images/getting-started.mp4?raw=true).*
+*UI tour: FlintEye 1.1.2 source with the 2026-11-15 QA fixes, using a demo profile with no cameras. This illustrates the five-step guide, not installation, real recording, shutdown or uninstall. [Download the full-resolution MP4](images/getting-started.mp4?raw=true).*
+
+</details>
 
 Recordings stay on your computer. Initial limits are **7 days** and **up to 50 GB** (or half the available disk space, whichever is smaller). Reaching either limit removes the oldest completed recordings. Change the folder and limits in Settings.
 
 Closing the browser keeps monitoring running. Use **Stop monitoring and quit** in the tray menu/control window to stop it.
 
 [Full user guide →](docs/USER_GUIDE.md)
+
 
 ## Documentation
 
@@ -94,6 +104,15 @@ Visit our **[documentation](docs/README.md)** to learn more about how to use Fli
 | --- | --- | --- |
 | [Install](docs/INSTALL.md) | [Docker Compose](docs/DOCKER.md) | [Source setup](docs/MANUAL_INSTALL.md) |
 | [Cameras and recordings](docs/USER_GUIDE.md) | [LAN access and systemd](docs/DISTRIBUTION.md) | [Build and release](docs/RELEASING.md) |
+
+<details>
+<summary><strong>Developer demo: Swagger API → WebRTC</strong></summary>
+
+![Calling the camera API in Swagger, then opening its WebRTC view](images/api-webrtc.gif)
+
+Open `/docs` after signing in, try `GET /api/v1/viewer/cameras`, then open the returned `addresses.webrtc_url` on the same FlintEye server. The demo uses a real USB camera and an authenticated local session. [Watch/download the developer MP4](images/api-webrtc.mp4?raw=true).
+
+</details>
 
 ## License
 

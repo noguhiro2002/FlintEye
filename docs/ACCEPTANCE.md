@@ -72,3 +72,7 @@ Do not edit/rebuild the packages after sign-off. A code change requires a new bu
 
 The source repository is public already. Only after this review, enable the matching public-preview flag and use both phases of **Publish tested release**. The first public preview requires Windows x64, M1 Mac and Linux x64 device acceptance, including camera recording/playback, complete GUI quit, and Windows uninstall with data retention. Mark other platforms as not tested where applicable. Public previews use GitHub Pre-release and never Latest.
 After public launch, verify the README one-command install routes from clean computers and confirm that all advertised release assets are accessible.
+
+## Follow-up to the November device review
+
+Use the [device QA follow-up](DEVICE_QA_FOLLOWUP.md) alongside this checklist. Its reported passes apply to the reviewed commit only. Recheck macOS signature integrity versus Gatekeeper trust, actual versus saved API ports, custom-profile shutdown results, active recording finalization and removal of login startup registrations on the new build.

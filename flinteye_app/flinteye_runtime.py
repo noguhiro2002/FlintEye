@@ -18,6 +18,10 @@ def application_dir() -> Path:
 def data_dir() -> Path:
     if os.environ.get('FLINTEYE_DATA_DIR'):
         return Path(os.environ['FLINTEYE_DATA_DIR']).expanduser().resolve()
+    return default_data_dir()
+
+
+def default_data_dir() -> Path:
     if sys.platform == 'win32':
         return Path(os.environ['LOCALAPPDATA']) / 'FlintEye'
     if sys.platform == 'darwin':

@@ -78,6 +78,7 @@ async function scenario({ conflict = false, timeout = false } = {}) {
         break;
       case '/api/v1/multiview/status': body = { views: [], updated_at: null }; break;
       case '/api/v1/desktop': body = { folder_picker: false }; break;
+      case '/api/v1/status/listener': body = { host: '127.0.0.1', port: 18765, source: 'command line' }; break;
       case '/api/v1/updates': body = { available: false }; break;
       case '/api/v1/storage/status': body = { message: '' }; break;
     }
@@ -96,6 +97,7 @@ try {
     const test = await scenario({ conflict });
     const page = test.page;
     await page.locator('.sidebar').getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByText('127.0.0.1:18765', { exact: true }).waitFor();
     await page.getByRole('complementary', { name: 'Settings categories' }).getByRole('button', { name: 'General', exact: true }).click();
     const title = page.getByRole('textbox', { name: /^App Title/ });
     await title.fill('Protected edit');

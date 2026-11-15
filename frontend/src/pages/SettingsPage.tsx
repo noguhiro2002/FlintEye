@@ -632,6 +632,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
   const [installation, setInstallation] = useState<{ folder_picker: boolean } | null>(null);
   const [viewerPassword, setViewerPassword] = useState("");
   const [updateMessage, setUpdateMessage] = useState("");
+  const [listener, setListener] = useState<{ host?: string; port?: number; source?: string }>({});
 
   useEffect(() => {
     let active = true;
@@ -1042,15 +1043,17 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
     setConfigReady(false);
     try {
       let deviceError = "";
-      const [runtimeRes, uvcRes, multiviewStatusRes] = await Promise.all([
+      const [runtimeRes, uvcRes, multiviewStatusRes, listenerRes] = await Promise.all([
         api.getRuntimeConfig(),
         api.getUvcDevices(refreshDevices).catch((e) => {
           deviceError = `USB discovery unavailable: ${e instanceof Error ? e.message : "Request failed"}. Other settings are available; Refresh to retry.`;
           return { items: [], warning: deviceError };
         }),
         api.getMultiviewStatus().catch(() => ({ updated_at: null, views: [] } as MultiviewStatus)),
+        api.getListener().catch(() => ({})),
       ]);
       if (request !== loadRequest.current) return;
+      setListener(listenerRes);
 
       // Editable cameras must come from the same response as the configuration ETag.
       // A separate status request may observe a different administrator's revision.
@@ -1661,7 +1664,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
               <div className="quick-status-strip" aria-label="System configuration status">
                 <div className="ok">
                   <CheckCircleIcon aria-hidden="true" />
-                  <span><strong>API configuration</strong><small>{runtime.api?.host}:{runtime.api?.port}</small></span>
+                  <span><strong>API listening now</strong><small>{listener.host && listener.port ? `${listener.host}:${listener.port}` : "Unavailable"}</small></span>
                 </div>
                 <div className={runtime.mediamtx?.autostart_on_api_start ? "ok" : "muted"}>
                   <CheckCircleIcon aria-hidden="true" />
@@ -1941,7 +1944,8 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
             <div className="form-grid">
               <div className="runtime-subsection-title form-span-3">
                 <h4>API & Session</h4>
-                <span>Connection and browser-session defaults for the Orchestrator API.</span>
+                <span>Saved connection and browser-session defaults for the FlintEye API.</span>
+                <span>Listening now: {listener.host && listener.port ? `${listener.host}:${listener.port} (${listener.source})` : "Unavailable"}. Host and port changes apply after restarting FlintEye. A command-line override takes precedence for that launch.</span>
               </div>
               <label>
                 API Host
@@ -1954,7 +1958,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
                     }))
                   }
                 />
-                <small className="field-help">Hostname or IP address where the API is available.</small>
+                <small className="field-help">Saved listening interface for the next launch.</small>
               </label>
               <label>
                 API Port
@@ -1970,7 +1974,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
                     }))
                   }
                 />
-                <small className="field-help">TCP port used by the API service.</small>
+                <small className="field-help">Saved TCP port for the next launch; --port can override it.</small>
               </label>
               <label>
                 Session TTL (sec)

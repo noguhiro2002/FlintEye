@@ -131,6 +131,7 @@ try {
         const a = await inputs.nth(1).boundingBox(), b = await inputs.nth(2).boundingBox();
         assert.ok(a && b && (a.y + a.height <= b.y || b.y + b.height <= a.y || a.x + a.width <= b.x || b.x + b.width <= a.x), 'setup fields overlap');
         await p.screenshot({ path: `dist/terra-webapp-fixes/setup-${width}.png`, fullPage: true });
+        assert.equal(await p.title(), 'FlintEye');
         await ctx.close();
         console.log('PASS 9 setup', width);
     }
