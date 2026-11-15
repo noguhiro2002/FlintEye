@@ -37,7 +37,7 @@ export function LoginPage({ api, auth, onLoggedIn, onCancel }: LoginPageProps): 
   return (
     <div className="login-page">
       <div className="login-card">
-        <h1>Unified Camera Orchestrator</h1>
+        <h1>FlintEye</h1>
         <p className="login-subtitle">Sign in to manage cameras, multiview, and recordings.</p>
         {provider === "legacy_token" ? (
           <div className="panel-note">

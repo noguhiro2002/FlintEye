@@ -56,8 +56,8 @@ Minimum recommended keys:
 - `LOG_DIR=./logs`
 - `LOG_LEVEL=ERROR`
 - `LOG_RETENTION=` (blank = follow `MTX_RECORD_DELETE_AFTER`)
-- `WEBAPP_TITLE=Unified Camera Orchestrator`
-- `WEBAPP_SIDEBAR_TITLE=Orchestrator UI`
+- `WEBAPP_TITLE=FlintEye`
+- `WEBAPP_SIDEBAR_TITLE=FlintEye`
 - `WEBAPP_FOOTER_TEXT=© 2026 Noguhiro. Sustainable Use License + additional permission.`
 - `MTX_CONTROL_MODE=windows_service|systemd|launchd|direct|external`
 - `MTX_SERVICE_NAME=mediamtx`

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownIcon,
   ArrowDownTrayIcon,
@@ -184,6 +184,9 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
   const [pageSize, setPageSize] = useState<PageSize>(50);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [streamError, setStreamError] = useState("");
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [loadedQuery, setLoadedQuery] = useState("");
 
   const [selectedItem, setSelectedItem] = useState<RecordingItem | null>(null);
   const [selectedVideoUrl, setSelectedVideoUrl] = useState("");
@@ -193,12 +196,17 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
   const playbackRequestRef = useRef(0);
   const loadRequestRef = useRef(0);
   const paginationTopRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  const triggerRef = useRef<HTMLElement | null>(null);
 
   const [sortKey, setSortKey] = useState<SortKey>("recorded");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [recordedFrom, setRecordedFrom] = useState("");
   const [recordedTo, setRecordedTo] = useState("");
+  const rangeInvalid = Boolean(recordedFrom && recordedTo && recordedFrom > recordedTo);
+  const queryKey = JSON.stringify([selectedStream, statusFilter, recordedFrom, recordedTo, sortKey, sortDir, pageIndex, pageSize]);
+  const showingPrevious = hasLoaded && (loadedQuery !== queryKey || Boolean(error));
   const [thumbnailErrors, setThumbnailErrors] = useState<Record<string, boolean>>({});
 
   const filteredItems = items;
@@ -236,68 +244,100 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
   const load = async (): Promise<void> => {
     const requestId = loadRequestRef.current + 1;
     loadRequestRef.current = requestId;
+    if (rangeInvalid) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
-    try {
-      const fromBoundary = parseRecordedBoundary(recordedFrom);
-      const toBoundary = parseRecordedBoundary(recordedTo, true);
-      const [streamRes, listRes] = await Promise.all([
-        api.getRecordingStreams(),
-        api.getRecordings({
-          streamId: selectedStream || undefined,
-          status: statusFilter,
-          recordedFrom: fromBoundary ?? undefined,
-          recordedTo: toBoundary ?? undefined,
-          sortBy: sortKey,
-          sortDir,
-          limit: pageSize,
-          offset: pageIndex * pageSize,
-        }),
-      ]);
-      if (loadRequestRef.current !== requestId) {
-        return;
-      }
-      setStreams(streamRes.items.filter((stream) => stream.trim().toLowerCase() !== ".playback_cache"));
-      setRecordRoot(listRes.record_root);
-      setTotal(listRes.total);
-      const lastPageIndex = Math.max(0, Math.ceil(listRes.total / pageSize) - 1);
+    const current = (): boolean => loadRequestRef.current === requestId;
+    const streamsRequest = api.getRecordingStreams().then((response) => {
+      if (!current()) return;
+      setStreams(response.items.filter((stream) => stream.trim().toLowerCase() !== ".playback_cache"));
+      setStreamError("");
+    }).catch((e: unknown) => {
+      if (current()) setStreamError(`Stream filters unavailable: ${e instanceof Error ? e.message : "Request failed"}`);
+    });
+    const listRequest = api.getRecordings({
+      streamId: selectedStream || undefined,
+      status: statusFilter,
+      recordedFrom: parseRecordedBoundary(recordedFrom) ?? undefined,
+      recordedTo: parseRecordedBoundary(recordedTo, true) ?? undefined,
+      sortBy: sortKey,
+      sortDir,
+      limit: pageSize,
+      offset: pageIndex * pageSize,
+    }).then((response) => {
+      if (!current()) return;
+      setRecordRoot(response.record_root);
+      setTotal(response.total);
+      setHasLoaded(true);
+      setLoadedQuery(queryKey);
+      setError("");
+      const lastPageIndex = Math.max(0, Math.ceil(response.total / pageSize) - 1);
       if (pageIndex > lastPageIndex) {
         setPageIndex(lastPageIndex);
         return;
       }
-      setItems(listRes.items.filter((item) => !isPlaybackCachePath(item.relative_path)));
+      setItems(response.items.filter((item) => !isPlaybackCachePath(item.relative_path)));
       setThumbnailErrors({});
-      setError("");
-    } catch (e) {
-      if (loadRequestRef.current === requestId) {
-        setError(e instanceof Error ? e.message : "Failed to load recordings");
-      }
-    } finally {
-      if (loadRequestRef.current === requestId) {
-        setLoading(false);
-      }
-    }
+    }).catch((e: unknown) => {
+      if (current()) setError(`Recordings unavailable: ${e instanceof Error ? e.message : "Request failed"}`);
+    }).finally(() => {
+      if (current()) setLoading(false);
+    });
+    await Promise.all([streamsRequest, listRequest]);
   };
 
   useEffect(() => {
     void load();
+    return () => { loadRequestRef.current += 1; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedStream, statusFilter, recordedFrom, recordedTo, sortKey, sortDir, pageIndex, pageSize]);
 
-  useEffect(() => {
-    if (!playbackOpen) {
-      return undefined;
-    }
+  useLayoutEffect(() => {
+    if (!playbackOpen || !dialogRef.current) return undefined;
+    const dialog = dialogRef.current;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    const madeInert: Array<{ element: HTMLElement; inert: boolean }> = [];
+    let node: HTMLElement | null = dialog.parentElement;
+    while (node && node !== document.body) {
+      const parent: HTMLElement | null = node.parentElement;
+      if (!parent) break;
+      for (const sibling of Array.from(parent.children)) {
+        if (sibling !== node && sibling instanceof HTMLElement) {
+          madeInert.push({ element: sibling, inert: sibling.inert });
+          sibling.inert = true;
+        }
+      }
+      node = parent;
+    }
+    const focusables = (): HTMLElement[] => Array.from(dialog.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), video[controls], [tabindex]:not([tabindex="-1"])'
+    )).filter((element) => element.getClientRects().length > 0);
+    (focusables()[0] || dialog).focus();
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key === "Escape") {
+        event.preventDefault();
         closePlayback();
+      } else if (event.key === "Tab") {
+        const elements = focusables();
+        const first = elements[0] || dialog;
+        const last = elements[elements.length - 1] || dialog;
+        if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
+          event.preventDefault(); last.focus();
+        } else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
+          event.preventDefault(); first.focus();
+        }
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => {
       document.body.style.overflow = previousOverflow;
+      madeInert.forEach(({ element, inert }) => { element.inert = inert; });
       window.removeEventListener("keydown", onKeyDown);
+      triggerRef.current?.focus();
+      triggerRef.current = null;
     };
   }, [playbackOpen]);
 
@@ -305,6 +345,7 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
     if (!item.is_stable) {
       return;
     }
+    if (!playbackOpen) triggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const requestId = playbackRequestRef.current + 1;
     playbackRequestRef.current = requestId;
     setSelectedItem(item);
@@ -379,7 +420,9 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
         </button>
       </div>
 
-      {error && <div className="panel-error">{error}</div>}
+      {error && <div className="panel-error" role="alert">{error}</div>}
+      {streamError && <div className="panel-error" role="alert">{streamError}</div>}
+      {showingPrevious && <div role="status">Showing previous results; they may not match the current filters.</div>}
 
       <section className="recording-toolbar" aria-label="Recording filters and sorting">
         <div className="recording-toolbar-group recording-filter-group" aria-label="Filters">
@@ -425,6 +468,8 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
                 step="60"
                 value={recordedFrom}
                 max={recordedTo || undefined}
+                aria-invalid={rangeInvalid}
+                aria-describedby={rangeInvalid ? "recording-range-error" : undefined}
                 onInput={(event) => {
                   setRecordedFrom(event.currentTarget.value);
                   setPageIndex(0);
@@ -438,6 +483,8 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
                 step="60"
                 value={recordedTo}
                 min={recordedFrom || undefined}
+                aria-invalid={rangeInvalid}
+                aria-describedby={rangeInvalid ? "recording-range-error" : undefined}
                 onInput={(event) => {
                   setRecordedTo(event.currentTarget.value);
                   setPageIndex(0);
@@ -445,6 +492,7 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
               />
             </label>
           </div>
+          {rangeInvalid && <div id="recording-range-error" className="panel-error" role="alert">Recorded from must be before recorded to.</div>}
         </div>
 
         <div className="recording-toolbar-group recording-sort-group" aria-label="Sort recordings">
@@ -482,12 +530,12 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
           </div>
         </div>
         <div className="recording-result-count" aria-live="polite">
-          {total} {total === 1 ? "recording" : "recordings"}
+          {hasLoaded ? `${total} ${total === 1 ? "recording" : "recordings"}` : loading ? "Loading recordings..." : ""}
         </div>
       </section>
 
       <div ref={paginationTopRef}>
-        <RecordingPagination
+        {hasLoaded && total > 0 && <RecordingPagination
           position="top"
           pageIndex={pageIndex}
           pageSize={pageSize}
@@ -496,12 +544,12 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
           loading={loading}
           onPageChange={goToPage}
           onPageSizeChange={changePageSize}
-        />
+        />}
       </div>
 
       <div className="recording-library">
         {filteredItems.length === 0 ? (
-          <div className="panel-empty">No recordings match the current filters.</div>
+          rangeInvalid ? null : loading ? <div className="panel-empty">Loading recordings...</div> : error ? null : hasLoaded ? <div className="panel-empty">No recordings match the current filters.</div> : null
         ) : (
           sections.map((section) => (
             <section key={section.key} className="recording-day-group">
@@ -564,6 +612,7 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
                           <button
                             type="button"
                             className="icon-text-button"
+                            aria-label={item.is_stable ? `Play ${item.stream_id || item.relative_path}, ${formatDateTime(item.modified_at)}` : `${item.relative_path} is recording`}
                             onClick={() => void playRecording(item)}
                             disabled={!item.is_stable || Boolean(preparingFileId)}
                           >
@@ -592,7 +641,7 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
         )}
       </div>
 
-      <RecordingPagination
+      {hasLoaded && total > pageSize && <RecordingPagination
         position="bottom"
         pageIndex={pageIndex}
         pageSize={pageSize}
@@ -601,11 +650,11 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
         loading={loading}
         onPageChange={goToPage}
         onPageSizeChange={changePageSize}
-      />
+      />}
 
       {playbackOpen && selectedItem && (
         <div className="recording-modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && closePlayback()}>
-          <section className="recording-modal" role="dialog" aria-modal="true" aria-labelledby="recording-modal-title">
+          <section ref={dialogRef} tabIndex={-1} className="recording-modal" role="dialog" aria-modal="true" aria-labelledby="recording-modal-title">
             <header className="recording-modal-header">
               <div>
                 <h3 id="recording-modal-title">{selectedItem.stream_id || "Recording"}</h3>

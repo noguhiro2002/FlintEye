@@ -12,13 +12,14 @@ export function DashboardPage({ api }: DashboardPageProps): JSX.Element {
   const [status, setStatus] = useState<DashboardStatus | null>(null);
   const [error, setError] = useState("");
 
-  usePolling(async () => {
+  usePolling(async (isCurrent) => {
     try {
       const next = await api.getStatus();
+      if (!isCurrent()) return;
       setStatus(next);
       setError("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to fetch status");
+      if (isCurrent()) setError(e instanceof Error ? e.message : "Failed to fetch status");
     }
   }, 3000);
 

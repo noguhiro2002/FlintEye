@@ -19,13 +19,16 @@ import {
   TrashIcon,
   VideoCameraIcon,
 } from "@heroicons/react/24/outline";
-import type { ApiClient } from "../api/client";
-import type { CameraItem, IpCameraProbeResult, MultiviewStatus, RuntimeConfigResponse, UvcDeviceItem, UvcSuggestion } from "../types";
+import { ApiClient, ApiError } from "../api/client";
+import type { IpCameraProbeResult, MultiviewStatus, RuntimeConfigResponse, UvcDeviceItem, UvcSuggestion } from "../types";
 import { SettingsHelp } from "../components/SettingsHelp";
+
+type ConfiguredCamera = NonNullable<RuntimeConfigResponse["cameras"]>[number];
 
 interface SettingsPageProps {
   api: ApiClient;
   onUiConfigChanged?: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 interface IpCameraDraft {
@@ -186,7 +189,7 @@ const SETTINGS_SEARCH_INDEX: Array<{
   { label: "Recording behavior", description: "Enablement, cameras, format, and segment duration", section: "recording", terms: "recording enabled cameras format segment path" },
   { label: "Storage & retention", description: "Recording folder, capacity, retention, and previous locations", section: "recording", terms: "storage retention record root folder browse capacity quota GB days previous locations delete playback cache" },
   { label: "Logging", description: "Log level, directory, and retention", section: "logging", terms: "logging log level directory retention error debug" },
-  { label: "Multiview", description: "Sources, layout, quality, and synchronization", section: "multiview", terms: "multiview sources layout tile sync buffer quality" },
+  { label: "Multiview", description: "Sources, layout, encoder, quality, and synchronization", section: "multiview", terms: "multiview sources layout tile sync buffer quality encoder bitrate fps resolution canvas width height hardware gpu preset watchdog restart" },
   { label: "Camera discovery", description: "UVC devices and IP cameras", section: "cameras", terms: "camera uvc discovery ip onvif ptz" },
   { label: "Full runtime JSON", description: "Expert-level configuration editor", section: "advanced", terms: "advanced json runtime expert raw" },
 ];
@@ -213,8 +216,8 @@ const DEFAULT_RUNTIME: RuntimeConfigResponse = {
     },
   },
   ui: {
-    app_title: "Unified Camera Orchestrator",
-    sidebar_title: "Orchestrator UI",
+    app_title: "FlintEye",
+    sidebar_title: "FlintEye",
     footer_text: "© 2026 Noguhiro. Sustainable Use License + additional permission.",
   },
   logging: {
@@ -439,7 +442,7 @@ function pickInitialModeOption(
   );
 }
 
-function getCameraLabel(camera: CameraItem): string {
+function getCameraLabel(camera: ConfiguredCamera): string {
   if (camera.display_name?.trim()) {
     return camera.display_name.trim();
   }
@@ -484,7 +487,7 @@ function getUvcDeviceMatchKeys(device: UvcDeviceItem): string[] {
   return uniqueIdentifiers(out);
 }
 
-function getManagedUvcCameraMatchKeys(camera: CameraItem): string[] {
+function getManagedUvcCameraMatchKeys(camera: ConfiguredCamera): string[] {
   if (camera.type !== "uvc") {
     return [];
   }
@@ -499,7 +502,7 @@ function getManagedUvcCameraMatchKeys(camera: CameraItem): string[] {
   );
 }
 
-function serializeCamera(camera: CameraItem): Record<string, unknown> {
+function serializeCamera(camera: ConfiguredCamera): Record<string, unknown> {
   return {
     id: camera.id,
     type: camera.type,
@@ -607,19 +610,23 @@ function retentionDays(value: string): number {
   return Number(match[1]) * seconds[match[2]] / 86400;
 }
 
-export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX.Element {
+export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange }: SettingsPageProps): JSX.Element {
+  // Keep this editor's revision separate from onboarding and branding requests.
+  const api = useMemo(() => sharedApi.configSession(), [sharedApi]);
   const [mode, setMode] = useState<SettingsMode>("quick");
   const [settingsSearch, setSettingsSearch] = useState("");
-  const [cameras, setCameras] = useState<CameraItem[]>([]);
+  const [cameras, setCameras] = useState<ConfiguredCamera[]>([]);
   const [runtime, setRuntime] = useState<RuntimeConfigResponse>(DEFAULT_RUNTIME);
   const [runtimeJsonText, setRuntimeJsonText] = useState("");
+  const [savedJsonText, setSavedJsonText] = useState("");
   const [savedRuntimeText, setSavedRuntimeText] = useState("");
   const [savedRuntimeSnapshot, setSavedRuntimeSnapshot] = useState<RuntimeConfigResponse | null>(null);
   const [savedIpDraftsText, setSavedIpDraftsText] = useState("");
   const [lastRefreshedAt, setLastRefreshedAt] = useState("");
   const [uvcDevices, setUvcDevices] = useState<UvcDeviceItem[]>([]);
   const [uvcWarning, setUvcWarning] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [configReady, setConfigReady] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [installation, setInstallation] = useState<{ folder_picker: boolean } | null>(null);
@@ -645,6 +652,8 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
 
   const [ipDrafts, setIpDrafts] = useState<IpCameraDraft[]>([]);
   const [ipProbeStates, setIpProbeStates] = useState<Record<string, IpCameraProbeState>>({});
+  const probeRequests = useRef(new Map<string, symbol>());
+  const loadRequest = useRef(0);
   const [multiviewStatus, setMultiviewStatus] = useState<MultiviewStatus>({ updated_at: null, views: [] });
   const settingsSearchRef = useRef<HTMLInputElement>(null);
 
@@ -769,9 +778,31 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
   );
   const currentRuntimeText = useMemo(() => JSON.stringify(runtime), [runtime]);
   const currentIpDraftsText = useMemo(() => JSON.stringify(ipDrafts), [ipDrafts]);
-  const hasUnsavedChanges =
+  const formDirty =
     Boolean(savedRuntimeText) &&
     (currentRuntimeText !== savedRuntimeText || currentIpDraftsText !== savedIpDraftsText);
+  const jsonDirty = Boolean(savedJsonText) && runtimeJsonText !== savedJsonText;
+  const hasUnsavedChanges = formDirty || jsonDirty;
+  useEffect(() => {
+    onDirtyChange?.(hasUnsavedChanges);
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) { event.preventDefault(); event.returnValue = ""; }
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, [hasUnsavedChanges, onDirtyChange]);
+  useEffect(() => () => { onDirtyChange?.(false); loadRequest.current++; probeRequests.current.clear(); }, [onDirtyChange]);
+  const confirmDiscard = (): boolean => !hasUnsavedChanges || window.confirm("Discard all unsaved settings, including Advanced JSON edits, and reload the saved configuration?");
+  const requireSavedDraft = (): boolean => {
+    if (!hasUnsavedChanges) return true;
+    setError("Save or discard your unsaved settings before changing devices or account access.");
+    return false;
+  };
+  const saveError = (error: unknown, fallback: string): void => {
+    setError(error instanceof ApiError && [409, 412].includes(error.status)
+      ? "Settings changed in another session. Your edits are still here. Copy any changes you need before using Refresh to reload the latest settings; refreshing will ask before discarding them."
+      : error instanceof Error ? error.message : fallback);
+  };
   const normalizedSettingsSearch = settingsSearch.trim().toLowerCase();
   const settingsSearchResults = useMemo(
     () =>
@@ -817,11 +848,12 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
         value: `${runtime.snapshot?.thumbnail_refresh_interval_sec ?? 10} seconds`,
       });
     }
-    if (items.length === 0 && hasUnsavedChanges) {
-      items.push({ label: "Configuration", value: "Other settings changed" });
+    if (formDirty) {
+      items.push({ label: "Configuration", value: "Unsaved form changes; saving applies all edited fields." });
     }
+    if (jsonDirty) items.push({ label: "Advanced JSON", value: "Unsaved JSON edits; use Replace Runtime & Apply in Advanced." });
     return items;
-  }, [hasUnsavedChanges, runtime, savedRuntimeSnapshot]);
+  }, [formDirty, jsonDirty, runtime, savedRuntimeSnapshot]);
 
   const selectSettingsSection = (section: SettingsMode): void => {
     setMode(section);
@@ -831,7 +863,7 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
   const applySelectedDeviceDraft = (
     deviceId: string,
     nextDevices: UvcDeviceItem[],
-    nextCameras: CameraItem[],
+    nextCameras: ConfiguredCamera[],
   ): void => {
     setSelectedDeviceId(deviceId);
     const device = nextDevices.find((item) => item.device_id === deviceId) ?? null;
@@ -946,6 +978,8 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
   };
 
   const onToggleIgnoredDevice = async (device: UvcDeviceItem): Promise<void> => {
+    if (!requireSavedDraft() || loading) return;
+    setLoading(true);
     const ignoredIds = runtime.device_discovery?.ignored_uvc_devices ?? [];
     const shouldIgnore = !device.ignored;
     const nextIgnoredIds = shouldIgnore
@@ -976,11 +1010,13 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
       onUiConfigChanged?.();
       await loadAll(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to update ignored device list");
-    }
+      saveError(e, "Failed to update ignored device list");
+    } finally { setLoading(false); }
   };
 
-  const onIgnoreManagedUvcCamera = async (camera: CameraItem): Promise<void> => {
+  const onIgnoreManagedUvcCamera = async (camera: ConfiguredCamera): Promise<void> => {
+    if (!requireSavedDraft() || loading) return;
+    setLoading(true);
     const ignoredIds = runtime.device_discovery?.ignored_uvc_devices ?? [];
     const cameraKeys = getManagedUvcCameraMatchKeys(camera);
     try {
@@ -994,27 +1030,40 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
       onUiConfigChanged?.();
       await loadAll(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to remove managed UVC camera");
-    }
+      saveError(e, "Failed to remove managed UVC camera");
+    } finally { setLoading(false); }
   };
 
   const loadAll = async (refreshDevices = false): Promise<void> => {
+    const request = ++loadRequest.current;
+    probeRequests.current.clear();
+    setIpProbeStates({});
     setLoading(true);
+    setConfigReady(false);
     try {
-      const [runtimeRes, camerasRes, uvcRes, multiviewStatusRes] = await Promise.all([
+      let deviceError = "";
+      const [runtimeRes, uvcRes, multiviewStatusRes] = await Promise.all([
         api.getRuntimeConfig(),
-        api.getCameras(),
-        api.getUvcDevices(refreshDevices),
+        api.getUvcDevices(refreshDevices).catch((e) => {
+          deviceError = `USB discovery unavailable: ${e instanceof Error ? e.message : "Request failed"}. Other settings are available; Refresh to retry.`;
+          return { items: [], warning: deviceError };
+        }),
         api.getMultiviewStatus().catch(() => ({ updated_at: null, views: [] } as MultiviewStatus)),
       ]);
+      if (request !== loadRequest.current) return;
 
+      // Editable cameras must come from the same response as the configuration ETag.
+      // A separate status request may observe a different administrator's revision.
+      if (!Array.isArray(runtimeRes.cameras)) throw new Error("Camera configuration is unavailable. Refresh to retry.");
+      const configuredCameras = runtimeRes.cameras;
       const mergedRuntime = withDefaults(runtimeRes);
       setRuntime(mergedRuntime);
       setRuntimeJsonText(JSON.stringify(mergedRuntime, null, 2));
+      setSavedJsonText(JSON.stringify(mergedRuntime, null, 2));
       setSavedRuntimeText(JSON.stringify(mergedRuntime));
       setSavedRuntimeSnapshot(mergedRuntime);
 
-      setCameras(camerasRes.items);
+      setCameras(configuredCameras);
       setMultiviewStatus(multiviewStatusRes);
       setUvcDevices(uvcRes.items);
       setUvcWarning(uvcRes.warning ?? "");
@@ -1025,7 +1074,7 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
           uvcRes.items[0]?.device_id ??
           "";
         if (nextSelectedId) {
-          applySelectedDeviceDraft(nextSelectedId, uvcRes.items, camerasRes.items);
+          applySelectedDeviceDraft(nextSelectedId, uvcRes.items, configuredCameras);
         }
       } else {
         setSelectedDeviceId("");
@@ -1034,7 +1083,7 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
         setSelectedModeKey("");
       }
 
-      const nextIpDrafts = camerasRes.items
+      const nextIpDrafts = configuredCameras
         .filter((camera) => camera.type === "ip")
         .map(
           (camera): IpCameraDraft => ({
@@ -1091,14 +1140,16 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
         );
       setIpDrafts(nextIpDrafts);
       setSavedIpDraftsText(JSON.stringify(nextIpDrafts));
+      setConfigReady(true);
       setLastRefreshedAt(
         new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(new Date()),
       );
       setError("");
     } catch (e) {
+      if (request !== loadRequest.current) return;
       setError(e instanceof Error ? e.message : "Failed to load settings");
     } finally {
-      setLoading(false);
+      if (request === loadRequest.current) setLoading(false);
     }
   };
 
@@ -1134,9 +1185,11 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
   };
 
   const onApplyUvc = async (): Promise<void> => {
+    if (!requireSavedDraft() || loading) return;
     if (!selectedDeviceId) {
       return;
     }
+    setLoading(true);
     try {
       await api.applyUvcDevice(selectedDeviceId, {
         profile: suggestProfile,
@@ -1150,12 +1203,14 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
       setNotice("UVC device applied.");
       await loadAll(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to apply UVC device");
-    }
+      saveError(e, "Failed to apply UVC device");
+    } finally { setLoading(false); }
   };
 
   const onAddIpDraft = (): void => {
-    const idx = ipDrafts.length + 1;
+    const used = new Set([...cameras.flatMap(c => [c.id, c.path]), ...ipDrafts.flatMap(c => [c.id, c.path])].map(value => value.toLowerCase()));
+    let idx = 1;
+    while (used.has(`ipcam${idx}`)) idx++;
     setIpDrafts((prev) => [
       ...prev,
       {
@@ -1173,6 +1228,11 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
     idx: number,
     patch: Partial<Omit<IpCameraDraft, "ip">> & { ip?: Partial<IpCameraDraft["ip"]> },
   ): void => {
+    const id = ipDrafts[idx]?.id;
+    if (id) {
+      probeRequests.current.delete(id);
+      setIpProbeStates(prev => { const next = { ...prev }; delete next[id]; return next; });
+    }
     setIpDrafts((prev) =>
       prev.map((item, i) => {
         if (i !== idx) {
@@ -1210,9 +1270,11 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
     if (!force && existing?.requestKey === requestKey && existing.result) {
       return;
     }
+    const request = Symbol();
+    probeRequests.current.set(draft.id, request);
     setIpProbeStates((prev) => ({
       ...prev,
-      [draft.id]: { requestKey, loading: true, error: "", result: prev[draft.id]?.result ?? null },
+      [draft.id]: { requestKey, loading: true, error: "", result: null },
     }));
     try {
       const result = await api.probeIpCamera({
@@ -1225,21 +1287,20 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
         onvif_username: draft.ip.onvif_username.trim() || null,
         onvif_password: draft.ip.onvif_password || null,
       });
+      if (probeRequests.current.get(draft.id) !== request) return;
       setIpProbeStates((prev) => ({
         ...prev,
         [draft.id]: { requestKey, loading: false, error: "", result },
       }));
-      if (draft.ip.timestamp_mode === "auto" && result.recommendation.cfr_fps) {
-        onUpdateIpDraft(idx, { ip: { cfr_fps: result.recommendation.cfr_fps } });
-      }
     } catch (e) {
+      if (probeRequests.current.get(draft.id) !== request) return;
       setIpProbeStates((prev) => ({
         ...prev,
         [draft.id]: {
           requestKey,
           loading: false,
           error: e instanceof Error ? e.message : "Camera inspection failed",
-          result: prev[draft.id]?.result ?? null,
+          result: null,
         },
       }));
     }
@@ -1249,6 +1310,7 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
     const removedId = ipDrafts[idx]?.id;
     setIpDrafts((prev) => prev.filter((_, i) => i !== idx));
     if (removedId) {
+      probeRequests.current.delete(removedId);
       setIpProbeStates((prev) => {
         const next = { ...prev };
         delete next[removedId];
@@ -1283,6 +1345,8 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
   };
 
   const onSaveBasic = async (restart = false): Promise<void> => {
+    if (loading || !configReady) return;
+    if (jsonDirty) { setError("Advanced JSON has unsaved edits. Apply them in Advanced, or discard those edits before saving the form."); return; }
     if (
       restart &&
       !window.confirm(
@@ -1293,6 +1357,9 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
     }
     setLoading(true);
     try {
+      const paths = [...cameras.filter(c => c.type !== "ip").map(c => c.path.trim()), ...ipDrafts.map(c => c.path.trim())];
+      if (paths.some(path => !path)) throw new Error("Every camera needs a nonempty path.");
+      if (new Set(paths.map(path => path.toLowerCase())).size !== paths.length) throw new Error("Camera paths must be unique. Change the duplicate path before saving.");
       const recording = { ...runtime.recording };
       if (recording.managed_storage) {
         if (recording.max_bytes != null && (!Number.isFinite(recording.max_bytes) || recording.max_bytes <= 0)) {
@@ -1410,7 +1477,7 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
       onUiConfigChanged?.();
       await loadAll(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save settings");
+      saveError(e, "Failed to save settings");
     } finally {
       setLoading(false);
     }
@@ -1439,6 +1506,8 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
   }, [selectedModeKey, selectedModeOptions, suggestFps, suggestHeight, suggestWidth]);
 
   const onReplaceRuntime = async (restart = false): Promise<void> => {
+    if (loading || !configReady) return;
+    if (formDirty && !window.confirm("Replacing runtime JSON will discard unsaved form changes. Continue?")) return;
     if (
       restart &&
       !window.confirm(
@@ -1447,6 +1516,7 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
     ) {
       return;
     }
+    setLoading(true);
     try {
       const parsed = JSON.parse(runtimeJsonText) as Record<string, unknown>;
       await api.putRuntimeConfig(parsed);
@@ -1462,8 +1532,8 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
       onUiConfigChanged?.();
       await loadAll(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to apply runtime JSON");
-    }
+      saveError(e, "Failed to apply runtime JSON");
+    } finally { setLoading(false); }
   };
 
   return (
@@ -1476,25 +1546,25 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
         </div>
         <div className="settings-header-actions">
           <span className={hasUnsavedChanges ? "settings-save-state is-dirty" : "settings-save-state"}>
-            {hasUnsavedChanges ? `${quickChangeItems.length || 1} pending change${quickChangeItems.length === 1 ? "" : "s"}` : "All changes saved"}
+            {!configReady ? (loading ? "Loading settings…" : "Settings unavailable") : hasUnsavedChanges ? "Unsaved changes" : "All changes saved"}
           </span>
           <button
             type="button"
             className="settings-icon-button"
-            onClick={() => void loadAll(true)}
+            onClick={() => { if (confirmDiscard()) void loadAll(true); }}
             disabled={loading}
           >
             <ArrowPathIcon aria-hidden="true" />
             {loading ? "Refreshing..." : "Refresh"}
           </button>
-          <button type="button" onClick={() => void loadAll()} disabled={!hasUnsavedChanges || loading}>
+          <button type="button" onClick={() => { if (confirmDiscard()) void loadAll(); }} disabled={!hasUnsavedChanges || loading}>
             Discard
           </button>
           <button
             type="button"
             className="primary"
-            onClick={() => void onSaveBasic()}
-            disabled={!hasUnsavedChanges || loading}
+            onClick={() => void (mode === "advanced" && jsonDirty ? onReplaceRuntime() : onSaveBasic())}
+            disabled={!hasUnsavedChanges || loading || !configReady}
           >
             Save changes
           </button>
@@ -1524,6 +1594,7 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
                 type="button"
                 key={item.key}
                 className={mode === item.key && !normalizedSettingsSearch ? "active" : ""}
+                aria-current={mode === item.key && !normalizedSettingsSearch ? "page" : undefined}
                 onClick={() => selectSettingsSection(item.key)}
               >
                 <Icon aria-hidden="true" />
@@ -1536,13 +1607,16 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
         <main className="settings-main">
           {notice && <div className="panel-ok">{notice}</div>}
           {error && <div className="panel-error">{error}</div>}
+          {!savedRuntimeSnapshot && <p role="status">{loading ? "Loading saved settings…" : "Settings could not be loaded. Use Refresh to retry."}</p>}
+          {savedRuntimeSnapshot && <fieldset className="settings-fields" disabled={loading || !configReady}>
+          {uvcWarning && <p className="panel-note" role="status">{uvcWarning}</p>}
 
           {normalizedSettingsSearch && (
             <section className="settings-results" aria-live="polite">
               <div className="settings-content-heading">
                 <div>
                   <span className="settings-eyebrow">Search results</span>
-                  <h3>{settingsSearchResults.length} settings found</h3>
+                  <h3>{settingsSearchResults.length} settings categories found</h3>
                   <p>Results for “{settingsSearch.trim()}”</p>
                 </div>
               </div>
@@ -1564,7 +1638,7 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
                   <div className="settings-empty-search">
                     <MagnifyingGlassIcon aria-hidden="true" />
                     <strong>No matching settings</strong>
-                    <span>Try a field name such as “Session TTL”, “RTSP”, or “retention”.</span>
+                    <span>Search categories and common keywords such as “session”, “RTSP”, or “retention”.</span>
                   </div>
                 )}
               </div>
@@ -1587,7 +1661,7 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
               <div className="quick-status-strip" aria-label="System configuration status">
                 <div className="ok">
                   <CheckCircleIcon aria-hidden="true" />
-                  <span><strong>API Online</strong><small>{runtime.api?.host}:{runtime.api?.port}</small></span>
+                  <span><strong>API configuration</strong><small>{runtime.api?.host}:{runtime.api?.port}</small></span>
                 </div>
                 <div className={runtime.mediamtx?.autostart_on_api_start ? "ok" : "muted"}>
                   <CheckCircleIcon aria-hidden="true" />
@@ -1759,7 +1833,6 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
                         <span className="settings-eyebrow">This session</span>
                         <h4>Pending changes</h4>
                       </div>
-                      {quickChangeItems.length > 0 && <span className="pending-count">{quickChangeItems.length}</span>}
                     </div>
                     {quickChangeItems.length > 0 ? (
                       <div className="quick-change-list">
@@ -1777,7 +1850,7 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
                       </div>
                     )}
                     <div className="quick-aside-actions">
-                      <button type="button" onClick={() => void loadAll()} disabled={!hasUnsavedChanges}>Discard</button>
+                      <button type="button" onClick={() => { if (confirmDiscard()) void loadAll(); }} disabled={!hasUnsavedChanges}>Discard</button>
                       <button type="button" className="primary" onClick={() => void onSaveBasic()} disabled={!hasUnsavedChanges}>Save changes</button>
                     </div>
                   </section>
@@ -1786,10 +1859,10 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
                     <MagnifyingGlassIcon aria-hidden="true" />
                     <div>
                       <strong>Need an advanced setting?</strong>
-                      <p>Search every field by name or keyword.</p>
+                      <p>Search settings categories and common keywords.</p>
                       <small>Try “Session TTL”, “RTSP Base URL”, or “Snapshot Timeout”.</small>
                     </div>
-                    <button type="button" onClick={() => settingsSearchRef.current?.focus()}>Search all settings</button>
+                    <button type="button" onClick={() => settingsSearchRef.current?.focus()}>Search settings categories</button>
                   </section>
                 </aside>
               </div>
@@ -3237,7 +3310,7 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
             <div className="panel-list">
               <div className="panel-list-title">Managed UVC Cameras</div>
               {managedUvcCameraStates.length > 0 ? (
-                <table className="table">
+                <table className="table responsive-table managed-camera-table">
                   <thead>
                     <tr>
                       <th>Status</th>
@@ -3249,22 +3322,22 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
                   <tbody>
                     {managedUvcCameraStates.map(({ camera, detectedDevice }) => (
                       <tr key={camera.id}>
-                        <td>
+                        <td data-label="Status">
                           <span className={`status-tag ${detectedDevice ? "ok" : "muted"}`}>
                             {detectedDevice ? "detected" : "missing"}
                           </span>
                         </td>
-                        <td>
+                        <td data-label="Camera">
                           <strong>{getCameraLabel(camera)}</strong>
                           <div className="table-note">
                             /{camera.path}
                             {camera.enabled ? "" : " • disabled"}
                           </div>
                         </td>
-                        <td>
+                        <td data-label="Stored Device">
                           <code>{camera.uvc?.env?.DEVICE ?? "(unknown)"}</code>
                         </td>
-                        <td>
+                        <td data-label="Actions">
                           <div className="button-row wrap">
                             {detectedDevice && (
                               <button type="button" onClick={() => onSelectDevice(detectedDevice.device_id)}>
@@ -3642,6 +3715,10 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
                       )}
                       {probe && (
                         <div className="ip-probe-result">
+                          {probe.recommendation.cfr_fps && <div className="panel-note">
+                            Suggested CFR: {probe.recommendation.cfr_fps} fps. Inspection does not change your settings.
+                            <button type="button" onClick={() => onUpdateIpDraft(idx, { ip: { cfr_fps: probe.recommendation.cfr_fps ?? DEFAULT_IP_CAMERA_SETTINGS.cfr_fps } })}>Apply recommended FPS</button>
+                          </div>}
                           <div className={`ip-probe-banner ${probe.rtsp.timestamp_healthy ? "is-ok" : "is-warning"}`}>
                             {probe.rtsp.timestamp_healthy ? (
                               <CheckCircleIcon aria-hidden="true" />
@@ -4221,12 +4298,13 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
             This editor allows editing all runtime fields. Replace is atomic and immediately persisted to runtime.json.
           </p>
           <textarea
+            aria-label="Full runtime JSON"
             className="json-editor"
             value={runtimeJsonText}
             onChange={(e) => setRuntimeJsonText(e.target.value)}
           />
           <div className="button-row">
-            <button type="button" onClick={() => setRuntimeJsonText(JSON.stringify(runtime, null, 2))}>
+            <button type="button" onClick={() => { if (!jsonDirty || window.confirm("Discard the JSON edits and replace them with the current form values?")) setRuntimeJsonText(JSON.stringify(runtime, null, 2)); }}>
               Sync JSON From Form
             </button>
             <button type="button" onClick={() => void onReplaceRuntime()}>
@@ -4239,6 +4317,7 @@ export function SettingsPage({ api, onUiConfigChanged }: SettingsPageProps): JSX
         </div>
         </div>
       )}
+          </fieldset>}
         </main>
       </div>
     </div>

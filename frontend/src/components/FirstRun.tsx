@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ApiClient } from '../api/client';
 import type { PageKey } from './Sidebar';
 
@@ -8,7 +8,7 @@ export function SetupAccount({ api, onDone }: { api: ApiClient; onDone: () => vo
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  return <form onSubmit={async e => {
+  return <form className="login-form" onSubmit={async e => {
     e.preventDefault(); setError('');
     if (password !== confirm) { setError('Passwords do not match.'); return; }
     setBusy(true);
@@ -17,9 +17,10 @@ export function SetupAccount({ api, onDone }: { api: ApiClient; onDone: () => vo
   }}>
     <h2>Welcome to FlintEye</h2>
     <p>Create your administrator account. The username is <strong>admin</strong>.</p>
+    <p id="setup-password-help">Use a password of at least 12 characters.</p>
     <label>Server setup token<input required value={token} onChange={e => setToken(e.target.value)} autoComplete="off" /></label>
     <p>For Docker or systemd, read the setup-token file in the server data directory.</p>
-    <label>Password<input type="password" required minLength={12} maxLength={1024} value={password} onChange={e => setPassword(e.target.value)} autoComplete="new-password" /></label>
+    <label>Password<input type="password" required minLength={12} maxLength={1024} value={password} onChange={e => setPassword(e.target.value)} autoComplete="new-password" aria-describedby="setup-password-help" /></label>
     <label>Confirm password<input type="password" required minLength={12} value={confirm} onChange={e => setConfirm(e.target.value)} autoComplete="new-password" /></label>
     {error && <p role="alert">{error}</p>}
     <button disabled={busy}>{busy ? 'Creating account…' : 'Create administrator account'}</button>
@@ -27,7 +28,7 @@ export function SetupAccount({ api, onDone }: { api: ApiClient; onDone: () => vo
 }
 
 const steps: { title: string; body: string; page: PageKey }[] = [
-  { title: 'Welcome to FlintEye', body: 'Closing this browser does not stop recording. Use the FlintEye tray menu to stop monitoring. Manual sleep, logout, or shutdown stops monitoring.', page: 'dashboard' },
+  { title: 'Welcome to FlintEye', body: 'Closing this browser does not stop recording. In the desktop app, use Stop monitoring and quit in the tray menu or control window. For Docker or systemd, stop the service on the server. Monitoring requires the computer to remain awake and the service to keep running.', page: 'dashboard' },
   { title: 'Add your first camera', body: 'In Settings, find USB cameras to detect a connected device, or add an IP camera using its address and credentials. You can add cameras later.', page: 'settings' },
   { title: 'Choose where to save recordings', body: 'Open Settings → Recording to choose a recording folder on the computer running FlintEye. The suggested limit is half its free space, up to 50 GB. Choose Save changes to apply your choices.', page: 'settings' },
   { title: 'Understand loop recording', body: 'FlintEye deletes the oldest completed recordings when either the retention period (7 days by default) or storage limit is reached. Storage limits can shorten the actual history. Previous recording locations are also cleaned even when hidden.', page: 'settings' },
@@ -36,11 +37,6 @@ const steps: { title: string; body: string; page: PageKey }[] = [
 
 export function FirstRun({ api, navigate, onClose }: { api: ApiClient; navigate: (page: PageKey) => void; onClose: () => void }) {
   const [step, setStep] = useState(0);
-  useEffect(() => {
-    const element = document.querySelector(`[data-tour-nav="${steps[step].page}"]`);
-    element?.classList.add('tour-highlight');
-    return () => element?.classList.remove('tour-highlight');
-  }, [step]);
   const [error, setError] = useState('');
   const close = async () => {
     try { await api.patchRuntimeConfig({ ui: { onboarding_done: true } }); onClose(); }

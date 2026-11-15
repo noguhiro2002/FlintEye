@@ -324,8 +324,8 @@ def env_to_runtime_defaults(env: dict[str, str]) -> dict[str, Any]:
             },
         },
         "ui": {
-            "app_title": env.get("WEBAPP_TITLE", "Unified Camera Orchestrator"),
-            "sidebar_title": env.get("WEBAPP_SIDEBAR_TITLE", "Orchestrator UI"),
+            "app_title": env.get("WEBAPP_TITLE", "FlintEye"),
+            "sidebar_title": env.get("WEBAPP_SIDEBAR_TITLE", "FlintEye"),
             "footer_text": env.get(
                 "WEBAPP_FOOTER_TEXT",
                 "© 2026 Noguhiro. Sustainable Use License + additional permission.",

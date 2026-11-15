@@ -45,6 +45,10 @@ export class ApiClient {
     return `${this.directApiBase || this.baseUrl}${path}`;
   }
 
+  configSession(): ApiClient {
+    return new ApiClient(this.baseUrl);
+  }
+
   private async request<T>(
     path: string,
     init: RequestInit = {},
@@ -57,36 +61,55 @@ export class ApiClient {
       headers["If-Match"] = this.runtimeRevision;
     }
 
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      ...init,
-      headers,
-      credentials: "include",
-    });
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    init.signal?.addEventListener("abort", abort, { once: true });
+    if (init.signal?.aborted) controller.abort();
+    // A native folder picker waits for a person; media preparation can take longer.
+    const timeoutMs = path === "/api/v1/storage/pick-folder" ? 0
+      : path.includes("/probe") || path.includes("/prepare") ? 120000 : 30000;
+    const timeout = timeoutMs ? window.setTimeout(abort, timeoutMs) : undefined;
+    try {
+      const response = await fetch(`${this.baseUrl}${path}`, {
+        ...init,
+        headers,
+        credentials: "include",
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      let body: unknown = null;
-      const rawText = await response.text();
-      try {
-        body = rawText ? (JSON.parse(rawText) as unknown) : null;
-      } catch {
-        body = rawText;
+      if (!response.ok) {
+        let body: unknown = null;
+        const rawText = await response.text();
+        try {
+          body = rawText ? (JSON.parse(rawText) as unknown) : null;
+        } catch {
+          body = rawText;
+        }
+        const detail =
+          typeof body === "object" && body !== null && "detail" in body
+            ? String((body as { detail: unknown }).detail)
+            : response.statusText;
+        throw new ApiError(response.status, detail, body);
       }
-      const detail =
-        typeof body === "object" && body !== null && "detail" in body
-          ? String((body as { detail: unknown }).detail)
-          : response.statusText;
-      throw new ApiError(response.status, detail, body);
-    }
 
-    if (path === "/api/v1/config/effective" || path === "/api/v1/config/runtime") {
-      this.runtimeRevision = response.headers.get("ETag");
-    }
+      if (path === "/api/v1/config/effective" || path === "/api/v1/config/runtime") {
+        this.runtimeRevision = response.headers.get("ETag");
+      }
 
-    if (!expectJson) {
-      return (await response.blob()) as T;
-    }
+      if (!expectJson) {
+        return (await response.blob()) as T;
+      }
 
-    return (await response.json()) as T;
+      return (await response.json()) as T;
+    } catch (error) {
+      if (controller.signal.aborted && !init.signal?.aborted) {
+        throw new Error("The request timed out. Check the connection and retry. If you were saving changes, refresh to check whether they were saved.");
+      }
+      throw error;
+    } finally {
+      window.clearTimeout(timeout);
+      init.signal?.removeEventListener("abort", abort);
+    }
   }
 
   setup(token: string, password: string): Promise<{ ok: boolean }> {

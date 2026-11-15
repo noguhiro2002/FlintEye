@@ -9,6 +9,7 @@ interface LiveViewPageProps {
   api: ApiClient;
   canManage?: boolean;
   authRole?: "viewer" | "admin" | null;
+  onConfigure?: () => void;
 }
 
 function healthLabel(state: string | undefined): string {
@@ -45,7 +46,7 @@ function healthClass(state: string | undefined): string {
   return "ng";
 }
 
-export function LiveViewPage({ api, canManage = false, authRole = null }: LiveViewPageProps): JSX.Element {
+export function LiveViewPage({ api, canManage = false, authRole = null, onConfigure }: LiveViewPageProps): JSX.Element {
   const [cameras, setCameras] = useState<ViewerCameraItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [snapshotMap, setSnapshotMap] = useState<Record<string, string>>({});
@@ -55,23 +56,28 @@ export function LiveViewPage({ api, canManage = false, authRole = null }: LiveVi
   const [loadingSnapshots, setLoadingSnapshots] = useState(false);
   const [thumbnailRefreshIntervalMs, setThumbnailRefreshIntervalMs] = useState(10000);
   const [error, setError] = useState("");
+  const [initialLoading, setInitialLoading] = useState(true);
+  const cameraRequest = useRef(0);
+  const snapshotRequest = useRef(0);
 
-  usePolling(async () => {
+  usePolling(async (isCurrent) => {
+    const request = ++cameraRequest.current;
     try {
       const data = await api.getViewerCameras();
+      if (!isCurrent() || request !== cameraRequest.current) return;
       setCameras(data.items);
-      if (!selectedId && data.items.length > 0) {
-        setSelectedId(data.items[0].id);
-      }
       setError("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load cameras");
+      if (isCurrent() && request === cameraRequest.current) setError(e instanceof Error ? e.message : "Failed to load cameras");
+    } finally {
+      if (isCurrent() && request === cameraRequest.current) setInitialLoading(false);
     }
   }, 4000);
 
-  usePolling(async () => {
+  usePolling(async (isCurrent) => {
     try {
       const info = await api.getViewerInfo();
+      if (!isCurrent()) return;
       setThumbnailRefreshIntervalMs(
         Math.max(500, Math.round((info.snapshot.thumbnail_refresh_interval_sec || 10) * 1000)),
       );
@@ -79,6 +85,10 @@ export function LiveViewPage({ api, canManage = false, authRole = null }: LiveVi
       // Keep the previous interval when viewer info cannot be loaded.
     }
   }, 30000);
+
+  useEffect(() => {
+    setSelectedId(previous => cameras.some(camera => camera.id === previous) ? previous : cameras[0]?.id ?? null);
+  }, [cameras]);
 
   const selectedCamera = useMemo(
     () => cameras.find((camera) => camera.id === selectedId) ?? null,
@@ -90,7 +100,14 @@ export function LiveViewPage({ api, canManage = false, authRole = null }: LiveVi
   );
 
   const refreshSnapshots = async (): Promise<void> => {
+    const request = ++snapshotRequest.current;
     if (cameras.length === 0) {
+      Object.values(snapshotMapRef.current).forEach(url => URL.revokeObjectURL(url));
+      snapshotMapRef.current = {};
+      setSnapshotMap({});
+      setSnapshotUpdatedAtMap({});
+      setSnapshotErrorMap({});
+      setLoadingSnapshots(false);
       return;
     }
     setLoadingSnapshots(true);
@@ -108,6 +125,10 @@ export function LiveViewPage({ api, canManage = false, authRole = null }: LiveVi
           }
         }),
       );
+      if (request !== snapshotRequest.current) {
+        Object.values(nextSuccessful).forEach(url => URL.revokeObjectURL(url));
+        return;
+      }
 
       setSnapshotMap((prev) => {
         const next: Record<string, string> = {};
@@ -140,7 +161,7 @@ export function LiveViewPage({ api, canManage = false, authRole = null }: LiveVi
       });
       setSnapshotErrorMap(nextErrors);
     } finally {
-      setLoadingSnapshots(false);
+      if (request === snapshotRequest.current) setLoadingSnapshots(false);
     }
   };
 
@@ -160,6 +181,8 @@ export function LiveViewPage({ api, canManage = false, authRole = null }: LiveVi
 
   useEffect(() => {
     return () => {
+      snapshotRequest.current++;
+      cameraRequest.current++;
       Object.values(snapshotMapRef.current).forEach((url) => {
         if (url) {
           URL.revokeObjectURL(url);
@@ -169,9 +192,11 @@ export function LiveViewPage({ api, canManage = false, authRole = null }: LiveVi
   }, []);
 
   const handleExclude = async (camera: ViewerCameraItem): Promise<void> => {
+    const request = ++cameraRequest.current;
     try {
       await api.excludeCamera(camera.id, "Manually excluded from Live View");
       const data = await api.getViewerCameras();
+      if (request !== cameraRequest.current) return;
       setCameras(data.items);
       setError("");
     } catch (e) {
@@ -180,9 +205,11 @@ export function LiveViewPage({ api, canManage = false, authRole = null }: LiveVi
   };
 
   const handleRestore = async (camera: ViewerCameraItem): Promise<void> => {
+    const request = ++cameraRequest.current;
     try {
       await api.restoreCamera(camera.id);
       const data = await api.getViewerCameras();
+      if (request !== cameraRequest.current) return;
       setCameras(data.items);
       setError("");
     } catch (e) {
@@ -196,12 +223,18 @@ export function LiveViewPage({ api, canManage = false, authRole = null }: LiveVi
         <h2>Live View</h2>
         <div className="button-row">
           <div className="panel-note">Auto refresh: {(thumbnailRefreshIntervalMs / 1000).toFixed(1)}s</div>
-          <button type="button" onClick={() => void refreshSnapshots()} disabled={loadingSnapshots}>
+          <button type="button" onClick={() => void refreshSnapshots()} disabled={loadingSnapshots || cameras.length === 0}>
             {loadingSnapshots ? "Refreshing..." : "Refresh Thumbnails"}
           </button>
         </div>
       </div>
       {error && <div className="panel-error">{error}</div>}
+      {initialLoading && <p role="status">Loading cameras…</p>}
+      {!initialLoading && !error && cameras.length === 0 && <div className="panel-empty">
+        No cameras are configured.{canManage && onConfigure
+          ? <button type="button" onClick={onConfigure}>Add a camera in Settings</button>
+          : " Ask your administrator to add a camera."}
+      </div>}
 
       <div className="live-layout">
         <div className="thumb-grid">
@@ -214,16 +247,8 @@ export function LiveViewPage({ api, canManage = false, authRole = null }: LiveVi
               <div
                 key={camera.id}
                 className={selected ? "thumb selected" : "thumb"}
-                role="button"
-                tabIndex={0}
-                onClick={() => setSelectedId(camera.id)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    setSelectedId(camera.id);
-                  }
-                }}
               >
+                <button type="button" className="thumb-select" aria-label={`View ${camera.label || camera.id}`} aria-pressed={selected} onClick={() => setSelectedId(camera.id)}>
                 <div className="thumb-title-row">
                   <span className="thumb-title">{camera.label || camera.id}</span>
                   <span className={`status-tag ${healthClass(health?.state)}`}>{healthLabel(health?.state)}</span>
@@ -245,6 +270,7 @@ export function LiveViewPage({ api, canManage = false, authRole = null }: LiveVi
                     <small>Last snapshot: {new Date(updatedAt).toLocaleTimeString()}</small>
                   ) : null}
                 </div>
+                </button>
                 {canManage ? (
                   <div className="thumb-actions" onClick={(e) => e.stopPropagation()}>
                     {health?.manual_excluded || health?.quarantined ? (
@@ -264,12 +290,12 @@ export function LiveViewPage({ api, canManage = false, authRole = null }: LiveVi
         </div>
 
         <div className="live-view-stage">
-          <WebRtcEmbed
+          {selectedCamera && <WebRtcEmbed
             url={selectedCamera?.addresses.webrtc_url ?? null}
             title={selectedCamera ? `Camera: ${selectedCamera.label || selectedCamera.id}` : "Camera"}
-          />
+          />}
           {selectedCamera && canControlSelectedPtz ? (
-            <PtzControls api={api} camera={selectedCamera} isAdmin={canManage} />
+            <PtzControls key={selectedCamera.id} api={api} camera={selectedCamera} isAdmin={canManage} />
           ) : null}
         </div>
       </div>

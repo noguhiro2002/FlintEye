@@ -29,6 +29,12 @@ jobs:
         working-directory: frontend
       - name: Frontend build leaves tracked sources clean
         run: git diff --exit-code -- frontend
+      - name: Install Chromium for synthetic WebApp regressions
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: WebApp behavior and responsive layout
+        working-directory: frontend
+        run: npm test
       - run: npm audit --audit-level=high
         working-directory: frontend
       - run: docker build -t flinteye:check .

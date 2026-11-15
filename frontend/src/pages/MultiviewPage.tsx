@@ -6,6 +6,7 @@ import { WebRtcEmbed } from "../components/WebRtcEmbed";
 
 interface MultiviewPageProps {
   api: ApiClient;
+  onConfigure?: () => void;
 }
 
 function healthClass(state: string | undefined): string {
@@ -21,23 +22,32 @@ function healthClass(state: string | undefined): string {
   return "ng";
 }
 
-export function MultiviewPage({ api }: MultiviewPageProps): JSX.Element {
+export function MultiviewPage({ api, onConfigure }: MultiviewPageProps): JSX.Element {
   const [views, setViews] = useState<MultiviewViewItem[]>([]);
   const [selectedViewId, setSelectedViewId] = useState<string | null>(null);
   const [status, setStatus] = useState<MultiviewStatus>({ updated_at: null, views: [] });
   const [error, setError] = useState("");
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [healthError, setHealthError] = useState("");
 
-  usePolling(async () => {
+  usePolling(async (isCurrent) => {
     try {
-      const [data, health] = await Promise.all([api.getMultiviewViews(), api.getMultiviewStatus()]);
-      setViews(data.items);
-      setStatus(health);
-      if (!selectedViewId && data.items.length > 0) {
-        setSelectedViewId(data.items[0].id);
+      const [viewsResult, health] = await Promise.allSettled([api.getMultiviewViews(), api.getMultiviewStatus()]);
+      if (!isCurrent()) return;
+      if (health.status === "fulfilled") {
+        setStatus(health.value); setHealthError("");
+      } else {
+        setStatus({ updated_at: null, views: [] }); setHealthError("Multiview health status is unavailable. Retrying automatically.");
       }
+      if (viewsResult.status === "rejected") throw viewsResult.reason;
+      const data = viewsResult.value;
+      setViews(data.items);
+      setSelectedViewId(previous => data.items.some(view => view.id === previous) ? previous : data.items[0]?.id ?? null);
       setError("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load multiview data");
+      if (isCurrent()) setError(e instanceof Error ? e.message : "Failed to load multiview data");
+    } finally {
+      if (isCurrent()) setInitialLoading(false);
     }
   }, 4000);
 
@@ -51,17 +61,22 @@ export function MultiviewPage({ api }: MultiviewPageProps): JSX.Element {
     <div className="page">
       <h2>Multiview</h2>
       {error && <div className="panel-error">{error}</div>}
+      {healthError && <div className="panel-note">{healthError}</div>}
+      {initialLoading && <p role="status">Loading multiview outputs…</p>}
       <div className="live-layout">
         <div className="panel-list">
           <div className="panel-list-title">Views</div>
-          {views.length === 0 ? (
-            <div className="panel-empty">No multiview outputs available.</div>
+          {views.length === 0 ? (!initialLoading && !error && (
+            <div className="panel-empty">No multiview outputs are configured.
+              {onConfigure ? <button type="button" onClick={onConfigure}>Configure Multiview in Settings</button> : " Ask your administrator to configure Multiview."}
+            </div>)
           ) : (
             views.map((view) => (
               <button
                 key={view.id}
                 type="button"
                 className={view.id === selectedViewId ? "panel-list-item active" : "panel-list-item"}
+                aria-pressed={view.id === selectedViewId}
                 onClick={() => setSelectedViewId(view.id)}
               >
                 <div>{view.id}</div>
@@ -108,10 +123,10 @@ export function MultiviewPage({ api }: MultiviewPageProps): JSX.Element {
             </div>
           ) : null}
         </div>
-        <WebRtcEmbed
+        {selectedView && <WebRtcEmbed
           url={selectedView?.webrtc_url ?? null}
           title={selectedView ? `Multiview: ${selectedView.id}` : "Multiview"}
-        />
+        />}
       </div>
     </div>
   );

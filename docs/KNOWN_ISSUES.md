@@ -1,21 +1,32 @@
-# Known issues — under development
+# Known issues and WebApp review status
 
 [日本語](KNOWN_ISSUES.ja.md) · [Documentation](README.md)
 
-This source-first preview is not a stable release. A browser review reproduced 26 groups of interface issues using synthetic data. These are pending work, not fixes included in this snapshot. The review did not exercise physical cameras and does not establish that every issue has been found.
+FlintEye is **UNDER DEVELOPMENT**, not a stable release. The 2026-11-15 Terra browser review identified 26 groups of interface defects. The changes below address those groups in the current source. Installer artifacts built before these changes still contain the earlier interface; rebuild from the updated source before testing on Windows or macOS.
 
-| Area | Known limitation and current precaution |
+## Changes from the review
+
+| Review findings | Behavior in the updated source |
 | --- | --- |
-| Settings drafts | Refresh, navigation, conflict recovery and some camera removal actions can discard unsaved edits. Save one task at a time before changing pages or devices. Advanced JSON has separate save behavior and incomplete unsaved indicators. |
-| Camera inspection and PTZ | Delayed responses may apply stale information after switching or removing cameras. Finish an inspection before editing the camera list; verify the selected camera and capabilities before operating PTZ. |
-| Camera identities | Removing and then adding an IP camera can generate a duplicate default path. Check that every camera path is unique before saving. |
-| Connection and loading errors | Some pages confuse loading, empty results, partial failure or unknown authentication state. “Public viewer” during a service failure is not evidence of an authorization bypass; retry and check server status. |
-| Recordings | Invalid date ranges may appear as no results; partial filter failures can hide available recordings. Check the date order and retry. Playback dialogs have keyboard-focus problems. |
-| Narrow displays and accessibility | Some layouts overflow on phones/tablets. Selection labels, keyboard focus, contrast and first-run form spacing need further work. A desktop-width window is currently the most practical test environment. |
-| Guidance and search | Settings search misses some labels, first-run guidance can highlight a different page, and some empty-state actions are misleading. |
+| 1, 2, 13, 25 — Settings drafts and loading | Navigation, Refresh and both Discard actions confirm before dropping unsaved form or JSON edits. Separate device/account operations require existing changes to be saved or discarded. Advanced JSON has an accessible label and its own dirty state; replacing it warns about unsaved form changes. Status no longer understates changes with an incomplete count. Failed USB discovery leaves other settings available. Missing configuration is shown as unavailable rather than populated with default status claims. |
+| 19, 21, 22, 23, 24 — Camera identity and inspection | Switching cameras isolates PTZ state. Removed or edited drafts reject stale inspection responses. New camera paths are unique and duplicate/empty paths are rejected before saving. A failed inspection clears the previous success. Inspection presents an explicit **Apply recommended FPS** action instead of changing settings automatically. |
+| 3 — Authentication | An unavailable authentication endpoint shows an error and **Retry connection**, rather than claiming public access. Requests have bounded waits, except for the native folder picker, which waits for the user. |
+| 16, 18 — Recording player | Opening the player moves focus inside, keeps keyboard navigation inside, makes background controls inert, and restores focus on close. Play controls identify their recording. |
+| 17, 20 — Recording queries | Reversed date ranges show an inline error without sending an invalid query. Recordings and stream filters load independently; a failed filter request does not hide available footage. Retained results are identified as previous results while filters change or a refresh fails. |
+| 6, 7, 26 — Live View and Multiview | Polls run sequentially and outdated responses are ignored. A removed selection falls back to an available source. Loading, service failure and genuinely empty configuration have distinct messages. |
+| 4, 5 — Small screens | Headers, controls, camera cards and tables wrap or shrink at narrow widths. Long names and URLs no longer force the page wider. Mobile navigation takes only the height its content needs. |
+| 8 — Settings search | Encoder is included. Search describes its scope as settings categories and common keywords, rather than promising every field. |
+| 9, 10 — Setup and sign-in | Setup fields use a spaced vertical layout, FlintEye branding and visible password requirements. Mandatory sign-in does not show a Back action with no destination. |
+| 11, 12 — Accessible state and contrast | Navigation exposes its current page; camera and Multiview selectors expose their selected state. Camera controls are separate from the selection button. Small PTZ explanatory text has stronger contrast. |
+| 14, 15 — Guidance and empty states | Opening the guide no longer decorates a different page as if it were active. Empty camera/output/recording states explain the situation; empty recording lists omit pagination. |
 
-Automated builds check startup, initial authentication, bundled media tools, synthetic recording and playback. Windows installer checks also exercise uninstall with an active API and retained data. They do **not** replace USB/IP camera, microphone/privacy permission, sleep/resume, minimum-OS, autostart or desktop quit checks on real machines.
+## Validation and remaining limits
 
-Public installers and GHCR images are being prepared. Before publishing the first preview, the maintainer must confirm Windows x64, M1 Mac and Linux x64 acceptance and review corresponding sources/licenses. Other CPU/OS combinations remain explicitly subject to device testing. See the [acceptance checklist](ACCEPTANCE.md).
+The regression suite uses a built frontend, Chromium and synthetic API responses. It exercises delayed and failed requests, draft protection, camera switching, keyboard interaction and narrow layouts. It blocks requests to external hosts and does not connect to physical cameras. See [Contributing](../.github/CONTRIBUTING.md) for the test commands.
 
-Report reproducible problems through [Issues](https://github.com/noguhiro2002/FlintEye/issues). Remove credentials, setup tokens, private camera URLs and personal footage from reports. Report security vulnerabilities using the [private security channel](../.github/SECURITY.md).
+- **Real-device acceptance remains required:** Windows and macOS desktop behavior, physical USB/IP cameras, PTZ movement/stop, microphone/privacy permissions, sleep/resume, minimum-OS support and actual video decoding must be checked on the intended machines. Linux browser tests do not establish compatibility with every browser or screen reader.
+- **Conflicting settings are not merged automatically:** the draft stays on screen after a conflict. Copy the changes you need before explicitly discarding the draft and reloading the latest settings.
+- **Deployment guidance differs:** closing the browser keeps monitoring running. Desktop users stop the app through **Stop monitoring and quit**; Docker/systemd users stop their server service.
+- **Release status:** public installers and GHCR images remain gated on Windows x64, M1 Mac and Linux x64 acceptance plus corresponding source/license review. Existing Actions artifacts are development builds, not stable releases. See the [acceptance checklist](ACCEPTANCE.md).
+
+Report new reproducible problems through [Issues](https://github.com/noguhiro2002/FlintEye/issues). Remove credentials, setup tokens, private camera URLs and personal footage from reports. Use the [private security channel](../.github/SECURITY.md) for vulnerabilities.

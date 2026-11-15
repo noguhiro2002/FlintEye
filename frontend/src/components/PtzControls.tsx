@@ -72,15 +72,16 @@ export function PtzControls({ api, camera, isAdmin }: PtzControlsProps): JSX.Ele
       activeMoveRef.current = null;
       setActiveLabel("");
       setZoomVelocity(0);
+      setBusy(false);
       try {
         await api.stopPtz(camera.id, {
           operation_id: move?.operationId,
           pan_tilt: all ? true : move?.panTilt ?? true,
           zoom: all ? true : move?.zoom ?? true,
         });
-        if (mountedRef.current) setError("");
+        if (mountedRef.current && !activeMoveRef.current) setError("");
       } catch (e) {
-        if (mountedRef.current) setError(e instanceof Error ? e.message : "Failed to stop PTZ movement");
+        if (mountedRef.current && !activeMoveRef.current) setError(e instanceof Error ? e.message : "Failed to stop PTZ movement");
       }
     },
     [api, camera.id, clearHeartbeat],
@@ -99,11 +100,12 @@ export function PtzControls({ api, camera, isAdmin }: PtzControlsProps): JSX.Ele
     async (move: ActiveMove): Promise<void> => {
       try {
         await api.movePtz(camera.id, { operation_id: move.operationId, ...move.vector });
-        if (mountedRef.current) {
+        if (mountedRef.current && activeMoveRef.current === move) {
           setBusy(false);
           setError("");
         }
       } catch (e) {
+        if (!mountedRef.current || activeMoveRef.current !== move) return;
         clearHeartbeat();
         activeMoveRef.current = null;
         if (mountedRef.current) {
@@ -201,6 +203,7 @@ export function PtzControls({ api, camera, isAdmin }: PtzControlsProps): JSX.Ele
   );
 
   useEffect(() => {
+    let current = true;
     mountedRef.current = true;
     setLoading(true);
     setCapabilities(null);
@@ -208,22 +211,23 @@ export function PtzControls({ api, camera, isAdmin }: PtzControlsProps): JSX.Ele
     void api
       .getPtzCapabilities(camera.id)
       .then((result) => {
-        if (!mountedRef.current) return;
+        if (!current) return;
         setCapabilities(result);
         setZoomPosition(result.current.zoom ?? 0);
       })
       .catch((e) => {
-        if (mountedRef.current) setError(e instanceof Error ? e.message : "PTZ is unavailable");
+        if (current) setError(e instanceof Error ? e.message : "PTZ is unavailable");
       })
       .finally(() => {
-        if (mountedRef.current) setLoading(false);
+        if (current) setLoading(false);
       });
 
     return () => {
+      current = false;
       const move = activeMoveRef.current;
       clearHeartbeat();
       activeMoveRef.current = null;
-      if (move) void api.stopPtz(camera.id, { operation_id: move.operationId, pan_tilt: move.panTilt, zoom: move.zoom });
+      if (move) void api.stopPtz(camera.id, { operation_id: move.operationId, pan_tilt: move.panTilt, zoom: move.zoom }).catch(() => undefined);
       if (zoomPositionTimerRef.current !== null) window.clearTimeout(zoomPositionTimerRef.current);
       mountedRef.current = false;
     };

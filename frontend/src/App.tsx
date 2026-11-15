@@ -1,7 +1,7 @@
 import { UpdateNotice } from "./components/UpdateNotice";
 import { StorageStatus } from "./components/StorageStatus";
 import { FirstRun } from "./components/FirstRun";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiClient } from "./api/client";
 import { Sidebar, type PageKey } from "./components/Sidebar";
 import { DashboardPage } from "./pages/DashboardPage";
@@ -13,8 +13,8 @@ import { RecordingsPage } from "./pages/RecordingsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import type { AuthMeResponse } from "./types";
 
-const DEFAULT_APP_TITLE = "Unified Camera Orchestrator";
-const DEFAULT_SIDEBAR_TITLE = "Orchestrator UI";
+const DEFAULT_APP_TITLE = "FlintEye";
+const DEFAULT_SIDEBAR_TITLE = "FlintEye";
 const DEFAULT_FOOTER_TEXT = "© 2026 Noguhiro. Sustainable Use License + additional permission.";
 
 export default function App(): JSX.Element {
@@ -27,30 +27,39 @@ export default function App(): JSX.Element {
   const [auth, setAuth] = useState<AuthMeResponse | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [showLogin, setShowLogin] = useState(false);
+  const [authError, setAuthError] = useState("");
+  const [settingsDirty, setSettingsDirty] = useState(false);
+  const sessionRequest = useRef(0);
 
   const api = useMemo(() => new ApiClient(), []);
 
   const refreshSession = async (): Promise<void> => {
-    setAuthLoading(true);
+    const request = ++sessionRequest.current;
+    if (!auth) setAuthLoading(true);
+    setAuthError("");
     try {
       const authMe = await api.getAuthMe();
+      if (request !== sessionRequest.current) return;
       setAuth(authMe);
-      const runtime = await api.getRuntimeConfig();
+      setHasAdminAccess(authMe.role === "admin");
+      setShowLogin(false);
+      // Branding is optional for viewers and must not determine authentication.
+      const runtime = await api.getRuntimeConfig().catch(() => null);
+      if (request !== sessionRequest.current) return;
+      if (!runtime) return;
       setAppTitle(runtime.ui?.app_title || DEFAULT_APP_TITLE);
       setSidebarTitle(runtime.ui?.sidebar_title || DEFAULT_SIDEBAR_TITLE);
       setFooterText(runtime.ui?.footer_text || DEFAULT_FOOTER_TEXT);
       setHasAdminAccess(authMe.role === "admin");
       setShowGuide(authMe.role === "admin" && !runtime.ui?.onboarding_done);
       setShowLogin(false);
-    } catch {
-      const authMe = await api.getAuthMe().catch(() => null);
-      setAuth(authMe);
-      setAppTitle(DEFAULT_APP_TITLE);
-      setSidebarTitle(DEFAULT_SIDEBAR_TITLE);
-      setFooterText(DEFAULT_FOOTER_TEXT);
+    } catch (error) {
+      if (request !== sessionRequest.current) return;
+      setAuth(null);
+      setAuthError(error instanceof Error ? error.message : "Unable to check your session.");
       setHasAdminAccess(false);
     } finally {
-      setAuthLoading(false);
+      if (request === sessionRequest.current) setAuthLoading(false);
     }
   };
 
@@ -65,9 +74,17 @@ export default function App(): JSX.Element {
     }
   }, [hasAdminAccess, page]);
 
-  const isViewerAllowed = auth?.authenticated || !auth?.viewer_auth_required;
+  const isViewerAllowed = Boolean(auth && (auth.authenticated || !auth.viewer_auth_required));
+  const canLeaveSettings = (): boolean => !settingsDirty || window.confirm("Discard your unsaved settings and leave this page?");
+  const navigate = (next: PageKey): void => {
+    if (next === page || !canLeaveSettings()) return;
+    setSettingsDirty(false);
+    setPage(next);
+  };
 
   const onLogout = async (): Promise<void> => {
+    if (!canLeaveSettings()) return;
+    setSettingsDirty(false);
     await api.logout().catch(() => undefined);
     await refreshSession();
   };
@@ -76,13 +93,20 @@ export default function App(): JSX.Element {
     return <div className="page loading-page">Loading...</div>;
   }
 
+  if (authError || !auth) {
+    return <div className="page loading-page"><h1>FlintEye</h1>
+      <p role="alert">Unable to check your session. {authError}</p>
+      <button type="button" onClick={() => void refreshSession()}>Retry connection</button>
+    </div>;
+  }
+
   if (auth?.setup_required || showLogin || !isViewerAllowed) {
-    return <LoginPage api={api} auth={auth} onLoggedIn={refreshSession} onCancel={() => setShowLogin(false)} />;
+    return <LoginPage api={api} auth={auth} onLoggedIn={refreshSession} onCancel={isViewerAllowed ? () => setShowLogin(false) : undefined} />;
   }
 
   return (
     <div className="app">
-      <Sidebar active={page} onSelect={setPage} brandTitle={sidebarTitle} canAccessSettings={hasAdminAccess} />
+      <Sidebar active={page} onSelect={navigate} brandTitle={sidebarTitle} canAccessSettings={hasAdminAccess} />
       <main className="content">
         <header className="topbar">
           <div className="topbar-title">{appTitle}</div>
@@ -107,16 +131,16 @@ export default function App(): JSX.Element {
 
         <StorageStatus />
         {hasAdminAccess && <UpdateNotice />}
-        {hasAdminAccess && showGuide && <FirstRun api={api} navigate={setPage} onClose={() => setShowGuide(false)} />}
+        {hasAdminAccess && showGuide && <FirstRun api={api} navigate={navigate} onClose={() => setShowGuide(false)} />}
         {page === "dashboard" && <DashboardPage api={api} />}
         {page === "information" && <InformationPage api={api} />}
         {page === "settings" && hasAdminAccess && (
-          <SettingsPage api={api} onUiConfigChanged={() => void refreshSession()} />
+          <SettingsPage api={api} onDirtyChange={setSettingsDirty} onUiConfigChanged={() => void refreshSession()} />
         )}
         {page === "live" && (
-          <LiveViewPage api={api} canManage={hasAdminAccess} authRole={auth?.role ?? null} />
+          <LiveViewPage api={api} canManage={hasAdminAccess} authRole={auth?.role ?? null} onConfigure={() => navigate("settings")} />
         )}
-        {page === "multiview" && <MultiviewPage api={api} />}
+        {page === "multiview" && <MultiviewPage api={api} onConfigure={hasAdminAccess ? () => navigate("settings") : undefined} />}
         {page === "recordings" && <RecordingsPage api={api} canDownload={hasAdminAccess} />}
         <footer className="app-footer">{footerText}</footer>
       </main>

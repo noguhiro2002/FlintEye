@@ -15,6 +15,7 @@ python -m unittest discover -s tests -v
 python packaging/check_docs.py
 npm --prefix frontend ci
 npm --prefix frontend run build
+(cd frontend && npx playwright install chromium && npm test)
 ```
 
 自動テストでは、合成カメラ/アカウントを使用してください。ネイティブインストーラーは手動の **Build release** ワークフローによってビルドされます。自動スモークテストが物理カメラまたは最小OSの互換性を証明していると主張しないでください。公開プレビューには、個別の[リリース受け入れプロセス](../docs/RELEASING.ja.md)が必要です。

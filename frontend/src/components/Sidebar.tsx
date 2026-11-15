@@ -28,6 +28,7 @@ export function Sidebar({ active, onSelect, brandTitle, canAccessSettings }: Sid
             key={item.key}
             data-tour-nav={item.key}
             className={active === item.key ? "nav-item active" : "nav-item"}
+            aria-current={active === item.key ? "page" : undefined}
             onClick={() => onSelect(item.key)}
           >
             {item.label}

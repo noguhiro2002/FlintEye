@@ -58,8 +58,8 @@ class SnapshotConfig(BaseModel):
 
 class UiConfig(BaseModel):
     onboarding_done: bool = False
-    app_title: str = "Unified Camera Orchestrator"
-    sidebar_title: str = "Orchestrator UI"
+    app_title: str = "FlintEye"
+    sidebar_title: str = "FlintEye"
     footer_text: str = "© 2026 Noguhiro. Sustainable Use License + additional permission."
 
     @field_validator("app_title", "sidebar_title", "footer_text")

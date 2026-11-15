@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ApiClient } from "../api/client";
 import type { ViewerInfoResponse } from "../types";
 
@@ -8,16 +8,19 @@ interface InformationPageProps {
 
 export function InformationPage({ api }: InformationPageProps): JSX.Element {
   const [info, setInfo] = useState<ViewerInfoResponse | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const requestId = useRef(0);
   const [error, setError] = useState("");
 
   const load = async (): Promise<void> => {
+    const request = ++requestId.current;
     setLoading(true);
     try {
       const [response, multiviewViews] = await Promise.all([
         api.getViewerInfo(),
         api.getMultiviewViews(),
       ]);
+      if (request !== requestId.current) return;
       setInfo({
         ...response,
         multiview: {
@@ -27,14 +30,15 @@ export function InformationPage({ api }: InformationPageProps): JSX.Element {
       });
       setError("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load information");
+      if (request === requestId.current) setError(e instanceof Error ? e.message : "Failed to load information");
     } finally {
-      setLoading(false);
+      if (request === requestId.current) setLoading(false);
     }
   };
 
   useEffect(() => {
     void load();
+    return () => { requestId.current++; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -48,7 +52,7 @@ export function InformationPage({ api }: InformationPageProps): JSX.Element {
       </div>
       {error && <div className="panel-error">{error}</div>}
       {!info ? (
-        <div className="panel-empty">No information loaded.</div>
+        <div className="panel-empty" role="status">{loading ? "Loading information…" : "Information is unavailable. Use Refresh to retry."}</div>
       ) : (
         <>
           <div className="section">
@@ -97,6 +101,7 @@ export function InformationPage({ api }: InformationPageProps): JSX.Element {
 
           <div className="section">
             <h3>Cameras</h3>
+            {info.cameras.length === 0 && <p className="panel-note">No cameras are configured. An administrator can add cameras in Settings.</p>}
             <div className="table-scroll">
             <table className="table responsive-table information-camera-table">
               <thead>
