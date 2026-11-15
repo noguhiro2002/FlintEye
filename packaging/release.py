@@ -30,7 +30,8 @@ def write_documentation(destination: Path) -> None:
             archive.writestr(info, path.read_bytes(), compresslevel=9)
 
 
-def validate_publication_revision(build_commit: str, publication_commit: str, changed_paths: list[str]) -> None:
+def validate_publication_revision(build_commit: str, publication_commit: str, changed_paths: list[str],
+                                  *, workflow_token: bool = False) -> None:
     """A tested binary can accompany newer distribution instructions, never newer app code."""
     if not all(re.fullmatch('[0-9a-f]{40}', value) for value in (build_commit, publication_commit)):
         raise ValueError('Expected full build and publication commit hashes')
@@ -43,12 +44,17 @@ def validate_publication_revision(build_commit: str, publication_commit: str, ch
             name in allowed or (name.startswith('docs/') and name.endswith('.md'))
         ):
             raise ValueError('Application/build inputs changed; rebuild before publication: ' + name)
+    if workflow_token and any(name.startswith('.github/workflows/') for name in changed_paths):
+        raise ValueError('GITHUB_TOKEN cannot create this release because the tested commit has different '
+                         'workflow files from the default branch. Use a build with matching workflows, '
+                         'or maintainer-assisted publication of verified files; do not broaden CI credentials.')
 
 
 def check_publication_revision(build_commit: str, publication_commit: str) -> None:
     changed = subprocess.check_output(
         ['git', 'diff', '--name-only', '--no-renames', '-z', build_commit, publication_commit], text=True)
-    validate_publication_revision(build_commit, publication_commit, [p for p in changed.split('\0') if p])
+    validate_publication_revision(build_commit, publication_commit, [p for p in changed.split('\0') if p],
+                                  workflow_token=os.environ.get('GITHUB_ACTIONS') == 'true')
 
 
 def required_assets(v: str) -> set[str]:

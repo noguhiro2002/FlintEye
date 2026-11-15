@@ -152,6 +152,25 @@ class ReleaseTests(unittest.TestCase):
             release.write_documentation(self.root/'second.zip')
         self.assertEqual((self.root/'first.zip').read_bytes(), (self.root/'second.zip').read_bytes())
 
+    def test_actions_rejects_workflow_mismatch_before_distribution(self):
+        release.validate_publication_revision(self.commit, 'b'*40, ['docs/INSTALL.md'], workflow_token=True)
+        with self.assertRaisesRegex(ValueError, 'GITHUB_TOKEN'):
+            release.validate_publication_revision(self.commit, 'b'*40,
+                                                 ['.github/workflows/publish-release.yml'], workflow_token=True)
+        release.validate_publication_revision(self.commit, 'b'*40, ['.github/workflows/publish-release.yml'])
+
+    def test_release_lookup_includes_unpublished_drafts_and_all_pages(self):
+        from publish_release import find_release
+        from unittest.mock import patch
+        draft = {'tag_name': 'v1.1.3-preview.1', 'draft': True, 'id': 42}
+        with patch('publish_release.run', return_value=json.dumps([[{'tag_name': 'older'}], [draft]])) as query:
+            self.assertEqual(find_release(draft['tag_name']), draft)
+            self.assertIn('--paginate', query.call_args.args)
+            self.assertIsNone(find_release('missing'))
+        with patch('publish_release.run', return_value=json.dumps([[draft], [draft]])):
+            with self.assertRaisesRegex(ValueError, 'Multiple releases'):
+                find_release(draft['tag_name'])
+
     def test_preview_distribution_matches_embedded_build_identity(self):
         from publish_release import prepare, finalize
         from unittest.mock import patch
@@ -178,7 +197,7 @@ class ReleaseTests(unittest.TestCase):
         metadata = {'tag': 'v'+version()+'-preview.1'}
         draft = {'draft': True, 'target_commitish': self.commit, 'id': 42}
         for failing_check in ('check_visibility', 'verify_remote_assets'):
-            with patch('publish_release.api', return_value=draft), \
+            with patch('publish_release.find_release', return_value=draft), \
                  patch('publish_release.verify_container_receipt'), \
                  patch('publish_release.check_visibility'), \
                  patch('publish_release.verify_remote_assets'), \
@@ -196,11 +215,11 @@ class ReleaseTests(unittest.TestCase):
         args = SimpleNamespace(channel='public-preview', output=selected)
         metadata = {'tag': 'v'+version()+'-preview.1', 'container_digest': 'sha256:'+'a'*64}
         responses = [
-            {'draft': True, 'target_commitish': self.commit, 'id': 42},
             {'draft': False, 'prerelease': True, 'html_url': 'https://github.com/'+REPOSITORY+'/releases/tag/'+metadata['tag']},
             {'object': {'type': 'commit', 'sha': self.commit}},
         ]
         with patch('publish_release.api', side_effect=responses), \
+             patch('publish_release.find_release', return_value={'draft': True, 'target_commitish': self.commit, 'id': 42}), \
              patch('publish_release.verify_container_receipt'), \
              patch('publish_release.check_visibility'), \
              patch('publish_release.verify_remote_assets'), \

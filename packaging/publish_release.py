@@ -28,6 +28,16 @@ def api(endpoint: str, *, missing: bool = False):
     return json.loads(result.stdout)
 
 
+def find_release(tag: str) -> dict | None:
+    # The tag endpoint returns published releases only, even for a maintainer.
+    pages = json.loads(run('gh', 'api', '--paginate', '--slurp',
+                           f'repos/{REPOSITORY}/releases?per_page=100'))
+    matches = [item for page in pages for item in page if item['tag_name'] == tag]
+    if len(matches) > 1:
+        raise ValueError('Multiple releases use the requested tag; resolve the ambiguity first')
+    return matches[0] if matches else None
+
+
 def release_version(channel: str, number: str) -> str:
     if channel == 'stable':
         return version()
@@ -163,8 +173,8 @@ def verify_container_receipt(metadata: dict, commit: str) -> None:
 
 def finish_publication(args, metadata: dict, commit: str) -> None:
     tag = metadata['tag']
-    release = api(f'repos/{REPOSITORY}/releases/tags/{tag}')
-    if not release.get('draft') or release.get('target_commitish') != commit:
+    release = find_release(tag)
+    if not release or not release.get('draft') or release.get('target_commitish') != commit:
         raise ValueError('Only the verified draft for this exact commit can be published')
     verify_container_receipt(metadata, commit)
     check_visibility(args.channel, require_package=True)
@@ -218,7 +228,7 @@ def publish(args) -> None:
         finalize(args.output,metadata)
         finish_publication(args,metadata,commit)
         return
-    if api(f'repos/{REPOSITORY}/releases/tags/{tag}', missing=True) or api(f'repos/{REPOSITORY}/git/ref/tags/{tag}', missing=True):
+    if find_release(tag) or api(f'repos/{REPOSITORY}/git/ref/tags/{tag}', missing=True):
         raise ValueError('Release or tag already exists; never overwrite it')
     if args.channel == 'stable':
         pages=json.loads(run('gh','api','--paginate','--slurp',f'repos/{REPOSITORY}/releases?per_page=100'))
