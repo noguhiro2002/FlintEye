@@ -70,7 +70,7 @@ def assemble(source: Path, destination: Path, commit: str) -> None:
     (public / 'RELEASE-NOTES.md').write_text(
         f'# FlintEye {v}\n\nSource commit: `{commit}`\n\n'
         'Desktop installers include Python, the browser UI, FFmpeg and MediaMTX.\n'
-        'Quit monitoring before upgrading. Settings and recordings are retained.\n'
+        'Quit FlintEye before upgrading. Settings and recordings are retained.\n'
         'Windows/macOS packages are unsigned. Follow the documented per-app OS confirmation.\n'
         'Source archives and notices below cover bundled third-party components.\n'
         'Read the installation, server and licensing guides in the repository before deployment.\n')

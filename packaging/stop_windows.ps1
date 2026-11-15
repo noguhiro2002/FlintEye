@@ -16,6 +16,7 @@ $ownerSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $defaultData = Join-Path $env:LOCALAPPDATA 'FlintEye'
 $names = @('FlintEye.exe', 'ffmpeg.exe', 'ffprobe.exe', 'mediamtx.exe')
 $events = [Collections.Generic.List[object]]::new()
+$finalizationProfiles = [Collections.Generic.List[object]]::new()
 $forced = $false
 $stage = 'initialization'
 
@@ -83,7 +84,23 @@ function Get-Remaining {
     return @($tracked | Where-Object { Still-Running $_ })
 }
 function Report-Stop($mode, $code) {
-    $report = @{ mode=$mode; exit_code=$code; events=@($events.ToArray()); media_finalization='Check active recordings separately; a process exit alone is not proof of finalization.' }
+    $finalization = @($finalizationProfiles | ForEach-Object {
+        $entry = @{ profile=$_.path; verified=$false; message='No fresh recording completion receipt; verify the last recording.' }
+        $receipt = Join-Path $_.path 'last-monitoring-stop.json'
+        if (Test-Path -LiteralPath $receipt) {
+            try {
+                $result = Get-Content -LiteralPath $receipt -Raw | ConvertFrom-Json
+                if ($result.at -ge $_.requested_at) {
+                    $entry.verified = ($result.ok -eq $true -and $result.forced -ne $true)
+                    $entry.message = $result.reason
+                    $entry.pending_segments = $result.pending_segments
+                    $entry.forced = $result.forced
+                }
+            } catch { $entry.message='Recording completion receipt could not be read.' }
+        }
+        $entry
+    })
+    $report = @{ mode=$mode; exit_code=$code; events=@($events.ToArray()); media_finalization=$finalization }
     $json = $report | ConvertTo-Json -Depth 5
     $receiptRoot = if ($DataDir) { [IO.Path]::GetFullPath($DataDir) } else { $defaultData }
     New-Item -ItemType Directory -Force -Path $receiptRoot | Out-Null
@@ -98,7 +115,7 @@ try {
     foreach ($process in $original) {
         if ($process.Name -ne 'FlintEye.exe') { continue }
         $arguments = [FlintEyeCommandLine]::Parse($process.CommandLine)
-        if ($arguments -contains '--worker' -or $arguments -contains '--segment-complete' -or $arguments -contains '--pick-folder') { continue }
+        if ($arguments -contains '--worker' -or $arguments -contains '--segment-complete' -or $arguments -contains '--segment-created' -or $arguments -contains '--pick-folder') { continue }
         $profile = $defaultData
         for ($index=1; $index -lt $arguments.Count; $index++) {
             if ($arguments[$index] -eq '--data-dir' -and $index+1 -lt $arguments.Count) { $profile=$arguments[++$index] }
@@ -136,6 +153,7 @@ try {
         if (-not (Still-Running $process)) { continue }
         $targets.Add($process)
         $stage='write-stop-request'
+        $finalizationProfiles.Add(@{path=$profile; requested_at=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()/1000.0})
         $request=Join-Path $profile 'stop-request.json'
         $temporary=Join-Path $profile ('stop-request-' + [guid]::NewGuid().ToString('N') + '.tmp')
         try {

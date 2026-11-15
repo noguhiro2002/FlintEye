@@ -1,3 +1,5 @@
+import { StartupSettings } from "../components/StartupSettings";
+import { useConfirmChanges } from "../components/ConfirmChanges";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowPathIcon,
@@ -611,6 +613,7 @@ function retentionDays(value: string): number {
 }
 
 export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange }: SettingsPageProps): JSX.Element {
+  const { ask, confirmation } = useConfirmChanges();
   // Keep this editor's revision separate from onboarding and branding requests.
   const api = useMemo(() => sharedApi.configSession(), [sharedApi]);
   const [mode, setMode] = useState<SettingsMode>("quick");
@@ -793,7 +796,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
     return () => window.removeEventListener("beforeunload", beforeUnload);
   }, [hasUnsavedChanges, onDirtyChange]);
   useEffect(() => () => { onDirtyChange?.(false); loadRequest.current++; probeRequests.current.clear(); }, [onDirtyChange]);
-  const confirmDiscard = (): boolean => !hasUnsavedChanges || window.confirm("Discard all unsaved settings, including Advanced JSON edits, and reload the saved configuration?");
+  const confirmDiscard = async (): Promise<boolean> => !hasUnsavedChanges || await ask("Discard all unsaved settings, including Advanced JSON edits, and reload the saved configuration?");
   const requireSavedDraft = (): boolean => {
     if (!hasUnsavedChanges) return true;
     setError("Save or discard your unsaved settings before changing devices or account access.");
@@ -1510,7 +1513,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
 
   const onReplaceRuntime = async (restart = false): Promise<void> => {
     if (loading || !configReady) return;
-    if (formDirty && !window.confirm("Replacing runtime JSON will discard unsaved form changes. Continue?")) return;
+    if (formDirty && !await ask("Replacing runtime JSON will discard unsaved form changes. Continue?")) return;
     if (
       restart &&
       !window.confirm(
@@ -1541,6 +1544,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
 
   return (
     <SettingsHelp>
+    {confirmation}
     <div className="page settings-page">
       <div className="settings-page-header">
         <div>
@@ -1554,13 +1558,13 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
           <button
             type="button"
             className="settings-icon-button"
-            onClick={() => { if (confirmDiscard()) void loadAll(true); }}
+            onClick={async () => { if (await confirmDiscard()) void loadAll(true); }}
             disabled={loading}
           >
             <ArrowPathIcon aria-hidden="true" />
             {loading ? "Refreshing..." : "Refresh"}
           </button>
-          <button type="button" onClick={() => { if (confirmDiscard()) void loadAll(); }} disabled={!hasUnsavedChanges || loading}>
+          <button type="button" onClick={async () => { if (await confirmDiscard()) void loadAll(); }} disabled={!hasUnsavedChanges || loading}>
             Discard
           </button>
           <button
@@ -1584,7 +1588,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
           placeholder="Find a setting..."
           aria-label="Find a setting"
         />
-        <kbd>Ctrl K</kbd>
+        <kbd>{/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘ K" : "Ctrl K"}</kbd>
       </div>
 
       <div className="settings-workspace">
@@ -1678,6 +1682,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
 
               <div className="quick-settings-grid">
                 <section className="quick-settings-primary">
+                  <StartupSettings api={api} />
                   <h4>Frequently used</h4>
                   <div className="quick-setting-list">
                     <div className="quick-setting-row">
@@ -1853,7 +1858,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
                       </div>
                     )}
                     <div className="quick-aside-actions">
-                      <button type="button" onClick={() => { if (confirmDiscard()) void loadAll(); }} disabled={!hasUnsavedChanges}>Discard</button>
+                      <button type="button" onClick={async () => { if (await confirmDiscard()) void loadAll(); }} disabled={!hasUnsavedChanges}>Discard</button>
                       <button type="button" className="primary" onClick={() => void onSaveBasic()} disabled={!hasUnsavedChanges}>Save changes</button>
                     </div>
                   </section>
@@ -4308,7 +4313,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
             onChange={(e) => setRuntimeJsonText(e.target.value)}
           />
           <div className="button-row">
-            <button type="button" onClick={() => { if (!jsonDirty || window.confirm("Discard the JSON edits and replace them with the current form values?")) setRuntimeJsonText(JSON.stringify(runtime, null, 2)); }}>
+            <button type="button" onClick={async () => { if (!jsonDirty || await ask("Discard the JSON edits and replace them with the current form values?")) setRuntimeJsonText(JSON.stringify(runtime, null, 2)); }}>
               Sync JSON From Form
             </button>
             <button type="button" onClick={() => void onReplaceRuntime()}>

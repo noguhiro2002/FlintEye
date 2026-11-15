@@ -10,14 +10,14 @@ Host networking preserves ONVIF discovery and WebRTC. Docker Desktop USB forward
 
 ## Install without cloning
 
-**UNDER DEVELOPMENT.** Public GHCR images are not available yet. The first planned image is `ghcr.io/noguhiro2002/flinteye:1.1.2-preview.1`. Use [the local development build](#build-the-development-image) meanwhile. The pull instructions below apply only after publication.
+**UNDER DEVELOPMENT.** Public GHCR images are not available yet. The first planned image is `ghcr.io/noguhiro2002/flinteye:1.1.3-preview.1`. Use [the local development build](#build-the-development-image) meanwhile. The pull instructions below apply only after publication.
 
 Published public images can be pulled without a GitHub account or token. If Docker has an expired saved credential, use `docker logout ghcr.io` before pulling anonymously. Private maintainer testing still requires an authorized account and a classic token with `read:packages`, entered at `docker login ghcr.io -u YOUR_GITHUB_USERNAME`'s password prompt; never put tokens in `.env` or command arguments.
 
 Download `compose.yaml` from the same version's GitHub Release, put it in a new directory, and create `.env`:
 
 ```dotenv
-FLINTEYE_IMAGE=ghcr.io/noguhiro2002/flinteye:1.1.2-preview.1
+FLINTEYE_IMAGE=ghcr.io/noguhiro2002/flinteye:1.1.3-preview.1
 ```
 
 The preview will have no `latest` image tag. Pin the exact tested version as above. Publication requires automated and real-device checks; no public image is claimed to exist yet.

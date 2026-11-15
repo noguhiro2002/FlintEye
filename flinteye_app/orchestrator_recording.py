@@ -220,7 +220,7 @@ def _upsert_recording_for_path(
     return lines, changed, "updated"
 
 
-def apply_recording_config(config: RuntimeConfig, *, workspace_dir: str, before_write=None) -> RecordingApplyResult:
+def apply_recording_config(config: RuntimeConfig, *, workspace_dir: str, before_write=None, event_session=None, data_dir=None) -> RecordingApplyResult:
     if not config.recording.auto_apply:
         return RecordingApplyResult(
             ok=True,
@@ -272,10 +272,14 @@ def apply_recording_config(config: RuntimeConfig, *, workspace_dir: str, before_
         import os
         import shlex
         from flinteye_app.flinteye_runtime import launch_command
-        command = launch_command() + ["--segment-complete", os.environ.get("FLINTEYE_DATA_DIR", str(config_path.parent.resolve()))]
+        profile = str(data_dir or os.environ.get("FLINTEYE_DATA_DIR", str(config_path.parent.resolve())))
+        suffix = ["--recording-session", event_session] if event_session else []
+        command = launch_command() + ["--segment-complete", profile] + suffix
         # MediaMTX uses go-shellquote.Split even on Windows, then exec.Command.
         # Windows CRT quoting would lose unquoted backslashes in executable paths.
         desired["runOnRecordSegmentComplete"] = shlex.join(command)
+        desired["runOnRecordSegmentCreate"] = shlex.join(
+            launch_command() + ["--segment-created", profile] + suffix)
     lines = config_path.read_text(encoding="utf-8").splitlines()
     existing_record_paths = _find_existing_orchestrator_recording_paths(lines)
     changed = False

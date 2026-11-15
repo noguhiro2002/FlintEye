@@ -3,7 +3,7 @@
 # Private testing image. Sign in to ghcr.io before pulling; see docs/DOCKER.md.
 services:
   flinteye:
-    image: ${FLINTEYE_IMAGE:-ghcr.io/noguhiro2002/flinteye:1.1.2-preview.1}
+    image: ${FLINTEYE_IMAGE:-ghcr.io/noguhiro2002/flinteye:1.1.3-preview.1}
     init: true
     restart: unless-stopped
     # Linux only: preserves LAN ONVIF discovery and WebRTC ICE addresses.

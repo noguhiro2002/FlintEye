@@ -30,7 +30,10 @@ async function create(role = 'admin', width = 1440, height = 900, mode = 'normal
         }
         let v = { items: [] }, status = 200;
         requests.push(u.pathname + u.search);
-        if (u.pathname === '/api/v1/auth/me')
+        if (u.pathname === '/api/v1/status/monitoring') v = { state: 'stopped', color: 'gray', label: 'Monitoring stopped', message: 'Monitoring is stopped.', desired_running: false, busy: false, phase: 'stopped', resume_on_startup: false, counts: { configured: 0, targets: 0, receiving: 0, recording: 0 }, cameras: [] };
+        else if (u.pathname === '/api/v1/monitoring/preferences') v = { resume_on_startup: false };
+        else if (u.pathname === '/api/v1/build') v = { version: '1.1.1', release: '1.1.1', channel: 'stable', commit: null, dirty: false };
+        else if (u.pathname === '/api/v1/auth/me')
             v = { authenticated: role !== 'public', role: role === 'public' ? null : role, username: role, viewer_auth_required: role !== 'public', setup_required: false, provider: 'local', local: { viewer_username: 'viewer', admin_username: 'admin' } };
         else if (u.pathname === '/api/v1/config/effective')
             v = config;
@@ -101,7 +104,7 @@ try {
     await run('20-stream', async () => { let { ctx, p } = await create('admin', 1440, 900, 'streamerror'); await p.locator('.recording-card').first().waitFor(); assert.match(await p.locator('.recordings-page').innerText(), /Stream filters unavailable/); await ctx.close(); });
     await run('20-list', async () => { let { ctx, p } = await create('admin', 1440, 900, 'error'); await p.getByText(/Recordings unavailable/).waitFor(); assert.equal(await p.getByRole('option', { name: 'front' }).count(), 1); assert.equal(await p.getByText(/No recordings match/).count(), 0); await ctx.close(); });
     await run('20-stale', async () => { let { ctx, p } = await create('admin', 1440, 900, 'stale'); await p.getByRole('option', { name: 'rear' }).waitFor({ state: 'attached' }); await p.locator('.recording-filter-controls select').first().selectOption('rear'); await p.locator('.recording-card').first().waitFor(); await p.waitForTimeout(2200); const cards = await p.locator('.recording-card-heading strong').allTextContents(); assert.ok(cards.length > 0 && cards.every(x => x === 'rear'), JSON.stringify(cards)); await ctx.close(); });
-    await run('17-date', async () => { let { ctx, p, requests } = await create(); await p.locator('.recording-card').first().waitFor(); await p.getByLabel('Recorded from').fill('2025-10-12T10:00'); await p.waitForTimeout(250); let count = requests.filter(x => x.startsWith('/api/v1/recordings?')).length; await p.getByLabel('Recorded to').fill('2025-10-10T10:00'); await p.getByText(/Recorded from must be before/).waitFor(); await p.getByText(/Showing previous results/).waitFor(); await p.waitForTimeout(500); assert.equal(requests.filter(x => x.startsWith('/api/v1/recordings?')).length, count); await ctx.close(); });
+    await run('17-date', async () => { let { ctx, p, requests } = await create(); await p.locator('.recording-card').first().waitFor(); await p.getByLabel('Updated from').fill('2025-10-12T10:00'); await p.waitForTimeout(250); let count = requests.filter(x => x.startsWith('/api/v1/recordings?')).length; await p.getByLabel('Updated to').fill('2025-10-10T10:00'); await p.getByText(/Updated from must be before/).waitFor(); await p.getByText(/Showing previous results/).waitFor(); await p.waitForTimeout(500); assert.equal(requests.filter(x => x.startsWith('/api/v1/recordings?')).length, count); await ctx.close(); });
     await run('18-label', async () => { let { ctx, p } = await create(); await p.locator('.recording-card').nth(2).waitFor(); let names = await p.locator('.recording-card-actions button').allTextContents(); let labels = await p.locator('.recording-card-actions button').evaluateAll(es => es.slice(1, 3).map(e => e.getAttribute('aria-label'))); assert.equal(names[1], 'Play'); assert.ok(labels[0] && labels[1] && labels[0] !== labels[1], JSON.stringify(labels)); await ctx.close(); });
 }
 finally {

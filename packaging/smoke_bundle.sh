@@ -41,3 +41,69 @@ printf '%s' '{"username":"admin","password":"synthetic-bundle-password"}' |
 curl --silent --show-error --fail --cookie "$profile/cookies" "$base/api/v1/config/runtime" > /dev/null
 curl --silent --show-error --fail --cookie "$profile/cookies" "$base/" | grep -q '<div id="root">'
 printf 'PASS: installed media tools encode/probe; bundle serves UI, requires authentication and completes first-run setup.\n'
+
+# Exercise an actual MediaMTX recording with the packaged encoder and hooks.
+# The publisher is a test-owned process, so it exits before monitoring is stopped.
+printf '%s' '{"recording":{"record_all_cameras":false,"record_paths":["bundle-smoke"],"include_multiview":false}}' |
+  curl --silent --show-error --fail --cookie "$profile/cookies" -H "Origin: $base" -H 'Content-Type: application/json' -X PATCH --data-binary @- "$base/api/v1/config/runtime" > /dev/null
+media_ready=0
+for attempt in $(seq 1 60); do
+  if curl --silent --show-error --fail --cookie "$profile/cookies" "$base/api/v1/status/mediamtx" | grep -Eq '"running"[[:space:]]*:[[:space:]]*true'; then media_ready=1; break; fi
+  sleep 1
+done
+[ "$media_ready" = 1 ] || { printf 'MediaMTX did not start\n' >&2; exit 1; }
+LD_LIBRARY_PATH="$libraries" "$libraries/bin/ffmpeg" -hide_banner -loglevel error -re -f lavfi -i testsrc2=s=160x120:r=5 -t 4 -c:v libx264 -pix_fmt yuv420p -g 5 -f rtsp rtsp://127.0.0.1:8554/bundle-smoke
+
+curl --silent --show-error --fail --max-time 45 --cookie "$profile/cookies" -H "Origin: $base" -X POST "$base/api/v1/control/stop" > /dev/null
+curl --silent --show-error --fail "$base/api/v1/health" > /dev/null
+curl --silent --show-error --fail --cookie "$profile/cookies" "$base/api/v1/config/runtime" > /dev/null
+curl --silent --show-error --fail --cookie "$profile/cookies" "$base/api/v1/status/monitoring" | grep -Eq '"desired_running"[[:space:]]*:[[:space:]]*false'
+curl --silent --show-error --fail --cookie "$profile/cookies" "$base/api/v1/status/mediamtx" | grep -Eq '"running"[[:space:]]*:[[:space:]]*false'
+
+# Confirm that at least one completed segment exists and decode every segment.
+segments=0
+while IFS= read -r -d '' segment; do
+  LD_LIBRARY_PATH="$libraries" "$libraries/bin/ffmpeg" -v error -xerror -i "$segment" -f null -
+  segments=$((segments + 1))
+done < <(find "$profile/recordings/bundle-smoke" -type f \( -name '*.mp4' -o -name '*.ts' \) -print0)
+[ "$segments" -gt 0 ] || { printf 'No completed synthetic recording found\n' >&2; exit 1; }
+
+# Applying a camera configuration while stopped must not restart any worker.
+printf '%s' '{"cameras":[{"id":"bundle-camera","path":"bundle-camera","type":"ip","enabled":true,"ip":{"source_url":"rtsp://127.0.0.1:18554/no-source"}}]}' |
+  curl --silent --show-error --fail --cookie "$profile/cookies" -H "Origin: $base" -H 'Content-Type: application/json' -X PATCH --data-binary @- "$base/api/v1/config/runtime" > /dev/null
+sleep 2
+curl --silent --show-error --fail --cookie "$profile/cookies" "$base/api/v1/status/monitoring" | grep -Eq '"desired_running"[[:space:]]*:[[:space:]]*false'
+curl --silent --show-error --fail --cookie "$profile/cookies" "$base/api/v1/status/mediamtx" | grep -Eq '"running"[[:space:]]*:[[:space:]]*false'
+processes=$(curl --silent --show-error --fail --cookie "$profile/cookies" "$base/api/v1/status/processes")
+if printf '%s' "$processes" | grep -Eq '"(status|desired)"[[:space:]]*:[[:space:]]*("running"|true)'; then
+  printf 'A media process restarted while monitoring was stopped: %s\n' "$processes" >&2
+  exit 1
+fi
+test "$(curl --silent --output /dev/null --write-out '%{http_code}' --cookie "$profile/cookies" -H "Origin: $base" -X POST "$base/api/v1/control/restart")" = 409
+
+curl --silent --show-error --fail --max-time 45 --cookie "$profile/cookies" -H "Origin: $base" -X POST "$base/api/v1/control/start" > /dev/null
+curl --silent --show-error --fail --cookie "$profile/cookies" "$base/api/v1/status/monitoring" | grep -Eq '"desired_running"[[:space:]]*:[[:space:]]*true'
+curl --silent --show-error --fail --cookie "$profile/cookies" "$base/api/v1/status/mediamtx" | grep -Eq '"running"[[:space:]]*:[[:space:]]*true'
+curl --silent --show-error --fail --max-time 45 --cookie "$profile/cookies" -H "Origin: $base" -X POST "$base/api/v1/control/stop" > /dev/null
+kill "$pid"
+wait "$pid"
+pid=''
+"$app" --headless --data-dir "$profile" --port 18481 >>"$profile/startup.log" 2>&1 &
+pid=$!
+ready=0
+for attempt in $(seq 1 60); do
+  if curl --silent --fail "$base/api/v1/health" > /dev/null; then ready=1; break; fi
+  if ! kill -0 "$pid" 2>/dev/null; then cat "$profile/startup.log"; exit 1; fi
+  sleep 1
+done
+[ "$ready" = 1 ] || { cat "$profile/startup.log"; exit 1; }
+printf '%s' '{"username":"admin","password":"synthetic-bundle-password"}' |
+  curl --silent --show-error --fail -H "Origin: $base" -H 'Content-Type: application/json' --data-binary @- --cookie-jar "$profile/cookies" "$base/api/v1/auth/login" > /dev/null
+curl --silent --show-error --fail --cookie "$profile/cookies" "$base/api/v1/status/monitoring" | grep -Eq '"desired_running"[[:space:]]*:[[:space:]]*false'
+curl --silent --show-error --fail --cookie "$profile/cookies" "$base/api/v1/status/mediamtx" | grep -Eq '"running"[[:space:]]*:[[:space:]]*false'
+processes=$(curl --silent --show-error --fail --cookie "$profile/cookies" "$base/api/v1/status/processes")
+if printf '%s' "$processes" | grep -Eq '"(status|desired)"[[:space:]]*:[[:space:]]*("running"|true)'; then
+  printf 'A media process started after restarting the stopped app: %s\n' "$processes" >&2
+  exit 1
+fi
+printf 'PASS: synthetic recording decodes completely; monitoring stop, configuration, restart rejection, explicit start and stopped persistence work.\n'

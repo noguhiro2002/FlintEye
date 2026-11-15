@@ -34,6 +34,15 @@ async function context(scenario, width = 1440, height = 900, colorScheme = 'ligh
         let v = { items: [] }, status = 200;
         calls.push([req.method(), u.pathname, req.postData()]);
         switch (u.pathname) {
+            case '/api/v1/status/monitoring':
+                v = { state: 'stopped', color: 'gray', label: 'Monitoring stopped', message: 'Monitoring is stopped.', desired_running: false, busy: false, phase: 'stopped', resume_on_startup: false, counts: { configured: 0, targets: 0, receiving: 0, recording: 0 }, cameras: [] };
+                break;
+            case '/api/v1/monitoring/preferences':
+                v = { resume_on_startup: false };
+                break;
+            case '/api/v1/build':
+                v = { version: '1.1.1', release: '1.1.1', channel: 'stable', commit: null, dirty: false };
+                break;
             case '/api/v1/auth/me':
                 v = { authenticated: scenario === 'admin', role: scenario === 'admin' ? 'admin' : null, username: 'admin', viewer_auth_required: true, setup_required: scenario === 'setup', provider: 'local', local: { viewer_username: 'viewer', admin_username: 'admin' } };
                 break;

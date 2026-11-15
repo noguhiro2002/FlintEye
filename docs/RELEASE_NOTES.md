@@ -17,7 +17,7 @@ Download the installer for your system from this release's Assets:
 | Ubuntu / Raspberry Pi OS (64-bit) | `FlintEye-@VERSION@-linux-amd64.deb` / `FlintEye-@VERSION@-linux-arm64.deb` |
 | Rocky Linux | `FlintEye-@VERSION@-linux-amd64.rpm` / `FlintEye-@VERSION@-linux-arm64.rpm` |
 
-Windows/macOS packages are unsigned/not notarized. Follow the per-application OS confirmation in `documentation.zip`. Stop monitoring before upgrading; settings and recordings are retained. Camera access, recording, playback, tray/GUI behavior and minimum-OS support still need the applicable real-device acceptance checks.
+Windows/macOS packages are unsigned/not notarized. Follow the per-application OS confirmation in `documentation.zip`. Choose **Quit FlintEye** before upgrading; settings and recordings are retained. Camera access, recording, playback, tray/GUI behavior and minimum-OS support still need the applicable real-device acceptance checks.
 
 The archives include English/Japanese installation and acceptance guides, the exact applicable LICENSE, third-party notices and corresponding sources. `SHA256SUMS` covers every attached file except itself; `build-manifest.json` records the original tested bundle. `distribution-manifest.json` identifies this release's selected files and GHCR image digests. Public one-command installation scripts are omitted from private testing releases.
 
@@ -27,7 +27,7 @@ Use `ghcr.io/noguhiro2002/flinteye:@IMAGE_VERSION@` for `linux/amd64` or `linux/
 
 ## Changes in this version
 
-This development build includes MediaMTX path recovery on macOS, consolidated Settings on all platforms, hidden Windows media processes, and cleanup of owned API/media processes on quit and Windows uninstall. Preview-aware updates and version-pinned command installers are included. See the known-issues and acceptance guides in `documentation.zip`; automated checks alone do not prove every camera or minimum OS works.
+This development build adds shared desktop/Web monitoring status, persistent Stop and optional startup resume, recording-finalization checks, and explicit Stop versus Quit controls. It retains MediaMTX path recovery on macOS, consolidated Settings on all platforms, hidden Windows media processes, and cleanup of owned API/media processes on quit and Windows uninstall. Preview-aware updates and version-pinned command installers are included. See the known-issues and acceptance guides in `documentation.zip`; automated checks alone do not prove every camera or minimum OS works.
 
 ## License
 

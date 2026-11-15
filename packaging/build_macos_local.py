@@ -150,6 +150,7 @@ def main() -> int:
         work = ROOT / 'dist/local-macos' / timestamp
         source = work / 'source'
         commit = snapshot(source, env)
+        env['FLINTEYE_REVISION'] = commit
         with (work / 'build.log').open('w', encoding='utf-8') as log:
             run([sys.executable, '-m', 'venv', str(work / 'venv')], cwd=source, env=env, log=log)
             python = str(work / 'venv/bin/python')

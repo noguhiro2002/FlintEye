@@ -30,7 +30,11 @@ The regression suite uses a built frontend, Chromium and synthetic API responses
 
 - **Real-device acceptance remains required:** Windows and macOS desktop behavior, physical USB/IP cameras, PTZ movement/stop, microphone/privacy permissions, sleep/resume, minimum-OS support and actual video decoding must be checked on the intended machines. Linux browser tests do not establish compatibility with every browser or screen reader.
 - **Conflicting settings are not merged automatically:** the draft stays on screen after a conflict. Copy the changes you need before explicitly discarding the draft and reloading the latest settings.
-- **Deployment guidance differs:** closing the browser keeps monitoring running. Desktop users stop the app through **Stop monitoring and quit**; Docker/systemd users stop their server service.
+- **Deployment guidance differs:** closing the browser keeps monitoring running. Desktop users pause cameras through **Stop monitoring** or exit the application through **Quit FlintEye**; Docker/systemd users stop their server service.
 - **Release status:** public installers and GHCR images remain gated on Windows x64, M1 Mac and Linux x64 acceptance plus corresponding source/license review. Existing Actions artifacts are development builds, not stable releases. See the [acceptance checklist](ACCEPTANCE.md).
 
 Report new reproducible problems through [Issues](https://github.com/noguhiro2002/FlintEye/issues). Remove credentials, setup tokens, private camera URLs and personal footage from reports. Use the [private security channel](../.github/SECURITY.md) for vulnerabilities.
+
+## Monitoring controls in 1.1.3
+
+The tray and WebApp share monitoring state. See [monitoring controls](MONITORING.md) and the [acceptance checklist](ACCEPTANCE.md). Native menu clicks, sleep/resume, physical USB reconnects and 24-hour operation must be recorded separately for each target computer. Automated process tests do not certify those behaviors. Timeline, bulk export, diagnostic ZIP and a fully Japanese UI remain deferred.

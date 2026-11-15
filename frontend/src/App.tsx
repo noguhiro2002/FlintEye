@@ -1,5 +1,7 @@
 import { UpdateNotice } from "./components/UpdateNotice";
 import { StorageStatus } from "./components/StorageStatus";
+import { MonitoringStatus } from "./components/MonitoringStatus";
+import { useConfirmChanges } from "./components/ConfirmChanges";
 import { FirstRun } from "./components/FirstRun";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiClient } from "./api/client";
@@ -18,6 +20,7 @@ const DEFAULT_SIDEBAR_TITLE = "FlintEye";
 const DEFAULT_FOOTER_TEXT = "© 2026 Noguhiro. Sustainable Use License + additional permission.";
 
 export default function App(): JSX.Element {
+  const { ask, confirmation } = useConfirmChanges();
   const [showGuide, setShowGuide] = useState(false);
   const [page, setPage] = useState<PageKey>("dashboard");
   const [appTitle, setAppTitle] = useState(DEFAULT_APP_TITLE);
@@ -76,15 +79,15 @@ export default function App(): JSX.Element {
   }, [hasAdminAccess, page]);
 
   const isViewerAllowed = Boolean(auth && (auth.authenticated || !auth.viewer_auth_required));
-  const canLeaveSettings = (): boolean => !settingsDirty || window.confirm("Discard your unsaved settings and leave this page?");
-  const navigate = (next: PageKey): void => {
-    if (next === page || !canLeaveSettings()) return;
+  const canLeaveSettings = (): Promise<boolean> => settingsDirty ? ask("Your changes have not been saved. Discard them to leave Settings.") : Promise.resolve(true);
+  const navigate = async (next: PageKey): Promise<void> => {
+    if (next === page || !await canLeaveSettings()) return;
     setSettingsDirty(false);
     setPage(next);
   };
 
   const onLogout = async (): Promise<void> => {
-    if (!canLeaveSettings()) return;
+    if (!await canLeaveSettings()) return;
     setSettingsDirty(false);
     await api.logout().catch(() => undefined);
     await refreshSession();
@@ -107,6 +110,7 @@ export default function App(): JSX.Element {
 
   return (
     <div className="app">
+      {confirmation}
       <Sidebar active={page} onSelect={navigate} brandTitle={sidebarTitle} canAccessSettings={hasAdminAccess} />
       <main className="content">
         <header className="topbar">
@@ -131,6 +135,7 @@ export default function App(): JSX.Element {
         </header>
 
         <StorageStatus />
+        <MonitoringStatus api={api} canManage={hasAdminAccess} />
         {hasAdminAccess && <UpdateNotice />}
         {hasAdminAccess && showGuide && <FirstRun api={api} navigate={navigate} onClose={() => setShowGuide(false)} />}
         {page === "dashboard" && <DashboardPage api={api} />}

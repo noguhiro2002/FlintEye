@@ -2,9 +2,9 @@
 
 [日本語](STOP_AND_UNINSTALL.ja.md) · [Documentation](README.md) · [Installation](INSTALL.md)
 
-## Stop monitoring
+## Stop monitoring and quit
 
-On Windows, choose **Stop monitoring and quit** from the FlintEye notification-area icon (check the hidden-icons arrow). On macOS, use the FlintEye menu-bar icon. On Linux, use that button in the FlintEye desktop window. Closing the browser or signing out only closes the viewing session; it intentionally leaves monitoring running.
+To exit completely, on Windows choose **Quit FlintEye** from the FlintEye notification-area icon (check the hidden-icons arrow). On macOS, use the FlintEye menu-bar icon. On Linux, use the compact FlintEye control window. **Stop monitoring** instead pauses cameras/recording while leaving settings and the API available; **Start monitoring** resumes. [Status colors, recording finalization and startup preferences](MONITORING.md). Closing the browser or signing out only closes the viewing session; it intentionally leaves monitoring running.
 
 The updated application stops its camera workers, FFmpeg/FFprobe tasks, MediaMTX and API before exiting. It prevents new worker launches during shutdown and cleans up descendants even if a worker has already exited. Windows media children are owned by a kill-on-close job, so an app crash also ends those children. The browser and media tools started by other applications are not part of that job.
 
@@ -41,7 +41,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\packaging\stop_windows
 
 This invocation changes the execution policy only for that PowerShell process. The helper checks executable paths and ownership; it does not delete files. It discovers `--data-dir` arguments and requests shutdown for each current-user instance in the selected installation. To target one profile, add `-DataDir "C:\path\to\profile"`; this also handles a profile chosen through an environment variable. Without `-Force`, a timeout is an error. Use `-Force` only when you intend to terminate the matching processes after the timeout. The uninstaller uses that bounded fallback for its own installation.
 
-`last-stop-result.json` in the selected data directory (or `%LOCALAPPDATA%\FlintEye` for installation-wide stops) distinguishes `already-stopped`, `requested-shutdown-completed`, `forced`, and `incomplete`. Exit 0 means the selected processes are gone; exit 1 means stopping was incomplete. A successful parent shutdown request does not prove that an in-progress recording was finalized: Windows currently uses process-tree termination for media children. Check the final recording and recording index when testing a stop during recording. If the API still responds afterward, identify the process listening on that port: it may be another installation, a manually started server, Docker, or a cached page. Do not indiscriminately terminate every `python.exe` or `ffmpeg.exe` process.
+`last-stop-result.json` in the selected data directory (or `%LOCALAPPDATA%\FlintEye` for installation-wide stops) distinguishes `already-stopped`, `requested-shutdown-completed`, `forced`, and `incomplete`. Exit 0 means the selected processes are gone; exit 1 means stopping was incomplete. The separate `last-monitoring-stop.json` receipt records recording completion and pending/forced outcomes. The Windows helper incorporates fresh receipts into its `media_finalization` report; missing or stale receipts remain unverified. A process exit alone does not prove recording completion. Check the final recording and recording index when testing a stop during recording. If the API still responds afterward, identify the process listening on that port: it may be another installation, a manually started server, Docker, or a cached page. Do not indiscriminately terminate every `python.exe` or `ffmpeg.exe` process.
 
 ## macOS and Linux
 
@@ -55,7 +55,7 @@ If the app is already stopped, run this command before removing it:
 
 Adjust the app path if installed elsewhere, and add `--data-dir` for a custom profile. This command changes login startup only; it does not stop another running instance or delete settings/recordings. To restore login startup later, run the same app with `--enable-autostart`. New Mac registrations target the specific installed app copy; first move the app to Applications, because temporary App Translocation paths are not registered. A registration owned by another installation/profile is preserved, and the enable command reports failure instead of replacing it. If the app was already deleted, remove only the FlintEye LaunchAgent named above, then log out and back in to verify it no longer starts.
 
-On Linux, stop monitoring and remove the package through the package manager. Keep the data directories listed in [Recording lifecycle](DISTRIBUTION.md#recording-lifecycle) unless you deliberately want to erase them. A manually configured systemd service or Docker container is administered separately and must be stopped through its own deployment tools.
+On Linux, choose **Quit FlintEye** and remove the package through the package manager. Keep the data directories listed in [Recording lifecycle](DISTRIBUTION.md#recording-lifecycle) unless you deliberately want to erase them. A manually configured systemd service or Docker container is administered separately and must be stopped through its own deployment tools.
 
 ## Which builds contain this change?
 

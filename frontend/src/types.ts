@@ -641,3 +641,10 @@ export interface ViewerInfoResponse {
     views: MultiviewViewItem[];
   };
 }
+export interface MonitoringStatusResponse {
+  state: string; color: 'green' | 'red' | 'amber' | 'gray'; label: string; message: string;
+  desired_running: boolean; busy: boolean; phase: string; resume_on_startup: boolean;
+  counts: { configured: number; targets: number; receiving: number; recording: number };
+  cameras: Array<{ id: string; receiving: boolean; last_received_at: number | null; reason: string }>;
+  pending_segments?: number; previous_incomplete_segments?: number;
+}

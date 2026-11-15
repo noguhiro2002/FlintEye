@@ -26,12 +26,9 @@ that password exists. Changing it invalidates existing sessions.
 
 The Settings interface is shared by Windows, macOS, Linux, Docker and source installations. Recording location, quota and retention are in **Settings → Recording**; update checks are in **Settings → General**. Older installers retain their embedded interface until rebuilt and reinstalled. For a local Apple Silicon build, follow the [DMG build guide](LOCAL_MACOS_BUILD.md).
 
-Closing the browser leaves monitoring running. On Windows/macOS the tray menu provides **Open
-FlintEye**, logs, and **Stop monitoring and quit**. Linux uses a small control
-window so a tray extension is not required. Login autostart is installed
-for the current desktop user. Automatic sleep is inhibited while the desktop
-application runs; manual sleep/logout/shutdown interrupts monitoring. Linux
-inhibition requires a working systemd/logind session.
+Closing the browser leaves monitoring running. Windows/macOS desktop menus provide Open FlintEye, Start/Stop/Restart monitoring, logs, login startup and Quit FlintEye. Linux has a compact control window and a tray icon where supported. Stop monitoring keeps settings and the API available; Quit exits everything. The stop preference is remembered unless Always resume monitoring on startup is enabled. See [monitoring controls](MONITORING.md).
+
+Login autostart belongs to the current desktop user and installation. Automatic sleep is inhibited while monitoring/finalizing, and released when stopped. Manual sleep/logout/shutdown interrupts monitoring. Linux inhibition requires a working systemd/logind session. Docker/systemd/headless execution creates no desktop controls or login registration.
 
 FlintEye accepts local connections at `http://127.0.0.1:18080` by default. For access
 from other LAN devices, put an HTTPS reverse proxy in front of that loopback endpoint;
@@ -173,7 +170,7 @@ a newer glibc requirement; build DEBs against their minimum target. Linux deskto
 systems need a graphical session, Tk/X11 libraries. Native
 ARM64 availability of the complete toolchain must be verified before publishing.
 
-Preview installers check for newer published previews or stable releases in Settings; stable installers ignore previews. Source checkouts are updated with Git. FlintEye never downloads or installs updates automatically, and checking for updates never restarts recording. Stop monitoring,
+Preview installers check for newer published previews or stable releases in Settings; stable installers ignore previews. Source checkouts are updated with Git. FlintEye never downloads or installs updates automatically, and checking for updates never restarts recording. Choose **Quit FlintEye**,
 back up configuration/inventory, install the replacement package and restart.
 Keep the previous package for rollback. Preserve all data directories/volumes.
 Existing configuration is preserved during an upgrade. If an earlier development

@@ -76,3 +76,17 @@ After public launch, verify the README one-command install routes from clean com
 ## Follow-up to the November device review
 
 Use the [device QA follow-up](DEVICE_QA_FOLLOWUP.md) alongside this checklist. Its reported passes apply to the reviewed commit only. Recheck macOS signature integrity versus Gatekeeper trust, actual versus saved API ports, custom-profile shutdown results, active recording finalization and removal of login startup registrations on the new build.
+
+## Monitoring controls in 1.1.3
+
+- [ ] Test one commit across all installers; record the version, channel and commit from Information.
+- [ ] Compare native and Web status: no cameras, receiving, recording, one/all disconnected, MediaMTX down, unavailable health, starting, stopping and stopped. Confirm the 15-second stall threshold and distinct configured/target/receiving/recording counts.
+- [ ] Stop while recording: API/settings remain available, camera indicators turn off, MediaMTX stops after the final segment is indexed. Decode the complete last segment and replay it after restarting.
+- [ ] Save configuration while stopped, wait for maintenance/recovery, and restart the application. Monitoring stays stopped by default; the Always resume preference explicitly changes that behavior.
+- [ ] Verify login startup separately from monitoring resume; preserve another installation/profile's login registration.
+- [ ] Retry a pending stop with low space, disconnected storage or delayed completion hooks. Force quit must warn and retain an unverified receipt, never claim a valid recording.
+- [ ] On Windows/macOS, physically click every tray/menu action; inspect high-DPI, light/dark mode and keyboard operation. On Linux, test both a tray-enabled desktop and the compact fallback window.
+- [ ] Docker/headless starts without Tk/tray/login registration; Compose recreation preserves accounts, recording inventory and stopped-state preference.
+- [ ] Repeat physical USB disconnect/reconnect and manual sleep/resume. Record a separate 24-hour soak result; a short test does not pass this item.
+
+Signing contracts, notarization and public Release promotion are outside this development-build test cycle.

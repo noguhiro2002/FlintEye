@@ -96,6 +96,8 @@ class AppContext:
         self._shutdown_lock = threading.Lock()
         self._shutdown_complete = False
         self._closing = threading.Event()
+        from flinteye_app.monitoring import MonitoringController
+        self.monitoring = MonitoringController(self)
 
     def check_login_budget(self, client_host: str) -> None:
         now = time.monotonic()
@@ -129,7 +131,10 @@ class AppContext:
                 return
             self._recording_cache_cleanup_stop.set()
             try:
-                self.supervisor.shutdown()
+                try:
+                    self.monitoring.close()
+                finally:
+                    self.supervisor.shutdown()
             finally:
                 try:
                     self.ptz_controller.shutdown()
@@ -468,6 +473,22 @@ def _sanitized_process_status(processes: dict[str, Any]) -> dict[str, Any]:
     return {
         "items": [_sanitize_process_item(item) for item in processes.get("items", [])],
     }
+
+
+def _observed_process_status(context: AppContext) -> dict[str, Any]:
+    processes = _sanitized_process_status(context.supervisor.process_status())
+    status = context.monitoring.status()
+    cameras = {item['id'].lower(): item for item in status['cameras']}
+    for process in processes['items']:
+        if not str(process['id']).startswith('camera:'):
+            continue
+        if process['manual_excluded'] or process['quarantined']:
+            continue
+        observed = cameras.get(process['id'].split(':', 1)[1])
+        receiving = bool(observed and observed['receiving'] and status['state'] != 'unknown')
+        process['health_state'] = 'healthy' if receiving else 'starting' if status['state'] == 'starting' else 'unknown' if status['state'] == 'unknown' else 'unhealthy'
+        process['last_healthcheck_error'] = None if receiving else observed['reason'] if observed else status['message']
+    return processes
 
 
 def _camera_process_item(processes: dict[str, Any], camera_id: str) -> dict[str, Any] | None:
@@ -1057,11 +1078,23 @@ def _restart_affected(context: AppContext, old_cfg: RuntimeConfig, new_cfg: Runt
 
 
 def _apply_running_media_config(context: AppContext, config: RuntimeConfig, *, force_restart=False) -> MediamtxYamlApplyResult:
+    with context.monitoring.configuration_change() as allowed:
+        if not allowed:
+            from flinteye_app.orchestrator_recording import RecordingApplyResult
+            from flinteye_app.orchestrator_mediamtx_yaml import ManagedApplyResult
+            return MediamtxYamlApplyResult(ok=False, changed=False,
+                recording=RecordingApplyResult(ok=False, changed=False),
+                managed=ManagedApplyResult(ok=False, changed=False),
+                message='Configuration saved; waiting for recording finalization before applying.')
+        return _apply_running_media_config_unlocked(context, config, force_restart=force_restart)
+
+
+def _apply_running_media_config_unlocked(context: AppContext, config: RuntimeConfig, *, force_restart=False) -> MediamtxYamlApplyResult:
     with context.supervisor.media_update(pause=False):
         try:
             callback = context.supervisor.pause_media_publishers if config.mediamtx.control_mode != 'external' else None
             result = _apply_mediamtx_config(context, config, before_write=callback)
-            if force_restart or (result.ok and result.changed):
+            if context.monitoring.desired and (force_restart or (result.ok and result.changed)):
                 context.supervisor.mediamtx_restart(config)
             return result
         finally:
@@ -1073,7 +1106,9 @@ def _apply_mediamtx_config(context: AppContext, config: RuntimeConfig, *, before
     context.storage_problem = storage_problem(config)
     if context.storage_problem:
         config = config.model_copy(update={"recording": config.recording.model_copy(update={"enabled": False})})
-    result = apply_mediamtx_yaml(config, workspace_dir=context.workspace_dir, before_write=before_write)
+    result = apply_mediamtx_yaml(config, workspace_dir=context.workspace_dir, before_write=before_write,
+                                 event_session=context.monitoring.session, data_dir=context.monitoring.root)
+    context.monitoring.tracking_configured = bool(result.recording.ok and config.recording.managed_storage and config.recording.auto_apply)
     if not result.ok:
         logger.warning("mediamtx config apply failed: %s", result.message)
         return result
@@ -1296,6 +1331,7 @@ def _on_startup() -> None:
                 "insecure auth mode: viewer_auth_required=false and admin token is empty;"
                 " viewer APIs are public and admin APIs are disabled until API_ADMIN_TOKEN is set"
             )
+    context.monitoring.startup()
     if config.auth.provider == "local" and not local_auth_is_configured(config.auth):
         return
     enabled_camera_count = sum(1 for cam in config.cameras if cam.enabled)
@@ -1310,13 +1346,6 @@ def _on_startup() -> None:
             len(config.cameras),
             "enabled" if config.multiview.enabled else "disabled",
         )
-    _apply_mediamtx_config(context, config)
-    if config.mediamtx.autostart_on_api_start and config.mediamtx.control_mode != "external":
-        start_result = context.supervisor.mediamtx_start(config)
-        if not start_result.get("ok"):
-            detail = start_result.get("stderr") or start_result.get("stdout") or "unknown error"
-            logger.warning("mediamtx autostart failed: %s", detail)
-    context.supervisor.reconcile(config)
     context.start_recording_cache_cleanup()
 
 
@@ -1477,26 +1506,52 @@ def get_status_mediamtx(request: Request) -> dict[str, Any]:
 
 @app.post("/api/v1/control/start", dependencies=[Depends(require_admin)])
 def post_control_start(request: Request) -> dict[str, Any]:
-    context = get_context(request)
-    config = context.store.get_effective()
-    result = context.supervisor.start_all(config)
-    return {"ok": True, "result": result}
+    return _monitoring_control(request, 'start')
 
 
 @app.post("/api/v1/control/stop", dependencies=[Depends(require_admin)])
 def post_control_stop(request: Request) -> dict[str, Any]:
-    context = get_context(request)
-    config = context.store.get_effective()
-    result = context.supervisor.stop_all(config)
-    return {"ok": True, "result": result}
+    return _monitoring_control(request, 'stop')
 
 
 @app.post("/api/v1/control/restart", dependencies=[Depends(require_admin)])
 def post_control_restart(request: Request) -> dict[str, Any]:
-    context = get_context(request)
-    config = context.store.get_effective()
-    result = context.supervisor.restart_all(config)
-    return {"ok": True, "result": result}
+    return _monitoring_control(request, 'restart')
+
+
+def _monitoring_control(request: Request, action: str) -> dict[str, Any]:
+    from flinteye_app.monitoring import MonitoringConflict
+    try:
+        result = get_context(request).monitoring.perform(action)
+    except MonitoringConflict as error:
+        raise HTTPException(409, str(error)) from error
+    if not result['ok']:
+        raise HTTPException(409, result['message'])
+    return {'ok': True, 'result': result}
+
+
+@app.get('/api/v1/status/monitoring', dependencies=[Depends(require_viewer)])
+def get_monitoring_status(request: Request) -> dict[str, Any]:
+    return get_context(request).monitoring.status()
+
+
+@app.get('/api/v1/monitoring/preferences', dependencies=[Depends(require_admin)])
+def get_monitoring_preferences(request: Request) -> dict[str, Any]:
+    return get_context(request).monitoring.preferences()
+
+
+@app.patch('/api/v1/monitoring/preferences', dependencies=[Depends(require_admin)])
+def set_monitoring_preferences(request: Request, payload: dict) -> dict[str, Any]:
+    if set(payload) != {'resume_on_startup'} or type(payload['resume_on_startup']) is not bool:
+        raise HTTPException(422, 'Provide resume_on_startup as a boolean')
+    get_context(request).monitoring.set_resume_on_startup(payload['resume_on_startup'])
+    return get_context(request).monitoring.preferences()
+
+
+@app.get('/api/v1/build', dependencies=[Depends(require_viewer)])
+def get_build_info() -> dict[str, Any]:
+    from flinteye_app.build_info import build_info
+    return build_info()
 
 
 @app.get("/api/v1/config/effective", dependencies=[Depends(require_admin)])
@@ -1821,7 +1876,7 @@ def post_ip_camera_probe(request: Request, payload: dict[str, Any]) -> dict[str,
 def get_viewer_cameras(request: Request) -> dict[str, Any]:
     context = get_context(request)
     config = context.store.get_effective()
-    processes = _sanitized_process_status(context.supervisor.process_status())
+    processes = _observed_process_status(context)
     items = [_viewer_camera_item(config, processes, camera) for camera in config.cameras]
     return {"items": items}
 
@@ -1830,7 +1885,7 @@ def get_viewer_cameras(request: Request) -> dict[str, Any]:
 def get_viewer_info(request: Request) -> dict[str, Any]:
     context = get_context(request)
     config = context.store.get_effective()
-    processes = _sanitized_process_status(context.supervisor.process_status())
+    processes = _observed_process_status(context)
     api_base_url = str(request.base_url).rstrip("/")
     cameras = []
     for camera in config.cameras:
@@ -2362,7 +2417,7 @@ def post_multiview_disable(request: Request) -> dict[str, Any]:
 def get_multiview_views(request: Request) -> dict[str, Any]:
     context = get_context(request)
     config = context.store.get_effective()
-    processes = _sanitized_process_status(context.supervisor.process_status())
+    processes = _observed_process_status(context)
     return {"items": _multiview_views(config, processes)}
 
 

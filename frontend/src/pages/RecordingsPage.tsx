@@ -462,7 +462,7 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
               </select>
             </label>
             <label>
-              <span>Recorded from</span>
+              <span>Updated from</span>
               <input
                 type="datetime-local"
                 step="60"
@@ -477,7 +477,7 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
               />
             </label>
             <label>
-              <span>Recorded to</span>
+              <span>Updated to</span>
               <input
                 type="datetime-local"
                 step="60"
@@ -492,7 +492,7 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
               />
             </label>
           </div>
-          {rangeInvalid && <div id="recording-range-error" className="panel-error" role="alert">Recorded from must be before recorded to.</div>}
+          {rangeInvalid && <div id="recording-range-error" className="panel-error" role="alert">Updated from must be before updated to.</div>}
         </div>
 
         <div className="recording-toolbar-group recording-sort-group" aria-label="Sort recordings">
@@ -511,7 +511,7 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
                 }}
               >
                 <option value="stream">Stream</option>
-                <option value="recorded">Recorded date</option>
+                <option value="recorded">Updated date</option>
                 <option value="size">Size</option>
               </select>
             </label>
@@ -599,7 +599,7 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
                         <div className="recording-card-meta">
                           <span>
                             <CalendarDaysIcon aria-hidden="true" />
-                            <span className="recording-meta-label">Recorded</span>
+                            <span className="recording-meta-label">Updated</span>
                             {formatDateTime(item.modified_at)}
                           </span>
                           <span>

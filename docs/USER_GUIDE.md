@@ -48,10 +48,10 @@ Keep the local HTTP and MediaMTX listeners on loopback. Do not expose them direc
 ## Stop, update, or uninstall
 
 Closing a browser tab keeps recording running.
-Choose **Stop monitoring and quit** in the Windows/macOS tray menu or Linux control window to stop.
+Choose **Stop monitoring** to pause cameras and recording while keeping settings available. Choose **Quit FlintEye** in the Windows/macOS tray menu or Linux control window to exit completely. The stopped state is remembered by default. See [monitoring indicators and startup preferences](MONITORING.md).
 Desktop startup runs after login; use systemd or Docker for unattended server operation.
 Manual sleep, logout, or shutdown interrupts monitoring.
 
 Check for updates in **Settings → General → Software updates**. Updates are installed manually. The **Getting started** button in the top bar reopens the introductory tour.
-Stop monitoring, back up configuration and recording inventory, install the replacement package, and restart.
+Quit FlintEye, back up configuration and recording inventory, install the replacement package, and restart.
 Uninstalling normally keeps settings and recordings. Data deletion requires a separate explicit choice.

@@ -1,13 +1,18 @@
-"""Desktop lifetime and sleep inhibition. Recording continues after closing the browser."""
+"""Native monitoring controls. Closing a browser never ends monitoring."""
 from __future__ import annotations
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager, nullcontext, ExitStack
+import logging
 import os
 from pathlib import Path
+import queue
 import shutil
 import subprocess
 import sys
 import threading
 import webbrowser
+
+logger = logging.getLogger(__name__)
+COLORS = {'green': '#1c9b55', 'red': '#d12f3e', 'amber': '#b77500', 'gray': '#64748b'}
 
 
 @contextmanager
@@ -22,72 +27,296 @@ def inhibit_sleep():
         process = subprocess.Popen(['systemd-inhibit', '--what=sleep:idle', '--mode=block',
                                     '--why=FlintEye camera monitoring', 'cat'], stdin=subprocess.PIPE,
                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    try: yield
+    try:
+        yield
     finally:
         if sys.platform == 'win32':
             import ctypes
             ctypes.windll.kernel32.SetThreadExecutionState(0x80000000)
         if process:
             process.terminate()
-            try: process.wait(timeout=3)
-            except subprocess.TimeoutExpired: process.kill(); process.wait()
+            try:
+                process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
 
 
-def run_desktop(url, server, root: Path):
-    if sys.platform.startswith('linux'):
-        # A control window also works on desktops without an AppIndicator extension.
-        import tkinter as tk
-        from tkinter import messagebox
-        window = tk.Tk()
-        window.title('FlintEye — monitoring')
-        tk.Label(window, text='FlintEye is monitoring.\nClosing the browser does not stop recording.', padx=24, pady=18).pack()
-        tk.Button(window, text='Open FlintEye', command=lambda: webbrowser.open(url)).pack(pady=8)
-        def stop_window():
-            if messagebox.askyesno('Stop monitoring?', 'Stop recording and quit FlintEye?'):
-                server.should_exit = True
-                window.destroy()
-        tk.Button(window, text='Stop monitoring and quit', command=stop_window).pack(pady=12)
-        window.protocol('WM_DELETE_WINDOW', stop_window)
-        def check_shutdown():
-            if server.should_exit:
-                window.destroy()
-            else:
-                window.after(200, check_shutdown)
-        window.after(200, check_shutdown)
-        with inhibit_sleep(): window.mainloop()
-        return
-    import pystray
+def tray_image(status):
+    """The eye mark and a high-contrast shape convey status without color alone."""
     from PIL import Image, ImageDraw
-    icon_image = Image.new('RGB', (64, 64), '#173647')
-    ImageDraw.Draw(icon_image).ellipse((12, 18, 52, 46), fill='#57d6aa')
-    def stop(icon, item):
-        # Explicit action; closing the browser never stops recording.
-        server.should_exit = True
-        icon.stop()
-    def prepare_removal(icon, item):
-        from flinteye_app.cli import disable_autostart
-        disable_autostart()
-        stop(icon, item)
-    icon = pystray.Icon('FlintEye', icon_image, 'FlintEye — monitoring', menu=pystray.Menu(
-        pystray.MenuItem('Open FlintEye', lambda: webbrowser.open(url), default=True),
-        pystray.MenuItem('Open logs', lambda: webbrowser.open((root / 'logs').as_uri())),
-        pystray.MenuItem('Disable start at login and quit', prepare_removal),
-        pystray.MenuItem('Stop monitoring and quit', stop)))
-    watcher_done = threading.Event()
-    def ready(icon):
-        icon.visible = True
-        def check_shutdown():
-            while not watcher_done.wait(.2):
-                if server.should_exit:
-                    icon.stop()
+    image = Image.new('RGBA', (96, 96))
+    draw = ImageDraw.Draw(image)
+    draw.ellipse((4, 18, 86, 76), fill='#8fbf72', outline='white', width=3)
+    draw.ellipse((22, 22, 70, 70), fill='#123047', outline='white', width=3)
+    draw.ellipse((32, 32, 60, 60), fill='#33758e')
+    draw.ellipse((45, 34, 54, 43), fill='white')
+    draw.ellipse((50, 50, 94, 94), fill=COLORS.get(status['color'], COLORS['amber']), outline='white', width=3)
+    state = status['state']
+    if state == 'running':
+        draw.polygon([(67, 61), (67, 83), (82, 72)], fill='white')
+    elif state == 'stopped':
+        draw.rectangle((64, 64, 80, 80), fill='white')
+    elif status['color'] == 'red':
+        draw.line((64, 64, 80, 80), fill='white', width=5)
+        draw.line((80, 64, 64, 80), fill='white', width=5)
+    elif status['color'] == 'gray':
+        draw.line((62, 72, 82, 72), fill='white', width=5)
+    else:
+        draw.line((72, 61, 72, 75), fill='white', width=4)
+        draw.ellipse((70, 80, 74, 84), fill='white')
+    return image
+
+
+def status_text(status):
+    counts = status['counts']
+    return f"{status['label']} — {counts['receiving']}/{counts['targets']} receiving, {counts['recording']} recording"
+
+
+class DesktopActions:
+    def __init__(self, controller, server):
+        self.controller, self.server = controller, server
+        self.lock = threading.Lock()
+        self.message = ''
+
+    @property
+    def busy(self):
+        return self.lock.locked() or self.controller.status()['busy']
+
+    def submit(self, action, *, force=False, startup=None, remove_startup=False):
+        if not self.lock.acquire(blocking=False):
+            return
+        def work():
+            try:
+                from flinteye_app.cli import set_autostart
+                self.message = ''
+                if startup is not None:
+                    set_autostart(startup)
                     return
-        threading.Thread(target=check_shutdown, name='flinteye-tray-stop', daemon=True).start()
+                if remove_startup:
+                    set_autostart(False)
+                result = self.controller.perform(action, force=force)
+                if action == 'quit' and (result['ok'] or force):
+                    self.server.should_exit = True
+                elif not result['ok']:
+                    self.message = result['message']
+            except Exception as exc:
+                self.message = str(exc)
+                logger.exception('Desktop action failed')
+            finally:
+                self.lock.release()
+        threading.Thread(target=work, name='desktop-action', daemon=True).start()
+
+
+def _sleep_watcher(controller, done):
+    # Windows execution state is thread-local: acquire AND release here.
+    active = None
     try:
-        termination = nullcontext()
+        while not done.wait(.3):
+            status = controller.status()
+            needed = ((status['desired_running'] and status['counts']['targets'] > 0)
+                      or status['phase'] in {'stopping', 'finalizing'})
+            if needed and active is None:
+                active = ExitStack()
+                try:
+                    active.enter_context(inhibit_sleep())
+                except OSError:
+                    logger.exception('Could not inhibit sleep')
+                    active.close()
+                    active = None
+            elif not needed and active is not None:
+                active.close()
+                active = None
+    finally:
+        if active is not None:
+            active.close()
+
+
+def _confirm_force_quit():
+    text = 'Some recordings may be incomplete. Force quit FlintEye and stop all its processes?'
+    if sys.platform == 'darwin':
+        import AppKit
+        alert = AppKit.NSAlert.alloc().init()
+        alert.setMessageText_('Force quit FlintEye?')
+        alert.setInformativeText_(text)
+        alert.addButtonWithTitle_('Cancel')
+        alert.addButtonWithTitle_('Force quit')
+        return alert.runModal() == AppKit.NSAlertSecondButtonReturn
+    if sys.platform == 'win32':
+        import ctypes
+        return ctypes.windll.user32.MessageBoxW(None, text, 'Force quit FlintEye?', 0x134) == 6
+    from tkinter import messagebox
+    return messagebox.askyesno('Force quit FlintEye?', text, default='no')
+
+
+def _run_tray(url, server, root, controller, actions):
+    import pystray
+    from flinteye_app.cli import autostart_status
+    snapshot = controller.status()
+    startup = autostart_status()
+    last = None
+    done = threading.Event()
+    def open_web():
+        webbrowser.open(url)
+    def force_quit():
+        if _confirm_force_quit():
+            actions.submit('quit', force=True)
+    icon = pystray.Icon('FlintEye', tray_image(snapshot), 'FlintEye', menu=pystray.Menu(
+        pystray.MenuItem(lambda item: status_text(snapshot), None, enabled=False),
+        pystray.MenuItem(lambda item: (actions.message or snapshot['message'])[:140], None, enabled=False),
+        pystray.Menu.SEPARATOR,
+        pystray.MenuItem('Open FlintEye', open_web, default=True),
+        pystray.MenuItem('Start monitoring', lambda: actions.submit('start'),
+                         enabled=lambda item: not actions.busy and not snapshot['desired_running'] and snapshot['phase'] != 'finalizing'),
+        pystray.MenuItem('Stop monitoring', lambda: actions.submit('stop'),
+                         enabled=lambda item: not actions.busy and (snapshot['desired_running'] or snapshot['phase'] == 'finalizing')),
+        pystray.MenuItem('Restart monitoring', lambda: actions.submit('restart'),
+                         enabled=lambda item: not actions.busy and snapshot['desired_running'] and snapshot['phase'] != 'finalizing'),
+        pystray.MenuItem('Open logs', lambda: webbrowser.open((root / 'logs').as_uri())),
+        pystray.MenuItem('Start at login', lambda: actions.submit(None, startup=not startup['enabled']),
+                         checked=lambda item: startup['enabled'], enabled=lambda item: not actions.busy and startup['available']),
+        pystray.MenuItem('Disable start at login and quit', lambda: actions.submit('quit', remove_startup=True),
+                         enabled=lambda item: not actions.busy and startup['available']),
+        pystray.Menu.SEPARATOR,
+        pystray.MenuItem('Quit FlintEye', lambda: actions.submit('quit'), enabled=lambda item: not actions.busy),
+        pystray.MenuItem('Force quit (recordings may be incomplete)', force_quit,
+                         visible=lambda item: snapshot['phase'] == 'finalizing' and not actions.busy)))
+
+    def update():
+        nonlocal snapshot, startup, last
+        if done.is_set():
+            return
+        if server.should_exit:
+            icon.stop()
+            return
+        snapshot = controller.status()
+        startup = autostart_status()
+        key = (snapshot['state'], snapshot['color'])
+        if key != last:
+            icon.icon = tray_image(snapshot)
+            last = key
+        icon.title = 'FlintEye — ' + status_text(snapshot)
+        icon.update_menu()
+
+    def schedule(callback):
         if sys.platform == 'darwin':
-            from flinteye_app.macos_lifecycle import graceful_application_quit
-            termination = graceful_application_quit(icon, server)
-        with inhibit_sleep(), termination:
+            from PyObjCTools.AppHelper import callAfter
+            callAfter(callback)
+        else:
+            callback()  # Win32 notification-area updates use thread-safe shell calls.
+
+    def ready(icon):
+        schedule(lambda: setattr(icon, 'visible', True))
+        def watch():
+            while not done.wait(.5):
+                schedule(update)
+        threading.Thread(target=watch, name='tray-status', daemon=True).start()
+    termination = nullcontext()
+    if sys.platform == 'darwin':
+        from flinteye_app.macos_lifecycle import graceful_application_quit
+        termination = graceful_application_quit(icon, server, on_quit=lambda: actions.submit('quit'))
+    try:
+        with termination:
             icon.run(setup=ready)
     finally:
-        watcher_done.set()
+        done.set()
+
+
+def _run_control_window(url, server, root, controller, actions):
+    import tkinter as tk
+    from tkinter import ttk, messagebox
+    from flinteye_app.cli import autostart_status
+    window = tk.Tk()
+    window.title('FlintEye')
+    window.geometry('480x420')
+    window.minsize(420, 380)
+    frame = ttk.Frame(window, padding=18)
+    frame.pack(fill='both', expand=True)
+    state = ttk.Label(frame, font=('', 13, 'bold'), wraplength=430)
+    state.pack(anchor='w', pady=(0, 10))
+    message = ttk.Label(frame, wraplength=430)
+    message.pack(anchor='w', pady=(0, 10))
+    ttk.Button(frame, text='Open FlintEye', command=lambda: webbrowser.open(url)).pack(fill='x', pady=3)
+    buttons = {}
+    for action in ('start', 'stop', 'restart'):
+        buttons[action] = ttk.Button(frame, text=action.capitalize() + ' monitoring', command=lambda a=action: actions.submit(a))
+        buttons[action].pack(fill='x', pady=3)
+    ttk.Button(frame, text='Open logs', command=lambda: webbrowser.open((root / 'logs').as_uri())).pack(fill='x', pady=3)
+    startup_value = tk.BooleanVar()
+    startup_button = ttk.Checkbutton(frame, text='Start at login', variable=startup_value,
+                                    command=lambda: actions.submit(None, startup=startup_value.get()))
+    startup_button.pack(anchor='w', pady=5)
+    ttk.Label(frame, text='Closing the browser keeps monitoring running.', wraplength=430).pack(anchor='w', pady=6)
+    quit_button = ttk.Button(frame, text='Quit FlintEye', command=lambda: actions.submit('quit'))
+    quit_button.pack(fill='x', pady=3)
+    force_button = ttk.Button(frame, text='Force quit (recordings may be incomplete)',
+                              command=lambda: actions.submit('quit', force=True) if _confirm_force_quit() else None)
+    def close_window():
+        if messagebox.askyesno('Quit FlintEye?', 'Stop monitoring, finish recordings, and quit FlintEye?', default='no'):
+            actions.submit('quit')
+    window.protocol('WM_DELETE_WINDOW', close_window)
+    icon = None
+    commands = queue.SimpleQueue()
+    if sys.platform.startswith('linux') and os.environ.get('DISPLAY'):
+        # Xorg supports a default click action but no menus. Only use it if a
+        # system tray manager exists; the small controller remains available.
+        try:
+            from Xlib.display import Display
+            display = Display()
+            owner = display.get_selection_owner(display.intern_atom('_NET_SYSTEM_TRAY_S' + str(display.get_default_screen())))
+            display.close()
+            if owner:
+                import pystray
+                icon = pystray.Icon('FlintEye', tray_image(controller.status()), 'FlintEye', menu=pystray.Menu(
+                    pystray.MenuItem('Open controls', lambda: commands.put('show'), default=True)))
+                icon.run_detached()
+        except Exception:
+            logger.info('Desktop tray unavailable; using the control window', exc_info=True)
+    def refresh():
+        if server.should_exit:
+            window.destroy()
+            return
+        while not commands.empty():
+            commands.get()
+            window.deiconify()
+            window.lift()
+        status = controller.status()
+        state.configure(text=status_text(status), foreground=COLORS[status['color']])
+        message.configure(text=actions.message or status['message'])
+        enabled = not actions.busy
+        buttons['start'].configure(state='normal' if enabled and not status['desired_running'] and status['phase'] != 'finalizing' else 'disabled')
+        buttons['stop'].configure(state='normal' if enabled and (status['desired_running'] or status['phase'] == 'finalizing') else 'disabled')
+        buttons['restart'].configure(state='normal' if enabled and status['desired_running'] and status['phase'] != 'finalizing' else 'disabled')
+        startup = autostart_status()
+        startup_value.set(startup['enabled'])
+        startup_button.configure(state='normal' if enabled and startup['available'] else 'disabled')
+        quit_button.configure(state='normal' if enabled else 'disabled')
+        if status['phase'] == 'finalizing' and enabled:
+            force_button.pack(fill='x', pady=3)
+        else:
+            force_button.pack_forget()
+        if icon:
+            icon.icon = tray_image(status)
+            icon.title = 'FlintEye — ' + status_text(status)
+        window.after(500, refresh)
+    window.after(0, refresh)
+    try:
+        window.mainloop()
+    finally:
+        if icon:
+            icon.stop()
+
+
+def run_desktop(url, server, root: Path, controller):
+    actions = DesktopActions(controller, server)
+    done = threading.Event()
+    sleeper = threading.Thread(target=_sleep_watcher, args=(controller, done), name='desktop-sleep', daemon=True)
+    sleeper.start()
+    try:
+        if sys.platform.startswith('linux'):
+            _run_control_window(url, server, root, controller, actions)
+        else:
+            _run_tray(url, server, root, controller, actions)
+    finally:
+        done.set()
+        sleeper.join(timeout=5)

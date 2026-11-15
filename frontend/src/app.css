@@ -3296,3 +3296,18 @@ select { min-width: 0; max-width: 100%; }
   .recording-toolbar { grid-template-columns: minmax(0, 1fr); }
   .settings-content-heading, .settings-page-header { min-width: 0; }
 }
+
+/* Monitoring state is shared with the native tray; symbols supplement color. */
+.monitoring-status { margin: 16px 24px 0; padding: 16px; border: 1px solid var(--border, #c9d7e5); border-radius: 12px; background: var(--panel, #fff); }
+.monitoring-summary { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.monitoring-indicator { padding: 4px 8px; border-radius: 6px; }
+.monitoring-indicator.is-green { color: #146c3e; background: #e0f5e8; }
+.monitoring-indicator.is-red { color: #a51f2c; background: #ffe7e9; }
+.monitoring-indicator.is-amber { color: #805100; background: #fff2ce; }
+.monitoring-indicator.is-gray { color: #42546b; background: #e9eef5; }
+.confirm-changes { max-width: min(480px, calc(100vw - 32px)); border: 1px solid #b9c8d8; border-radius: 12px; padding: 24px; color: #172d43; background: white; }
+.confirm-changes::backdrop { background: rgb(8 22 36 / 55%); }
+.confirm-changes .button-row { justify-content: flex-end; flex-wrap: wrap; }
+.startup-settings .checkbox-row { display: flex; gap: 10px; align-items: center; }
+.startup-settings input[type=checkbox] { width: auto; flex: none; }
+@media(max-width:600px) { .monitoring-status { margin: 12px; } }

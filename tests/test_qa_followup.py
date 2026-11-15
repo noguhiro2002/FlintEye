@@ -114,6 +114,7 @@ class BootstrapTests(unittest.TestCase):
         import threading
         supervisor=OrchestratorSupervisor.__new__(OrchestratorSupervisor)
         supervisor._lock=threading.RLock(); supervisor._processes={}
+        supervisor._monitoring_enabled = True
         supervisor.reconcile=Mock()
         with patch.object(supervisor,'_restart_mediamtx',return_value={'ok':True}):
             for mode in ['direct','external']:

@@ -37,6 +37,8 @@ jobs:
         run: npm test
       - run: npm audit --audit-level=high
         working-directory: frontend
-      - run: docker build -t flinteye:check .
+      - run: docker build --build-arg "FLINTEYE_REVISION=$GITHUB_SHA" -t flinteye:check .
       - run: docker run --rm -i --network none --tmpfs /data:rw,uid=10001,gid=10001 --entrypoint python flinteye:check - < packaging/smoke_container.py
       - run: docker run --rm -i --network none --entrypoint python flinteye:check - --mediamtx /opt/flinteye/bin/mediamtx < packaging/smoke_private_input.py
+      - name: Compose recreation preserves data and stopped monitoring
+        run: python packaging/smoke_compose.py --image flinteye:check

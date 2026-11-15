@@ -4,7 +4,7 @@
 
 [Documentation](README.md)
 
-**UNDER DEVELOPMENT.** The public repository currently provides source code. Public installers are being prepared; the first planned release is `v1.1.2-preview.1`. Use [source setup](MANUAL_INSTALL.md), [local M1 DMG build](LOCAL_MACOS_BUILD.md), or [development Docker](DOCKER.md#build-the-development-image) now. Follow [Releases](https://github.com/noguhiro2002/FlintEye/releases) for tested downloads. The instructions below describe packaged installation once a public preview is available. See [acceptance checks](ACCEPTANCE.md) and [known issues](KNOWN_ISSUES.md).
+**UNDER DEVELOPMENT.** The public repository currently provides source code. Public installers are being prepared; the first planned release is `v1.1.3-preview.1`. Use [source setup](MANUAL_INSTALL.md), [local M1 DMG build](LOCAL_MACOS_BUILD.md), or [development Docker](DOCKER.md#build-the-development-image) now. Follow [Releases](https://github.com/noguhiro2002/FlintEye/releases) for tested downloads. The instructions below describe packaged installation once a public preview is available. See [acceptance checks](ACCEPTANCE.md) and [known issues](KNOWN_ISSUES.md).
 
 ## Choose a package
 
@@ -62,7 +62,7 @@ Managed computers may require help from their administrator.
 When a public preview is available, download the installer or command script directly from that exact release. Preview releases are not returned by GitHub’s `releases/latest` URL.
 
 Download `install.sh` or `install.ps1` from that release and run it locally.
-Each generated script pins its own release version. Optional `--version 1.1.2-preview.1` (shell) or `-Version 1.1.2-preview.1` (PowerShell) selects that exact development release; `X.Y.Z` selects a stable release when available. The tag includes the preview suffix, while installer filenames use the numeric application version (`1.1.2`). `--no-start` / `-NoStart` installs without launching the application.
+Each generated script pins its own release version. Optional `--version 1.1.3-preview.1` (shell) or `-Version 1.1.3-preview.1` (PowerShell) selects that exact development release; `X.Y.Z` selects a stable release when available. The tag includes the preview suffix, while installer filenames use the numeric application version (`1.1.3`). `--no-start` / `-NoStart` installs without launching the application.
 
 Packages include the application runtime and media tools. Linux desktop packages also ask the system package manager to install any required desktop libraries.
 
@@ -70,7 +70,7 @@ Packages include the application runtime and media tools. Linux desktop packages
 
 See [Stop and uninstall FlintEye](STOP_AND_UNINSTALL.md) for complete shutdown, Windows uninstall behavior, program/data locations and recovery from older installers that leave processes running.
 
-Stop monitoring before updating. Back up configuration/inventory and keep the previous installer for rollback.
+Choose **Quit FlintEye** before updating. Back up configuration/inventory and keep the previous installer for rollback.
 Install the replacement package and restart. User data is outside the installation directory.
 The macOS command installer retains the previous app as `FlintEye.previous.app`; move that backup aside before a subsequent upgrade.
 

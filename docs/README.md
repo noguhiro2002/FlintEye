@@ -14,6 +14,7 @@
 
 - [Install on Windows, macOS, or Linux](INSTALL.md)
 - [Add cameras, watch live video, and manage recordings](USER_GUIDE.md)
+- [Monitoring indicators, pause/resume and desktop startup](MONITORING.md)
 - [Docker Compose](DOCKER.md)
 - [Server deployment, HTTPS/LAN access, storage, and systemd](DISTRIBUTION.md)
 

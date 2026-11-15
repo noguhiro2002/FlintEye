@@ -234,14 +234,14 @@ def _default_ffmpeg_loglevel(level: str) -> str:
     return "error"
 
 
-def _kill_process_tree_windows(pid: int) -> bool:
+def _kill_process_tree_windows(pid: int, *, timeout: float = 10) -> bool:
     try:
         result = run_background(
             ["taskkill", "/PID", str(pid), "/T", "/F"], **background_process_options(),
             check=False,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            timeout=10,
+            timeout=timeout,
         )
     except (OSError, subprocess.TimeoutExpired):
         return False
@@ -263,6 +263,8 @@ class OrchestratorSupervisor:
         self.python_bin = python_bin or sys.executable or "python3"
         self._lock = threading.RLock()
         self._stop_event = threading.Event()
+        self._monitoring_enabled = True
+        self.media_environment: dict[str, str] = {}
         self._processes: dict[str, ManagedProcess] = {}
         self._last_config: RuntimeConfig | None = None
         self._monitor_thread = threading.Thread(target=self._monitor_loop, daemon=True)
@@ -276,6 +278,17 @@ class OrchestratorSupervisor:
             for proc in sorted(self._processes.values(), key=lambda item: item.key.startswith('mediamtx:')):
                 self._stop_process(proc)
 
+    def set_monitoring_enabled(self, enabled: bool) -> None:
+        """Gate every launch/retry without stopping the recorder prematurely."""
+        with self._lock:
+            self._monitoring_enabled = enabled and not self._stop_event.is_set()
+            if not self._monitoring_enabled:
+                for proc in self._processes.values():
+                    proc.desired = False
+                    proc.restart_pending_at = None
+                    proc.maintenance_next_at = None
+                    proc.healthcheck_next_at = None
+
     @contextmanager
     def media_update(self, *, pause=True):
         """Pause publishers before changing their media server, under its monitor lock."""
@@ -284,11 +297,11 @@ class OrchestratorSupervisor:
                 self.pause_media_publishers()
             yield
 
-    def pause_media_publishers(self):
+    def pause_media_publishers(self, *, deadline: float | None = None):
         with self._lock:
             for proc in self._processes.values():
                 if not proc.key.startswith('mediamtx:'):
-                    self._stop_process(proc)
+                    self._stop_process(proc, deadline=deadline) if deadline is not None else self._stop_process(proc)
             logger.info('publishers stopped for a planned media configuration change')
 
     def _monitor_loop(self) -> None:
@@ -361,6 +374,8 @@ class OrchestratorSupervisor:
         reason: str,
         delay_sec: float,
     ) -> None:
+        if not self._monitoring_enabled or not proc.desired:
+            return
         saved_desired = proc.desired
         self._stop_process(proc)
         proc.desired = saved_desired
@@ -510,7 +525,7 @@ class OrchestratorSupervisor:
                 self._schedule_multiview_restart(source_key=proc.key, exit_code=None, now=proc.last_healthcheck_at)
 
     def _start_process(self, proc: ManagedProcess, *, is_restart: bool = False) -> None:
-        if self._stop_event.is_set():
+        if self._stop_event.is_set() or not self._monitoring_enabled:
             proc.desired = False
             return
         try:
@@ -518,6 +533,8 @@ class OrchestratorSupervisor:
             popen_env = os.environ.copy()
             if proc.env:
                 popen_env.update(proc.env)
+            if proc.key == 'mediamtx:direct':
+                popen_env.update(self.media_environment)
             popen_kwargs: dict[str, Any] = {
                 "cwd": proc.cwd or self.workspace_dir,
                 "env": popen_env,
@@ -593,7 +610,7 @@ class OrchestratorSupervisor:
             except Exception:
                 pass
 
-    def _stop_process(self, proc: ManagedProcess) -> None:
+    def _stop_process(self, proc: ManagedProcess, *, deadline: float | None = None) -> None:
         proc.desired = False
         if proc.process is None:
             return
@@ -604,16 +621,16 @@ class OrchestratorSupervisor:
                     os.killpg(proc.process.pid, signal.SIGTERM)
                 except ProcessLookupError:
                     pass
-                proc.process.wait(timeout=5)
+                proc.process.wait(timeout=5 if deadline is None else max(0, min(5, deadline - time.monotonic())))
             elif proc.process.poll() is None:
-                if not _kill_process_tree_windows(proc.process.pid):
+                if not _kill_process_tree_windows(proc.process.pid, timeout=10 if deadline is None else max(.1, min(10, deadline - time.monotonic()))):
                     proc.process.terminate()
-                proc.process.wait(timeout=5)
+                proc.process.wait(timeout=5 if deadline is None else max(0, min(5, deadline - time.monotonic())))
         except Exception:  # noqa: BLE001
             try:
                 if proc.process and proc.process.poll() is None and os.name != "nt":
                     os.killpg(proc.process.pid, signal.SIGKILL)
-                elif proc.process and not _kill_process_tree_windows(proc.process.pid):
+                elif proc.process and not _kill_process_tree_windows(proc.process.pid, timeout=1 if deadline is not None else 10):
                     proc.process.kill()
             except Exception:  # noqa: BLE001
                 pass
@@ -626,7 +643,7 @@ class OrchestratorSupervisor:
                 except ProcessLookupError:
                     pass
                 try:
-                    proc.process.wait(timeout=5)
+                    proc.process.wait(timeout=5 if deadline is None else max(.1, min(5, deadline - time.monotonic())))
                 except subprocess.TimeoutExpired:
                     logger.error("process group did not stop: %s", proc.key)
             if proc.process is not None:
@@ -651,6 +668,7 @@ class OrchestratorSupervisor:
         cwd: str | None = None,
         force_restart: bool = False,
     ) -> ManagedProcess:
+        desired = desired and self._monitoring_enabled
         proc = self._processes.get(key)
         if proc is None:
             proc = ManagedProcess(key=key, kind=kind)
@@ -1066,6 +1084,8 @@ class OrchestratorSupervisor:
     def reconcile(self, config: RuntimeConfig, *, force_restart: bool = False) -> None:
         with self._lock:
             self._last_config = config
+            if not self._monitoring_enabled:
+                return
             desired_camera_keys: set[str] = set()
             for camera in config.cameras:
                 key = f"camera:{camera.id.lower()}"
@@ -1245,6 +1265,8 @@ class OrchestratorSupervisor:
         return {"mode": mode, "service_name": service_name, "status": "unsupported", "running": False}
 
     def mediamtx_start(self, config: RuntimeConfig) -> dict[str, Any]:
+        if not self._monitoring_enabled:
+            return {'ok': False, 'stderr': 'Monitoring is stopped', 'stdout': ''}
         mode = config.mediamtx.control_mode
         service_name = config.mediamtx.service_name
         if mode == "systemd":
@@ -1306,6 +1328,8 @@ class OrchestratorSupervisor:
         return {"ok": False, "stdout": "", "stderr": f"unsupported control_mode: {mode}"}
 
     def mediamtx_restart(self, config: RuntimeConfig) -> dict[str, Any]:
+        if not self._monitoring_enabled:
+            return {'ok': False, 'stderr': 'Monitoring is stopped', 'stdout': ''}
         if config.mediamtx.control_mode == 'external':
             return self._restart_mediamtx(config)
         with self.media_update():
@@ -1363,6 +1387,8 @@ class OrchestratorSupervisor:
 
     def restart_camera(self, config: RuntimeConfig, camera_id: str) -> bool:
         with self._lock:
+            if not self._monitoring_enabled:
+                return False
             for camera in config.cameras:
                 if camera.id.lower() != camera_id.lower():
                     continue
@@ -1380,6 +1406,8 @@ class OrchestratorSupervisor:
 
     def restart_multiview(self, config: RuntimeConfig) -> bool:
         with self._lock:
+            if not self._monitoring_enabled:
+                return False
             self._last_config = config
             if not config.multiview.enabled:
                 proc = self._processes.get("multiview")

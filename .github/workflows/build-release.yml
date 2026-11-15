@@ -168,7 +168,7 @@ jobs:
           persist-credentials: false
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Build on the minimum glibc baseline
-        run: docker buildx build -f packaging/LinuxBuilder.Dockerfile --target artifacts --output type=local,dest=dist .
+        run: docker buildx build --build-arg "FLINTEYE_REVISION=$GITHUB_SHA" -f packaging/LinuxBuilder.Dockerfile --target artifacts --output type=local,dest=dist .
       - name: Install and start without Python, Node or Git
         env:
           TARGET_ARCH: ${{ matrix.arch }}

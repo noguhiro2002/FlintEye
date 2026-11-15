@@ -92,7 +92,29 @@ def install_routes(app, context, *, setup_token: str, desktop: bool):
     @app.get('/api/v1/desktop', dependencies=[Depends(require_admin)])
     def capabilities(request: Request):
         local = request.client and request.client.host in {'127.0.0.1', '::1'}
-        return {'folder_picker': bool(desktop and local)}
+        return {'folder_picker': bool(desktop and local), 'startup_settings': bool(desktop and local)}
+
+    def local_desktop(request: Request):
+        if not desktop or not request.client or request.client.host not in {'127.0.0.1', '::1'}:
+            raise HTTPException(403, 'Start at login can only be changed on the installation computer')
+
+    @app.get('/api/v1/desktop/startup', dependencies=[Depends(require_admin)])
+    def startup_status(request: Request):
+        local_desktop(request)
+        from flinteye_app.cli import autostart_status
+        return autostart_status()
+
+    @app.put('/api/v1/desktop/startup', dependencies=[Depends(require_admin)])
+    def change_startup(request: Request, payload: dict):
+        local_desktop(request)
+        if set(payload) != {'enabled'} or type(payload['enabled']) is not bool:
+            raise HTTPException(422, 'Provide enabled as a boolean')
+        from flinteye_app.cli import set_autostart, autostart_status
+        try:
+            set_autostart(payload['enabled'])
+        except (ValueError, OSError) as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return autostart_status()
 
     @app.post('/api/v1/storage/pick-folder', dependencies=[Depends(require_admin)])
     def pick_folder(request: Request):

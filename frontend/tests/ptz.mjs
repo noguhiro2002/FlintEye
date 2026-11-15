@@ -35,7 +35,10 @@ async function start(role, width, height = 900, opts = {}) {
         }
         requests.push([q.method(), u.pathname]);
         let v = { items: [] }, s = 200;
-        if (u.pathname === '/api/v1/auth/me')
+        if (u.pathname === '/api/v1/status/monitoring') v = { state: 'stopped', color: 'gray', label: 'Monitoring stopped', message: 'Monitoring is stopped.', desired_running: false, busy: false, phase: 'stopped', resume_on_startup: false, counts: { configured: 0, targets: 0, receiving: 0, recording: 0 }, cameras: [] };
+        else if (u.pathname === '/api/v1/monitoring/preferences') v = { resume_on_startup: false };
+        else if (u.pathname === '/api/v1/build') v = { version: '1.1.1', release: '1.1.1', channel: 'stable', commit: null, dirty: false };
+        else if (u.pathname === '/api/v1/auth/me')
             v = { authenticated: role !== 'public', role: role === 'public' ? null : role, username: role, viewer_auth_required: role !== 'public', setup_required: false, provider: 'local', local: { viewer_username: 'viewer', admin_username: 'admin' } };
         else if (u.pathname === '/api/v1/config/effective' || u.pathname === '/api/v1/config/runtime')
             v = config;

@@ -7,6 +7,7 @@ interface InformationPageProps {
 }
 
 export function InformationPage({ api }: InformationPageProps): JSX.Element {
+  const [build, setBuild] = useState<Awaited<ReturnType<ApiClient['getBuildInfo']>> | null>(null);
   const [info, setInfo] = useState<ViewerInfoResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const requestId = useRef(0);
@@ -28,6 +29,7 @@ export function InformationPage({ api }: InformationPageProps): JSX.Element {
           views: multiviewViews.items,
         },
       });
+      setBuild(await api.getBuildInfo().catch(() => null));
       setError("");
     } catch (e) {
       if (request === requestId.current) setError(e instanceof Error ? e.message : "Failed to load information");
@@ -57,6 +59,8 @@ export function InformationPage({ api }: InformationPageProps): JSX.Element {
         <>
           <div className="section">
             <h3>System</h3>
+            <p>FlintEye {build?.version ?? 'version unavailable'} · {build?.channel ?? 'channel unavailable'}</p>
+            <p className="panel-note">Build: <code>{build?.commit ?? 'source commit not recorded'}</code>{build?.dirty ? ' (local changes)' : ''}</p>
             <div className="form-grid">
               <label>
                 Swagger UI

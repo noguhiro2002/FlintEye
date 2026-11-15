@@ -47,7 +47,7 @@ Keep this checkout clean. The helper builds a fresh snapshot of the current comm
 
 ## 3. Build and automatically verify the DMG
 
-Quit any running FlintEye from its menu-bar icon using **Stop monitoring and quit**. Also stop any separate MediaMTX instance using ports 8554, 8889, 9997 or UDP 8189. Closing the browser alone does not stop monitoring.
+Quit any running FlintEye from its menu-bar icon using **Quit FlintEye**. Also stop any separate MediaMTX instance using ports 8554, 8889, 9997 or UDP 8189. Closing the browser alone does not stop monitoring.
 
 Check the tools first:
 
@@ -105,6 +105,6 @@ An already downloaded installer or already built Docker image keeps its old inte
 
 The current Windows source also suppresses console windows for camera discovery, thumbnail updates and other background media processes while preserving their error output. That fix requires a newly built Windows installer; it does not change existing `.exe` downloads.
 
-The current source also includes [complete shutdown and uninstall fixes](STOP_AND_UNINSTALL.md). The installed-bundle test requests shutdown and checks that the API and MediaMTX listening ports close. On your Mac, additionally choose **Stop monitoring and quit** while a camera is streaming, verify that its indicator turns off and the icon disappears, then reopen FlintEye and check that the saved configuration still works.
+The current source also includes [complete shutdown and uninstall fixes](STOP_AND_UNINSTALL.md). The installed-bundle test requests shutdown and checks that the API and MediaMTX listening ports close. On your Mac, additionally choose **Quit FlintEye** while a camera is streaming, verify that its indicator turns off and the icon disappears, then reopen FlintEye and check that the saved configuration still works.
 
 The local M1 build also runs the native AppKit quit-delegate test. After installation, test both the menu-bar stop action and the normal Quit action from the Dock while a camera is streaming. These physical-device checks remain necessary.

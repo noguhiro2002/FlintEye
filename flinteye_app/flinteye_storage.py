@@ -17,8 +17,8 @@ def suggested_quota(path: Path) -> int:
 
 
 @contextmanager
-def database(root: Path):
-    db = sqlite3.connect(root / 'recordings.sqlite3', timeout=30)
+def database(root: Path, *, timeout=30):
+    db = sqlite3.connect(root / 'recordings.sqlite3', timeout=timeout)
     db.execute('CREATE TABLE IF NOT EXISTS segments (root TEXT, relative TEXT, size INTEGER, mtime INTEGER, PRIMARY KEY(root, relative))')
     try:
         with db:
@@ -43,20 +43,21 @@ def locations(config, workspace: str, visible_only: bool = False):
     return result
 
 
-def register_segment(data: Path, segment: Path) -> None:
+def register_segment(data: Path, segment: Path) -> bool:
     from flinteye_app.orchestrator_models import RuntimeConfig
     config = RuntimeConfig.model_validate(json.loads((data / 'runtime.json').read_text()))
-    if segment.is_symlink() or not segment.is_file(): return
+    if segment.is_symlink() or not segment.is_file(): return False
     path = segment.resolve()
     for root, _, _ in locations(config, str(data)):
         try: relative = path.relative_to(root)
         except ValueError: continue
-        if len(relative.parts) != 3 or path.suffix not in {'.mp4', '.ts'}: return
+        if len(relative.parts) != 3 or path.suffix not in {'.mp4', '.ts'}: return False
         stat = path.stat()
         with database(data) as db:
             db.execute('INSERT OR REPLACE INTO segments VALUES (?, ?, ?, ?)',
                        (str(root), relative.as_posix(), stat.st_size, stat.st_mtime_ns))
-        return
+        return True
+    return False
 
 
 def cleanup(data: Path, config, workspace: str, now: float | None = None) -> int:

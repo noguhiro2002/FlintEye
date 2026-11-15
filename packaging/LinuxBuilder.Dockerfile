@@ -33,6 +33,7 @@ RUN python -m pip install -c packaging/constraints.txt -r requirements.txt -r pa
 COPY packaging/build_vendor.sh packaging/LinuxBuilder.Dockerfile ./packaging/
 RUN bash packaging/build_vendor.sh
 COPY . .
+ARG FLINTEYE_REVISION
 RUN python packaging/build_bundle.py --vendor vendor \
     && VERSION=$(python -c 'import sys; sys.path.insert(0,"packaging"); from release_lib import version; print(version())') \
     && ARCH=$(uname -m) && if [ "$ARCH" = x86_64 ]; then ARCH=amd64; else ARCH=arm64; fi \

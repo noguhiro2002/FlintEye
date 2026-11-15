@@ -100,9 +100,13 @@ def check_application(executable: Path, profile: Path, cwd: Path, *, first_run: 
                     assert result.status_code == 200, result.text
                     assert not token_file.exists(), 'Setup token was not consumed'
                 assert client.get('/api/v1/config/runtime').status_code == 401
+                assert client.get('/api/v1/status/monitoring').status_code == 401
                 assert client.get('/media/bundle-smoke/').status_code == 401
                 result = client.post('/api/v1/auth/login', json={'username':'admin','password':PASSWORD})
                 assert result.status_code == 200, result.text
+                assert client.get('/api/v1/desktop/startup').status_code == 403, 'Headless mode exposed login-start settings'
+                identity = client.get('/api/v1/build').json()
+                assert identity['version'] == version() and identity['commit'], identity
                 runtime = client.get('/api/v1/config/effective')
                 assert runtime.status_code == 200
                 active_listener = client.get('/api/v1/status/listener').json()
@@ -140,6 +144,24 @@ def check_application(executable: Path, profile: Path, cwd: Path, *, first_run: 
                 assert recordings, 'No synthetic recordings were created'
                 assert client.get('/api/v1/recordings/files/'+recordings[0]['file_id']).status_code == 200
                 print('PASS: installed app setup/auth, bundled MediaMTX, video proxy, synthetic recording and completion hook')
+                # Stop only monitoring; API/auth must remain usable and saved
+                # configuration must not restart the camera/media subprocesses.
+                result = client.post('/api/v1/control/stop', timeout=45)
+                assert result.status_code == 200, result.text
+                assert client.get('/api/v1/health').status_code == 200
+                assert client.get('/api/v1/status/monitoring').json()['desired_running'] is False
+                assert client.get('/api/v1/status/mediamtx').json()['running'] is False
+                assert client.post('/api/v1/control/restart').status_code == 409
+                assert client.patch('/api/v1/config/runtime', json={'ui': {'onboarding_done': True}}).status_code == 200
+                assert client.get('/api/v1/status/mediamtx').json()['running'] is False
+                result = client.post('/api/v1/control/start', timeout=45)
+                assert result.status_code == 200, result.text
+                receipt = json.loads((profile/'last-monitoring-stop.json').read_text())
+                assert receipt['ok'] and not receipt['forced'], receipt
+                for file in (profile/'recordings').rglob('*.mp4'):
+                    decoded = subprocess.run([str(ffmpeg), '-v', 'error', '-i', str(file), '-f', 'null', '-'], capture_output=True, timeout=30)
+                    assert decoded.returncode == 0 and not decoded.stderr, 'Recording failed full decode'
+                print('PASS: monitoring Stop preserves API, settings cannot restart it, explicit Start works, recordings fully decode')
                 # Same request used by the Windows uninstaller; exercises graceful
                 # lifetime cleanup instead of taskkill hiding leftover children.
                 control = json.loads((profile/'instance-control.json').read_text())

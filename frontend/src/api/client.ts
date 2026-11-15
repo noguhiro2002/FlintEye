@@ -1,4 +1,5 @@
 import type {
+  MonitoringStatusResponse,
   AuthMeResponse,
   CameraItem,
   DashboardStatus,
@@ -67,7 +68,8 @@ export class ApiClient {
     if (init.signal?.aborted) controller.abort();
     // A native folder picker waits for a person; media preparation can take longer.
     const timeoutMs = path === "/api/v1/storage/pick-folder" ? 0
-      : path.includes("/probe") || path.includes("/prepare") ? 120000 : 30000;
+      : path.includes("/probe") || path.includes("/prepare") ? 120000
+      : path.startsWith('/api/v1/control/') ? 45000 : 30000;
     const timeout = timeoutMs ? window.setTimeout(abort, timeoutMs) : undefined;
     try {
       const response = await fetch(`${this.baseUrl}${path}`, {
@@ -115,7 +117,20 @@ export class ApiClient {
   setup(token: string, password: string): Promise<{ ok: boolean }> {
     return this.request('/api/v1/setup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, password }) });
   }
-  desktopCapabilities(): Promise<{ folder_picker: boolean }> { return this.request('/api/v1/desktop'); }
+  desktopCapabilities(): Promise<{ folder_picker: boolean; startup_settings?: boolean }> { return this.request('/api/v1/desktop'); }
+  getMonitoringStatus(): Promise<MonitoringStatusResponse> { return this.request('/api/v1/status/monitoring'); }
+  monitoringControl(action: 'start' | 'stop' | 'restart'): Promise<{ ok: boolean }> {
+    return this.request('/api/v1/control/' + action, { method: 'POST' });
+  }
+  getMonitoringPreferences(): Promise<{ resume_on_startup: boolean }> { return this.request('/api/v1/monitoring/preferences'); }
+  setMonitoringPreferences(value: boolean): Promise<{ resume_on_startup: boolean }> {
+    return this.request('/api/v1/monitoring/preferences', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resume_on_startup: value }) });
+  }
+  getDesktopStartup(): Promise<{ enabled: boolean; available: boolean; message: string }> { return this.request('/api/v1/desktop/startup'); }
+  setDesktopStartup(enabled: boolean): Promise<{ enabled: boolean; available: boolean; message: string }> {
+    return this.request('/api/v1/desktop/startup', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled }) });
+  }
+  getBuildInfo(): Promise<{ version: string; release: string; channel: string; commit: string | null; dirty: boolean | null }> { return this.request('/api/v1/build'); }
   getUpdates(): Promise<{ available: boolean; current: string; current_release?: string; channel?: string; version?: string; url?: string; message?: string }> {
     return this.request('/api/v1/updates');
   }

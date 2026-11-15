@@ -46,12 +46,21 @@ subprocess.run([sys.executable, str(ROOT / 'packaging/smoke_private_input.py'),
 subprocess.run(['npm.cmd' if sys.platform == 'win32' else 'npm', 'ci'], cwd=ROOT / 'frontend', check=True)
 subprocess.run(['npm.cmd' if sys.platform == 'win32' else 'npm', 'run', 'build'], cwd=ROOT / 'frontend', check=True)
 collect(vendor / 'licenses/runtime')
+identity = ROOT / 'build/build-info.json'
+identity.parent.mkdir(parents=True, exist_ok=True)
+commit = os.environ.get('FLINTEYE_REVISION') or os.environ.get('GITHUB_SHA')
+dirty = False
+if (ROOT / '.git').exists():
+    commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+    dirty = bool(subprocess.check_output(['git', 'status', '--porcelain', '--untracked-files=no'], cwd=ROOT, text=True).strip())
+identity.write_text(json.dumps({'commit': commit, 'dirty': dirty}) + '\n')
 sep = os.pathsep
 command = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', '--onedir', '--name', 'FlintEye',
            '--exclude-module', 'readline',
            '--add-data', f'{ROOT / "frontend/dist"}{sep}frontend/dist',
            '--add-data', f'{vendor / "THIRD_PARTY_NOTICES.txt"}{sep}.',
            '--add-data', f'{ROOT / "LICENSE"}{sep}.',
+           '--add-data', f'{identity}{sep}.',
            '--add-data', f'{ROOT / "THIRD_PARTY_NOTICES.md"}{sep}.',
            '--add-data', f'{vendor / "licenses"}{sep}licenses',
            '--add-data', f'{vendor / "vendor-lock.json"}{sep}.',

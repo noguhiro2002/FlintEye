@@ -29,7 +29,7 @@ Monitor USB and IP cameras, watch live video, and find recordings in your browse
 
 **Available now:** [run from source](docs/MANUAL_INSTALL.md), [build a local M1 Mac DMG](docs/LOCAL_MACOS_BUILD.md), or [build the development Docker image](docs/DOCKER.md#build-the-development-image).
 
-Public installers are not available yet. The first planned download is **`v1.1.2-preview.1`**, after automated and real-device checks. It will be marked **Pre-release**, not Latest. Follow [Releases](https://github.com/noguhiro2002/FlintEye/releases) for availability. [Testing checklist →](docs/ACCEPTANCE.md)
+Public installers are not available yet. The first planned download is **`v1.1.3-preview.1`**, after automated and real-device checks. It will be marked **Pre-release**, not Latest. Follow [Releases](https://github.com/noguhiro2002/FlintEye/releases) for availability. [Testing checklist →](docs/ACCEPTANCE.md)
 
 <details>
 <summary><strong>Planned one-command installation — available after the public preview is published</strong></summary>
@@ -39,19 +39,19 @@ These commands are examples for the planned preview and **do not work until that
 **Windows — PowerShell**
 
 ```powershell
-irm https://github.com/noguhiro2002/FlintEye/releases/download/v1.1.2-preview.1/install.ps1 | iex
+irm https://github.com/noguhiro2002/FlintEye/releases/download/v1.1.3-preview.1/install.ps1 | iex
 ```
 
 **macOS — Terminal**
 
 ```sh
-bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.1.2-preview.1/install.sh
+bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.1.3-preview.1/install.sh
 ```
 
 **Linux — Terminal**
 
 ```sh
-bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.1.2-preview.1/install.sh
+bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.1.3-preview.1/install.sh
 ```
 
 You can also download the script from the selected release, inspect it, and run it locally. Packaged builds include Python, FFmpeg, FFprobe and MediaMTX. No separate copies are required. Windows/macOS packages are unsigned/not notarized; see [OS confirmation screens](docs/INSTALL.md#unsigned-packages).
@@ -85,13 +85,13 @@ A pip application package is not part of the first release.
 
 ![FlintEye's five-step English first-run guide](images/getting-started.gif)
 
-*UI tour: FlintEye 1.1.2 source with the 2026-11-15 QA fixes, using a demo profile with no cameras. This illustrates the five-step guide, not installation, real recording, shutdown or uninstall. [Download the full-resolution MP4](images/getting-started.mp4?raw=true).*
+*UI tour: FlintEye 1.1.3 source with the 2026-11-15 QA fixes, using a demo profile with no cameras. This illustrates the five-step guide, not installation, real recording, shutdown or uninstall. [Download the full-resolution MP4](images/getting-started.mp4?raw=true).*
 
 </details>
 
 Recordings stay on your computer. Initial limits are **7 days** and **up to 50 GB** (or half the available disk space, whichever is smaller). Reaching either limit removes the oldest completed recordings. Change the folder and limits in Settings.
 
-Closing the browser keeps monitoring running. Use **Stop monitoring and quit** in the tray menu/control window to stop it.
+Closing the browser keeps monitoring running. Use **Stop monitoring** to pause cameras while keeping settings open, or **Quit FlintEye** in the desktop menu to exit completely. [Status colors and startup preferences →](docs/MONITORING.md)
 
 [Full user guide →](docs/USER_GUIDE.md)
 

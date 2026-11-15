@@ -5,7 +5,7 @@ _delegate_class = None
 
 
 @contextmanager
-def graceful_application_quit(icon, server):
+def graceful_application_quit(icon, server, *, on_quit=None):
     import AppKit
     import Foundation
     import objc
@@ -16,8 +16,11 @@ def graceful_application_quit(icon, server):
             # NSApplicationTerminateReply is NSUInteger on supported 64-bit Macs.
             @objc.signature(b'Q@:@')
             def applicationShouldTerminate_(self, application):
-                self.server.should_exit = True
-                self.icon.stop()
+                if self.on_quit is not None:
+                    self.on_quit()
+                else:
+                    self.server.should_exit = True
+                    self.icon.stop()
                 # Cancel Cocoa's immediate process exit. icon.stop() returns
                 # control to cli.main(), which stops and reaps media children.
                 return AppKit.NSTerminateCancel
@@ -27,6 +30,7 @@ def graceful_application_quit(icon, server):
     previous = application.delegate()
     delegate = _delegate_class.alloc().init()
     delegate.icon, delegate.server = icon, server
+    delegate.on_quit = on_quit
     application.setDelegate_(delegate)
     try:
         yield

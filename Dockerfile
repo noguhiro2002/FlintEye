@@ -43,6 +43,8 @@ COPY --from=media /opt/flinteye/vendor/bin/mediamtx ./bin/mediamtx
 COPY --from=media /opt/flinteye/vendor/licenses/ ./licenses/media/
 ARG FLINTEYE_VERSION=development
 ARG FLINTEYE_REVISION=unknown
+ARG FLINTEYE_BUILD_DIRTY=false
+RUN python -c "import json,os; json.dump({'commit': os.environ.get('FLINTEYE_REVISION'), 'dirty': os.environ.get('FLINTEYE_BUILD_DIRTY') == 'true'}, open('build-info.json', 'w'))"
 LABEL org.opencontainers.image.title="FlintEye" \
       org.opencontainers.image.description="Private camera monitoring and recording on your own infrastructure" \
       org.opencontainers.image.documentation="https://github.com/noguhiro2002/FlintEye/blob/main/docs/DOCKER.md" \

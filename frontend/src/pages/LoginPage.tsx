@@ -11,7 +11,7 @@ interface LoginPageProps {
 }
 
 export function LoginPage({ api, auth, onLoggedIn, onCancel }: LoginPageProps): JSX.Element {
-  const [username, setUsername] = useState(auth?.local.viewer_username ?? "viewer");
+  const [username, setUsername] = useState(auth?.local.admin_username ?? "admin");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");

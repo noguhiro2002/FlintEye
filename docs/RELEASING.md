@@ -6,7 +6,7 @@
 
 ## Source-first public development
 
-The public history begins with a single **1.1.1 source snapshot**. The next build is application **1.1.2**, distribution **`v1.1.2-preview.1`**. Old private installers and emulated local builds are not republished as public releases. Existing private checkouts must be cloned again into a new directory; do not merge the unrelated old history into this repository.
+The public history begins with a single **1.1.1 source snapshot**. The next build is application **1.1.3**, distribution **`v1.1.3-preview.1`**. Old private installers and emulated local builds are not republished as public releases. Existing private checkouts must be cloned again into a new directory; do not merge the unrelated old history into this repository.
 
 Normal pushes run **Distribution checks**. **Build release** is manual and creates Actions artifacts, including desktop installers and tested container archives. On a public repository these artifacts and logs are accessible to repository readers (artifact downloads require GitHub sign-in); they are development build results, not approved releases. No camera credentials, recordings or personal profiles belong in CI inputs or logs.
 
@@ -41,7 +41,7 @@ Official reference: [GitHub Container Registry](https://docs.github.com/en/packa
 
 ## Version and source of truth
 
-`flinteye_app/_version.py` holds `VERSION` (numeric `X.Y.Z`), `RELEASE_VERSION` (for example `1.1.2-preview.1`) and `RELEASE_CHANNEL` (`source`, `preview` or `stable`). Installer filenames, Inno Setup and DEB/RPM metadata use the numeric version; download URLs, update comparison and image tags use the complete release version. These values must match the tested build manifest. Source snapshots use the `source` channel and do not advertise installer updates.
+`flinteye_app/_version.py` holds `VERSION` (numeric `X.Y.Z`), `RELEASE_VERSION` (for example `1.1.3-preview.1`) and `RELEASE_CHANNEL` (`source`, `preview` or `stable`). Installer filenames, Inno Setup and DEB/RPM metadata use the numeric version; download URLs, update comparison and image tags use the complete release version. These values must match the tested build manifest. Source snapshots use the `source` channel and do not advertise installer updates.
 Do not overwrite an existing release or image version.
 
 `packaging/vendor-lock.json` fixes source URLs and SHA-256 hashes.

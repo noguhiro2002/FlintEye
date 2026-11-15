@@ -91,12 +91,13 @@ async def stream():
 with socket.socket() as sock:
     sock.bind(('127.0.0.1',0)); port=sock.getsockname()[1]
 children=[]; connections=[]
-def desktop(url,server,root):
+def desktop(url,server,root,monitoring):
     children.append(popen_background([sys.executable,'-c','import time;time.sleep(60)']))
     connections.append(urllib.request.urlopen(url+'/test-long-stream',timeout=10))
     assert connections[0].readline()==b'ready\\n'
     server.should_exit=True
 cli.setup_dialog=lambda path: None
+cli.desktop_available=lambda: True
 cli.enable_autostart=lambda: None
 flinteye_desktop.run_desktop=desktop
 with tempfile.TemporaryDirectory() as tmp:

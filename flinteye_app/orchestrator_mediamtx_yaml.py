@@ -273,8 +273,9 @@ def apply_managed_mediamtx_config(config: RuntimeConfig, *, workspace_dir: str, 
     )
 
 
-def apply_mediamtx_yaml(config: RuntimeConfig, *, workspace_dir: str, before_write=None) -> MediamtxYamlApplyResult:
-    recording = apply_recording_config(config, workspace_dir=workspace_dir, before_write=before_write)
+def apply_mediamtx_yaml(config: RuntimeConfig, *, workspace_dir: str, before_write=None, event_session=None, data_dir=None) -> MediamtxYamlApplyResult:
+    recording = apply_recording_config(config, workspace_dir=workspace_dir, before_write=before_write,
+                                       event_session=event_session, data_dir=data_dir)
     managed = apply_managed_mediamtx_config(config, workspace_dir=workspace_dir, before_write=before_write)
     ok = recording.ok and managed.ok
     changed = recording.changed or managed.changed

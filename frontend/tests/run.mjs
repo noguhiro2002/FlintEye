@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-const names = ['auth-settings', 'config-revision', 'drafts', 'dialog', 'recordings', 'ptz', 'ptz-release', 'cameras', 'poll', 'selection', 'navigation', 'states', 'misc', 'setup', 'layout', 'layout-recordings', 'layout-viewers'];
+const names = ['monitoring', 'auth-settings', 'config-revision', 'drafts', 'dialog', 'recordings', 'ptz', 'ptz-release', 'cameras', 'poll', 'selection', 'navigation', 'states', 'misc', 'setup', 'layout', 'layout-recordings', 'layout-viewers'];
 let failed = false;
 for (const name of names) {
     console.log(`\n--- ${name} ---`);

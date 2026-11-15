@@ -53,6 +53,9 @@ def _repair_bundled_media_path(runtime: Path, root: Path) -> None:
     # avoid starting an unused listener when upgrading an older profile.
     if media.managed.enabled and 'moq' not in media.managed.global_:
         changes['managed'] = {'global': {**media.managed.global_, 'moq': False}}
+    if media.managed.enabled:
+        globals_ = changes.get('managed', {}).get('global', media.managed.global_)
+        changes['managed'] = {'global': {**globals_, 'api': True, 'apiAddress': '127.0.0.1:9997', 'apiEncryption': False}}
     if changes:
         store.patch_runtime({'mediamtx': changes})
 
@@ -87,7 +90,7 @@ def initialize(root: Path) -> Path:
                                'working_dir': str(root)},
                     'managed': {'enabled': True, 'global': {
                         'rtspAddress': '127.0.0.1:8554', 'webrtcAddress': '127.0.0.1:8889',
-                        'apiAddress': '127.0.0.1:9997', 'hls': False, 'rtmp': False,
+                        'api': True, 'apiAddress': '127.0.0.1:9997', 'apiEncryption': False, 'hls': False, 'rtmp': False,
                         'srt': False, 'moq': False, 'playback': False}}}})
     return runtime
 
@@ -243,6 +246,36 @@ def disable_autostart() -> None:
     (root/'autostart-disabled').write_text('Disabled by the user.\n', encoding='utf-8')
 
 
+def autostart_status() -> dict:
+    existing = _read_startup()
+    owned = _owns_startup(existing)
+    return {'enabled': existing is not None and owned, 'available': owned,
+            'message': '' if owned else 'Start at login belongs to another installation or profile.'}
+
+
+def set_autostart(enabled: bool):
+    if not _owns_startup(_read_startup()):
+        raise ValueError('Start at login belongs to another installation or profile; it was preserved.')
+    if enabled:
+        marker = data_dir()/'autostart-disabled'
+        marker.unlink(missing_ok=True)
+        if not enable_autostart():
+            marker.write_text('Start at login could not be enabled.\n', encoding='utf-8')
+            raise ValueError('Move FlintEye to Applications before enabling start at login.')
+    else:
+        disable_autostart()
+
+
+def desktop_available() -> bool:
+    if os.environ.get('FLINTEYE_HEADLESS') == '1':
+        return False
+    if sys.platform.startswith('linux'):
+        return bool(os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY'))
+    if sys.platform == 'darwin':
+        return not bool(os.environ.get('SSH_CONNECTION') or os.environ.get('SSH_TTY'))
+    return os.environ.get('SESSIONNAME', '').lower() != 'services'
+
+
 def main() -> int:
     from flinteye_app.subprocess_utils import ensure_standard_streams
     ensure_standard_streams()
@@ -253,9 +286,12 @@ def main() -> int:
         sys.argv = [name + '.py', *sys.argv[3:]]
         runpy.run_module('flinteye_app.workers.' + name, run_name='__main__')
         return 0
-    if '--segment-complete' in sys.argv:
-        from flinteye_app.flinteye_storage import register_segment
-        register_segment(Path(sys.argv[-1]), Path(os.environ['MTX_SEGMENT_PATH']))
+    if '--segment-complete' in sys.argv or '--segment-created' in sys.argv:
+        from flinteye_app.recording_events import record_event
+        flag = '--segment-complete' if '--segment-complete' in sys.argv else '--segment-created'
+        session = sys.argv[sys.argv.index('--recording-session') + 1] if '--recording-session' in sys.argv else None
+        record_event(Path(sys.argv[sys.argv.index(flag) + 1]), Path(os.environ['MTX_SEGMENT_PATH']),
+                     complete=flag == '--segment-complete', session=session)
         return 0
     if '--pick-folder' in sys.argv:
         import tkinter as tk
@@ -277,6 +313,7 @@ def main() -> int:
     parser.add_argument('--data-dir', type=Path, default=data_dir())
     parser.add_argument('--port', type=int, help='Override the saved API port for this launch only')
     args = parser.parse_args()
+    args.headless = args.headless or not desktop_available()
     if args.port is not None and not 1 <= args.port <= 65535:
         parser.error('--port must be between 1 and 65535')
     root = args.data_dir.expanduser().resolve()
@@ -353,7 +390,7 @@ def main() -> int:
         else: raise RuntimeError('FlintEye did not become ready.')
         from flinteye_app.flinteye_desktop import run_desktop
         if not args.background: webbrowser.open(url)
-        run_desktop(url, server, root)
+        run_desktop(url, server, root, context.monitoring)
     finally:
         server.should_exit = True
         try:
@@ -374,7 +411,7 @@ def entrypoint() -> None:
     try:
         raise SystemExit(main())
     except Exception as error:
-        if '--headless' not in sys.argv and '--worker' not in sys.argv:
+        if '--headless' not in sys.argv and '--worker' not in sys.argv and desktop_available() and not any(arg.startswith('--segment-') for arg in sys.argv):
             import tkinter as tk
             from tkinter import messagebox
             window = tk.Tk(); window.withdraw()
