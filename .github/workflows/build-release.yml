@@ -49,6 +49,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Windows installer test preflight
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: ./packaging/smoke_windows_installer.ps1 -PreflightOnly
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         id: python
         with:
@@ -109,6 +113,7 @@ jobs:
       - name: Start frozen app and check first-run authentication
         run: python packaging/smoke_desktop_bundle.py
       - name: Create Windows installer
+        id: windows_installer
         if: matrix.os == 'windows'
         shell: pwsh
         env:
@@ -129,6 +134,15 @@ jobs:
         env:
           APP_ARCH: ${{ matrix.arch }}
         run: ./packaging/smoke_windows_installer.ps1
+      - name: Preserve built packages after an installer test failure
+        if: ${{ failure() && steps.windows_installer.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: diagnostic-windows-${{ matrix.arch }}
+          path: dist/FlintEye-*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: build-${{ matrix.os }}-${{ matrix.arch }}
