@@ -55,3 +55,15 @@ bash public/install.sh --version 1.2.0-preview.1 --package-directory public
 ```
 
 このインストールを同じフォルダ内のスタンドアロンインストーラーと比較し、両方の SHA-256 値が一致することを確認してください。バージョンとソースコミットは固定してください。パブリックダウンロードコマンドは、1.2.0 の承認が完了するまで、現在公開されている 1.1.3 リリースに固定されたままです。GHCR 公開前にコンテナをテストするには、対応する `containers/container-amd64.tar.gz` または `container-arm64.tar.gz` を読み込み、Compose を使用する前に `FLINTEYE_IMAGE=flinteye:release-amd64` または `flinteye:release-arm64` を設定してください。ダウンロードした Compose ファイルにある将来の GHCR タグを、すでに公開されているイメージと見間違えないように注意してください。
+
+## 全OSの自動検証は完了、実機確認は未完了
+
+対象のアプリケーションコミットは `a0aa7592195a6b52cd732014603ea2fbc3ff4b22` です。[ビルド結果・検証用成果物](https://github.com/noguhiro2002/FlintEye/actions/runs/43800923694)を確認できます。Windows x64/ARM64、macOS Intel/Apple Silicon、Linux amd64/arm64の6構成すべてで、ビルドと自動動作確認が通りました。成果物はインストーラー8種（EXE、DMG、DEB、RPM）と、両CPU向けのコンテナアーカイブです。作成したアプリで、初回設定、認証、同梱メディア部品、テスト映像の録画・再生、通常の **Quit** 操作を確認しました。Windowsでは登録済みコマンドからのアンインストールとデータ保持、LinuxではDEB/RPMのインストールも確認しています。
+
+Pythonテストは190件を実行し、失敗はありませんでした。環境に依存するため、ローカルで2件、Linux CIで3件をスキップしています。Chromiumでは画面テスト全18グループ、FirefoxとWebKitでは監視・初回設定・録画の操作を確認しました。LAN設定と初回設定は、3つのブラウザーエンジンすべてで画面幅320/1440ピクセルの追加確認を行っています。
+
+独立したテスト環境でのLAN試験では、証明書の信頼、初回設定の本人確認、Secure属性のCookie、権限、テスト映像、再起動後の証明書・認証情報・録画の保持、通常のQuitを確認しました。Linux上のブラウザーエンジンやテスト映像による確認は、MacのSafari、モバイル端末、実カメラでの確認とは分けて扱います。
+
+Actionsから取得した成果物は、GitHubが記録したサイズ・SHA-256と照合し、展開時にZIPのCRCも検証しました。同じコミットのリリース作成手順でまとめ、マニフェスト、全ファイルのチェックサム、コンテナのCPU・ソース情報、macOSのad-hoc署名の整合性を確認しています。Intel Macでは最初のDMG作成時にmacOSが `Resource busy` を返したため、同じコミットで再実行しました。他の対象で成功した成果物はそのまま使用しています。
+
+[受け入れ記録](../packaging/acceptance-1.2.0.json)で確認済みにしたのは、全OS・両CPUの自動ビルド・動作確認の1項目だけです。WindowsのWinError 2とError 32の再確認を含め、ユーザー環境や実機での確認8項目は未完了です。新しいReleaseとGHCRイメージの公開、stable/latestへの昇格は行っていません。

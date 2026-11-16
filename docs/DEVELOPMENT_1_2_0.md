@@ -55,3 +55,13 @@ bash public/install.sh --version 1.2.0-preview.1 --package-directory public
 ```
 
 Compare this installation with the standalone installer from the same folder and verify both SHA-256 values match. Keep the version and source commit fixed. Public download commands remain pinned to the currently published 1.1.3 release until 1.2.0 acceptance passes. To test the container before GHCR publication, load the matching `containers/container-amd64.tar.gz` or `container-arm64.tar.gz`, then set `FLINTEYE_IMAGE=flinteye:release-amd64` or `flinteye:release-arm64` before using Compose. Do not mistake a downloaded Compose file's future GHCR tag for an already published image.
+
+## Recorded automated verification
+
+Application commit: `a0aa7592195a6b52cd732014603ea2fbc3ff4b22`. [Successful build and QA artifacts](https://github.com/noguhiro2002/FlintEye/actions/runs/43800923694). All six native OS/CPU targets passed: Windows x64/ARM64, macOS Intel/Apple Silicon and Linux amd64/arm64. This produced eight installers (EXE, DMG, DEB and RPM) and two container archives. Installed/frozen application checks covered setup, authentication, bundled media, generated-video recording/playback and normal Quit. Windows checks also used the registered uninstall command and confirmed retained data; Linux checked actual DEB/RPM installation.
+
+The Python suite ran 190 cases without failures: 2 platform-dependent skips locally and 3 in Linux CI. Chromium passed the full 18-group interface suite; Firefox and WebKit passed monitoring, setup and recording flows. LAN settings/setup were additionally checked at 320/1440 pixels on all three engines. Isolated LAN integration verified TLS trust, ownership, Secure cookies, roles, generated media, retained certificates/authentication/recordings and normal owned Quit. Linux-hosted browser engines and generated video do not count as physical Safari, mobile or camera acceptance.
+
+The downloaded Actions artifacts were checked against GitHub's stored sizes and SHA-256 values, safely extracted with ZIP CRC verification and assembled using this commit's release recipe. The manifest, complete file checksums, container architectures/source revisions and macOS ad-hoc integrity reports were verified. Intel Mac required a same-commit retry after macOS returned `Resource busy` while creating its first DMG; successful artifacts from the other targets were retained.
+
+Only the automated native-architecture acceptance case is marked passed. The eight physical/owner acceptance cases above remain pending, including the reported Windows WinError 2 and Error 32. No new Release, GHCR image or stable/latest promotion was made.

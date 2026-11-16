@@ -1,15 +1,42 @@
 {
   "version": "1.2.0",
-  "commit": null,
+  "commit": "a0aa7592195a6b52cd732014603ea2fbc3ff4b22",
   "cases": {
-    "windows-owner-startup": {"status": "pending", "evidence": "WinError 2 requires owner retest"},
-    "windows-owner-removal": {"status": "pending", "evidence": "Error 32 requires owner retest"},
-    "native-menus-and-accessibility": {"status": "pending", "evidence": "Windows, Mac and Linux native controls"},
-    "lan-pc": {"status": "pending", "evidence": "Separate PCs, trust, roles, video and reboot"},
-    "lan-mobile": {"status": "pending", "evidence": "iPhone, iPad and Android"},
-    "physical-cameras-and-long-run": {"status": "pending", "evidence": "Two USB cameras, reconnect, sleep and 24 hours"},
-    "linux-native-and-docker": {"status": "pending", "evidence": "OS install/update/remove and Docker lifecycle"},
-    "docker-desktop-host-video": {"status": "pending", "evidence": "Host browser and WebRTC"},
-    "all-native-architectures": {"status": "pending", "evidence": "Windows, Mac, Linux x64 and ARM64 builds and smoke"}
+    "windows-owner-startup": {
+      "status": "pending",
+      "evidence": "WinError 2 requires owner retest"
+    },
+    "windows-owner-removal": {
+      "status": "pending",
+      "evidence": "Error 32 requires owner retest"
+    },
+    "native-menus-and-accessibility": {
+      "status": "pending",
+      "evidence": "Windows, Mac and Linux native controls"
+    },
+    "lan-pc": {
+      "status": "pending",
+      "evidence": "Separate PCs, trust, roles, video and reboot"
+    },
+    "lan-mobile": {
+      "status": "pending",
+      "evidence": "iPhone, iPad and Android"
+    },
+    "physical-cameras-and-long-run": {
+      "status": "pending",
+      "evidence": "Two USB cameras, reconnect, sleep and 24 hours"
+    },
+    "linux-native-and-docker": {
+      "status": "pending",
+      "evidence": "OS install/update/remove and Docker lifecycle"
+    },
+    "docker-desktop-host-video": {
+      "status": "pending",
+      "evidence": "Host browser and WebRTC"
+    },
+    "all-native-architectures": {
+      "status": "passed",
+      "evidence": "https://github.com/noguhiro2002/FlintEye/actions/runs/43800923694; same-commit Windows/macOS/Linux x64+ARM64 builds, installed/frozen app setup/auth/media/recording/quit smokes, Windows actual installer removal/data retention, Linux DEB/RPM installation. CI only; physical-device acceptance remains separate."
+    }
   }
 }
