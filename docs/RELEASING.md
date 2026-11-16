@@ -82,6 +82,8 @@ On Windows/macOS, install Python 3.14.10, Node.js 22.12+, Go 1.27, a C/C++ compi
 Windows uses MSYS2 UCRT64 or CLANGARM64. macOS builds with `MACOSX_DEPLOYMENT_TARGET=14.0`.
 Use the Docker builder below for native Linux packages; it compiles the pinned Python 3.13.18 source.
 
+For Windows ARM64, also install Visual Studio C++ ARM64 tools, Rust and native Strawberry Perl. Before the dependency command below, run `python packaging/build_windows_crypto.py` with native ARM64 Python. The constrained cryptography release has no Windows ARM64 wheel: this helper builds and installs its native wheel against statically linked OpenSSL 3.5.9, whose official source hash is pinned in `packaging/vendor-lock.json`. Sources, licenses and build information are retained with the bundle. Use a fresh checkout for a retry. See the [cryptography build instructions](https://cryptography.io/en/stable/installation/#building-cryptography-on-windows) and [OpenSSL Windows instructions](https://github.com/openssl/openssl/blob/openssl-3.5.9/NOTES-WINDOWS.md).
+
 ```sh
 python -m pip install -c packaging/constraints.txt -r requirements.txt -r packaging/requirements-build.txt meson==1.9.1 ninja==1.13.0
 bash packaging/build_vendor.sh

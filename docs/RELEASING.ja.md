@@ -87,6 +87,8 @@ Windows/macOSでは、Python 3.14.10、Node.js 22.12+、Go 1.27、C/C++コンパ
 WindowsはMSYS2 UCRT64またはCLANGARM64を使用します。macOSは `MACOSX_DEPLOYMENT_TARGET=14.0` でビルドします。
 ネイティブLinuxパッケージ用の以下のDockerビルダーを使用してください。ピン留めされたPython 3.13.18ソースをコンパイルします。
 
+Windows ARM64の場合は、Visual Studio C++ ARM64ツール、Rust、およびネイティブのStrawberry Perlもインストールしてください。以下の依存関係コマンドを実行する前に、ネイティブのARM64 Pythonを使用して`python packaging/build_windows_crypto.py`を実行してください。固定したcryptographyのリリースにはWindows ARM64用のwheelが含まれていないため、このヘルパーを使用して、公式のソースハッシュが`packaging/vendor-lock.json`に固定されている静的リンクされたOpenSSL 3.5.9に対してネイティブwheelをビルドおよびインストールします。ソース、ライセンス、およびビルド情報はバンドルに保持されます。再試行の際は、新規のチェックアウトを使用してください。[cryptographyビルド手順](https://cryptography.io/en/stable/installation/#building-cryptography-on-windows)および[OpenSSL Windows手順](https://github.com/openssl/openssl/blob/openssl-3.5.9/NOTES-WINDOWS.md)を参照してください。
+
 ```sh
 python -m pip install -c packaging/constraints.txt -r requirements.txt -r packaging/requirements-build.txt meson==1.9.1 ninja==1.13.0
 bash packaging/build_vendor.sh
