@@ -50,7 +50,7 @@ export function NetworkAccess({api, blocked, onDirtyChange, onSaved}: {api: ApiC
         <button disabled={busy || blocked} onClick={() => void act(() => api.networkAction('/firewall', {action:'remove'}))}>Windows: remove this installation’s rules…</button>
         <button disabled={busy || blocked || !status.saved.enabled} onClick={() => {if (window.confirm('Replace the trust certificate? Every viewing device will need to trust the new certificate.')) void act(() => api.networkAction('/renew-trust', {confirm:true}));}}>Renew trust certificate…</button>
       </div>
-      <p><a href="https://github.com/noguhiro2002/FlintEye/blob/main/docs/LAN_ACCESS.md" target="_blank" rel="noreferrer">Trust, Firewall and recovery instructions / 日本語の手順</a></p>
+      <p><a href={status.guide_url} target="_blank" rel="noreferrer">Trust, Firewall and recovery instructions / 日本語の手順</a></p>
       {message && <p role="status">{message}</p>}
       {blocked && <p>Save or discard your other settings before changing LAN access.</p>}
       <p>Use the public connection guide to transfer the CA certificate; compare its fingerprint on the server. Do not ignore browser certificate warnings or share private keys.</p>

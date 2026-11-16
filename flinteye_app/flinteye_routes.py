@@ -103,7 +103,8 @@ def install_routes(app, context, *, setup_token: str, desktop: bool):
             ca = x509.load_pem_x509_certificate((data/'tls/ca.crt').read_bytes())
             metadata = {'fingerprint': ca.fingerprint(hashes.SHA256()).hex(), 'ca_expires': ca.not_valid_after_utc.isoformat()}
         group = getattr(context, 'listener_group', None)
-        return {'saved': config.network.model_dump(), 'active': active_network.model_dump(),
+        from flinteye_app.network_access import lan_guide_url
+        return {'saved': config.network.model_dump(), 'active': active_network.model_dump(), 'guide_url': lan_guide_url(),
                 'restart_required': config.network != active_network,
                 'local_url': listeners.get('url'), 'lan_url': listeners.get('lan_url'),
                 'error': group.lan_error if group else '', **metadata}

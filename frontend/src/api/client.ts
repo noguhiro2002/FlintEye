@@ -120,7 +120,7 @@ export class ApiClient {
   desktopCapabilities(): Promise<{ folder_picker: boolean; startup_settings?: boolean }> { return this.request('/api/v1/desktop'); }
   getMonitoringStatus(): Promise<MonitoringStatusResponse> { return this.request('/api/v1/status/monitoring'); }
   useBundledMedia(): Promise<{ok: boolean}> { return this.request('/api/v1/media/use-bundled', {method: 'POST'}); }
-  getNetwork(): Promise<{ saved: {enabled: boolean; address: string; allowed_subnets: string[]}; restart_required: boolean; local_url: string; lan_url: string | null; error: string; fingerprint?: string; ca_expires?: string }> { return this.request('/api/v1/network'); }
+  getNetwork(): Promise<{ saved: {enabled: boolean; address: string; allowed_subnets: string[]}; restart_required: boolean; local_url: string; lan_url: string | null; error: string; fingerprint?: string; ca_expires?: string; guide_url: string }> { return this.request('/api/v1/network'); }
   networkAction(action: string, body: unknown, method = 'POST'): Promise<{message?: string; path?: string}> {
     return this.request('/api/v1/network' + action, {method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
   }

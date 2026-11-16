@@ -29,6 +29,12 @@ def lan_media_patch(config) -> dict:
     return {'mediamtx': {'webrtc_base_url': '/media', 'managed': {'global': options}}}
 
 
+def lan_guide_url() -> str:
+    from flinteye_app.build_info import build_info
+    commit = build_info().get('commit') or 'codex/1.2.0-preview'
+    return f'https://github.com/noguhiro2002/FlintEye/blob/{commit}/docs/LAN_ACCESS.md'
+
+
 def private_write(path: Path, content: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     temporary = path.with_name(path.name + '.tmp')
@@ -164,7 +170,7 @@ def export_guide(root: Path, address: str, port: int) -> Path:
         'Compare this fingerprint on the server before trusting the certificate.\n'
         '接続前にサーバー側の証明書指紋と照合してください。\n'
         'Do not share passwords, setup tokens or private keys.\n'
-        'Trust instructions: https://github.com/noguhiro2002/FlintEye/blob/main/docs/LAN_ACCESS.md\n').encode())
+        f'Trust instructions: {lan_guide_url()}\n').encode())
     return folder
 
 

@@ -175,6 +175,39 @@ class MonitoringTests(unittest.TestCase):
         self.controller.refresh(items=[])
         self.assertEqual(self.controller.status()['color'], 'gray')
 
+    def test_quit_after_relaunching_a_stopped_profile_never_waits_for_old_writers(self):
+        self.controller.perform('stop')
+        self.context.store.patch_runtime({'recording': {'record_paths': ['cam']}})
+        from flinteye_app.monitoring import MonitoringController
+        restored = MonitoringController(self.context)
+        self.addCleanup(restored.close)
+        restored.startup()
+        self.assertTrue(restored.started)
+        self.assertFalse(restored.tracking_configured)
+        self.assertFalse(restored.desired)
+        self.assertTrue(restored.perform('quit')['ok'])
+        receipt = json.loads((self.root/'last-monitoring-stop.json').read_text())
+        self.assertTrue(receipt['ok'])
+        self.assertFalse(receipt['forced'])
+
+    def test_interrupted_stop_is_not_promoted_to_a_clean_stop_on_relaunch(self):
+        self.controller.perform('stop')
+        saved = json.loads((self.root/'monitoring.json').read_text())
+        saved['clean_stop'] = False
+        (self.root/'monitoring.json').write_text(json.dumps(saved))
+        from flinteye_app.monitoring import MonitoringController
+        restored = MonitoringController(self.context)
+        self.addCleanup(restored.close)
+        restored.startup()
+        self.assertFalse(restored.perform('quit')['ok'])
+        receipt = json.loads((self.root/'last-monitoring-stop.json').read_text())
+        self.assertFalse(receipt['ok'])
+        self.assertTrue(restored.status()['previous_stop_unknown'])
+        self.assertFalse(restored.perform('quit', force=True)['ok'])
+        receipt = json.loads((self.root/'last-monitoring-stop.json').read_text())
+        self.assertTrue(receipt['forced'])
+        self.assertFalse(receipt['ok'])
+
     def test_delayed_complete_must_be_indexed_before_media_stops(self):
         file = self.complete_file(complete=False)
         events = []

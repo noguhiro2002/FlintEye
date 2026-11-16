@@ -73,12 +73,26 @@ class MonitoringController:
         self.desired = True
         self.resume_on_startup = False
         self.preference_error = ''
+        self.clean_stop = False
         try:
             saved = json.loads(self.path.read_text(encoding='utf-8'))
             if type(saved.get('desired_running')) is not bool or type(saved.get('resume_on_startup')) is not bool:
                 raise ValueError('Invalid monitoring preferences')
             self.desired = saved['desired_running']
             self.resume_on_startup = saved['resume_on_startup']
+            self.clean_stop = saved.get('clean_stop') is True
+            if not self.desired and 'clean_stop' not in saved:
+                # Migrate only a legacy completed stop, never a newer stop request
+                # that was interrupted before its recording receipt was written.
+                try:
+                    receipt = json.loads((self.root/'last-monitoring-stop.json').read_text())
+                    evidence = recording_events.summary(self.root, self.session)
+                    self.clean_stop = (receipt.get('ok') is True and not receipt.get('forced')
+                        and receipt.get('pending_segments') == 0
+                        and float(receipt.get('at', 0)) >= self.path.stat().st_mtime
+                        and evidence['previous_incomplete_segments'] == 0)
+                except (OSError, ValueError, sqlite3.Error):
+                    self.clean_stop = False
         except FileNotFoundError:
             pass
         except (OSError, ValueError, AttributeError):
@@ -87,6 +101,9 @@ class MonitoringController:
             self.preference_error = 'Could not read monitoring preferences. Monitoring remains stopped; choose Start to resume.'
         if self.resume_on_startup:
             self.desired = True
+        self.previous_stop_unknown = not self.desired and not self.clean_stop
+        if self.previous_stop_unknown and not self.preference_error:
+            self.preference_error = 'Previous recording completion is unknown after an interrupted stop. Review recordings before forcing quit, or start a new monitoring session.'
         self.phase = 'starting' if self.desired else 'stopped'
         self.error = self.preference_error
         self.busy = False
@@ -106,7 +123,8 @@ class MonitoringController:
         temporary = self.path.with_suffix('.tmp')
         fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, 'w', encoding='utf-8') as stream:
-            json.dump({'desired_running': self.desired, 'resume_on_startup': self.resume_on_startup}, stream)
+            json.dump({'desired_running': self.desired, 'resume_on_startup': self.resume_on_startup,
+                       'clean_stop': self.clean_stop}, stream)
         temporary.replace(self.path)
 
     def preferences(self) -> dict:
@@ -160,7 +178,15 @@ class MonitoringController:
                     raise MonitoringConflict('Finish or retry the pending recording stop first')
                 self.busy = True
                 self.active_action = action
+                already_stopped = self.phase == 'stopped' and not self.desired and self.clean_stop and not self.error
                 self.error = ''
+                if self.phase == 'stopped' and not self.desired and not self.clean_stop and action in {'stop', 'quit'} and not force:
+                    self.error = 'Previous recording completion is unknown after an interrupted stop. Check recordings before explicitly forcing quit, or start a new monitoring session.'
+                    recording_events.write_stop_result(self.root, ok=False, pending=1, forced=False, reason=self.error)
+                    return {'ok': False, 'message': self.error, 'pending_segments': 1}
+                if not already_stopped:
+                    self.clean_stop = False
+                    self._save()
                 if action in {'start', 'stop'}:
                     previous = self.desired
                     self.desired = action == 'start'
@@ -171,7 +197,17 @@ class MonitoringController:
                         raise
                 self.phase = 'starting' if action == 'start' else 'stopping'
             if action in {'stop', 'restart', 'quit'}:
-                result = self._stop(force=force)
+                if self.previous_stop_unknown and force:
+                    result = {'ok': False, 'message': 'Previous recording completion remains unknown', 'pending_segments': 1}
+                    self.phase = 'stopped'
+                    self.error = result['message']
+                    recording_events.write_stop_result(self.root, ok=False, pending=1, forced=True, reason=result['message'])
+                elif already_stopped:
+                    self.phase = 'stopped'
+                    result = {'ok': True, 'message': 'Monitoring was already stopped', 'pending_segments': 0}
+                    recording_events.write_stop_result(self.root, ok=True, pending=0, forced=False, reason=result['message'])
+                else:
+                    result = self._stop(force=force)
                 if not result['ok'] and not force:
                     return result
                 if action == 'quit':
@@ -183,6 +219,7 @@ class MonitoringController:
                     raise MonitoringConflict('Complete administrator setup before starting monitoring')
                 applied = _apply_mediamtx_config(self.context, config)
                 self.started = True
+                self.previous_stop_unknown = False
                 self.context.supervisor.set_monitoring_enabled(True)
                 with self.lock:
                     self.started_mono = time.monotonic()
@@ -257,6 +294,9 @@ class MonitoringController:
             self.phase = 'stopped' if ok or force else 'finalizing'
         self.error = '' if ok else message
         recording_events.write_stop_result(self.root, ok=ok, pending=pending, forced=force and not ok, reason=message)
+        if ok:
+            self.clean_stop = True
+            self._save()
         return {'ok': ok, 'message': message, 'pending_segments': pending}
 
     def _unindexed_files(self, config, *, deadline=None) -> int:
@@ -288,8 +328,9 @@ class MonitoringController:
         self.quitting = True
         if not self.started:
             self.context.supervisor.set_monitoring_enabled(False)
-            recording_events.write_stop_result(self.root, ok=True, pending=0, forced=False,
-                                              reason='Monitoring was not started; no recording publishers were launched.')
+            if not self.previous_stop_unknown:
+                recording_events.write_stop_result(self.root, ok=True, pending=0, forced=False,
+                                                  reason='Monitoring was not started; no recording publishers were launched.')
             self.done.set()
             if self.thread:
                 self.thread.join(timeout=2)
@@ -299,7 +340,7 @@ class MonitoringController:
                 result = self._stop()
                 if not result['ok']:
                     self._stop(force=True)
-            elif not self.error:
+            elif not self.error and self.clean_stop:
                 recording_events.write_stop_result(self.root, ok=True, pending=0, forced=False, reason='Monitoring was already stopped')
         self.done.set()
         if self.thread and self.thread is not threading.current_thread():
@@ -390,6 +431,7 @@ class MonitoringController:
                 'state': 'unknown', 'color': 'amber', 'label': 'Checking status', 'message': '',
                 'counts': {'configured': 0, 'targets': 0, 'receiving': 0, 'recording': 0}, 'cameras': []}
             result['active_action'] = self.active_action
+            result['previous_stop_unknown'] = self.previous_stop_unknown
             if self.last_poll and time.monotonic() - self.last_poll > 6 and self.desired:
                 result.update(state='unknown', color='amber', label='Status unavailable', message='Waiting for a fresh health check.')
             if self.busy or self.phase == 'finalizing':

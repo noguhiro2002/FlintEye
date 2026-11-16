@@ -184,7 +184,7 @@ def _run_tray(url, server, root, controller, actions):
         pystray.Menu.SEPARATOR,
         pystray.MenuItem('Quit FlintEye', lambda: actions.submit('quit'), enabled=lambda item: not actions.busy),
         pystray.MenuItem('Force quit (recordings may be incomplete)', force_quit,
-                         visible=lambda item: snapshot['phase'] == 'finalizing' and not actions.busy)))
+                         visible=lambda item: (snapshot['phase'] == 'finalizing' or snapshot.get('previous_stop_unknown')) and not actions.busy)))
 
     def update():
         nonlocal snapshot, startup, last
@@ -307,7 +307,7 @@ def _run_control_window(url, server, root, controller, actions):
         startup_value.set(startup['enabled'])
         startup_button.configure(state='normal' if enabled and startup['available'] else 'disabled')
         quit_button.configure(state='normal' if enabled else 'disabled')
-        if status['phase'] == 'finalizing' and enabled:
+        if (status['phase'] == 'finalizing' or status.get('previous_stop_unknown')) and enabled:
             force_button.pack(fill='x', pady=3)
         else:
             force_button.pack_forget()

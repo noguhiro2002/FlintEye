@@ -49,7 +49,9 @@ try {
         try {
             foreach ($kind in @('HTTPS', 'WebRTC')) {
                 $ruleName = $group + '-' + $kind + '-staging'
-                Get-NetFirewallRule -Name $ruleName -ErrorAction SilentlyContinue | Remove-NetFirewallRule
+                $existing = Get-NetFirewallRule -Name $ruleName -ErrorAction SilentlyContinue
+                if ($existing -and $existing.Group -ne $group) { throw 'A staging rule belongs to another application. No rule was changed.' }
+                if ($existing) { $existing | Remove-NetFirewallRule }
                 $protocol = if ($kind -eq 'HTTPS') { 'TCP' } else { 'UDP' }
                 $port = if ($kind -eq 'HTTPS') { $config.port } else { 8189 }
                 $program = if ($kind -eq 'HTTPS') { $config.application } else { $config.media }
