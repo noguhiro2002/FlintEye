@@ -1,6 +1,7 @@
 # Release assets replace the version marker. Compatible with Windows PowerShell 5.1.
 param(
     [string]$Version = '@RELEASE_VERSION@',
+    [string]$PackageDirectory,
     [switch]$NoStart
 )
 $ErrorActionPreference = 'Stop'
@@ -28,14 +29,24 @@ $work = Join-Path ([IO.Path]::GetTempPath()) ('flinteye-install-' + [guid]::NewG
 $previousProtocol = [Net.ServicePointManager]::SecurityProtocol
 try {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    $sums = (Invoke-WebRequest -UseBasicParsing "$base/SHA256SUMS").Content
+    if ($PackageDirectory) {
+        $packageRoot = (Resolve-Path -LiteralPath $PackageDirectory).Path
+        $sums = Get-Content -LiteralPath (Join-Path $packageRoot 'SHA256SUMS') -Raw
+        Write-Host 'Installing from explicitly selected validation artifacts; no release download will occur.'
+    } else {
+        $sums = (Invoke-WebRequest -UseBasicParsing "$base/SHA256SUMS").Content
+    }
     if ($sums -is [byte[]]) { $sums = [Text.Encoding]::UTF8.GetString($sums) }
     $pattern = '^([a-f0-9]{64})  ' + [regex]::Escape($asset) + '$'
     $matchesFound = @($sums -split '\r?\n' | Where-Object { $_ -match $pattern })
     if ($matchesFound.Count -ne 1) { throw 'Package checksum is missing or ambiguous.' }
     $expected = $matchesFound[0].Substring(0, 64)
     $installer = Join-Path $work $asset
-    Invoke-WebRequest -UseBasicParsing "$base/$asset" -OutFile $installer
+    if ($PackageDirectory) {
+        Copy-Item -LiteralPath (Join-Path $packageRoot $asset) -Destination $installer
+    } else {
+        Invoke-WebRequest -UseBasicParsing "$base/$asset" -OutFile $installer
+    }
     if ((Get-FileHash -Algorithm SHA256 $installer).Hash.ToLowerInvariant() -ne $expected) { throw 'Checksum mismatch. Nothing was installed.' }
     # Mark the downloaded installer as Internet-origin; do not bypass SmartScreen.
     Set-Content -LiteralPath $installer -Stream Zone.Identifier -Value "[ZoneTransfer]`r`nZoneId=3" -ErrorAction Stop

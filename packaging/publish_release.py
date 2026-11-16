@@ -100,7 +100,8 @@ def prepare(bundle: Path, output: Path, commit: str, run_id: str, channel: str, 
     compose = (ROOT / 'compose.yaml').read_text()
     compose = re.sub(r'ghcr\.io/noguhiro2002/flinteye:[\w.-]+', IMAGE + ':' + image_version, compose)
     (output / 'compose.yaml').write_text(compose)
-    (output/'compose.desktop.yaml').write_text((ROOT/'deploy/compose.desktop.yaml').read_text())
+    desktop_compose = re.sub(r'ghcr\.io/noguhiro2002/flinteye:[\w.-]+', IMAGE + ':' + image_version, (ROOT/'deploy/compose.desktop.yaml').read_text())
+    (output/'compose.desktop.yaml').write_text(desktop_compose)
     for language in ('en', 'ja'):
         source = ROOT / 'docs' / ('RELEASE_NOTES.md' if language == 'en' else 'RELEASE_NOTES.ja.md')
         text = source.read_text()

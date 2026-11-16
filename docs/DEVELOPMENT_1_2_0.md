@@ -37,3 +37,21 @@ Run the Python suite, frontend build/browser suites, documentation checks and ex
 Before migration, runtime/monitoring backups are stored privately under `backup-before-1.2.0` in the profile. They contain sensitive configuration: never attach them to issues. Stop the new application before restoring a matching old backup and reinstalling the pinned 1.1.3 package. Preserve existing recordings and inventory. Remove the new Windows firewall rules and obsolete client trust if rolling back LAN access. No automatic downgrade or data erasure is performed.
 
 **Publication is blocked while any 1.2.0 P1 acceptance gate is pending or failed.** Build artifacts may be delivered for testing. Do not overwrite the existing 1.1.3 tag/assets. After acceptance, publish matching tested source, installers, version-pinned scripts, both Compose routes, licenses/sources and checksums together, as a prerelease with no image `latest` tag.
+
+## Validate the one-command installer before publication
+
+Download and extract the successful Build release run's `release-bundle` artifact. Its `public` folder contains the exact installers, install scripts and `SHA256SUMS`. Confirm the workflow commit and build manifest before using it. The following explicit local-artifact mode uses the same installer and checksum checks without requiring a public 1.2.0 Release; it does not clone the repository or bypass OS execution approval. Run as the normal user, quit existing FlintEye instances first, and use a dedicated clean/retained QA profile as appropriate.
+
+Windows PowerShell, from the extracted bundle directory:
+
+```powershell
+.\public\install.ps1 -Version 1.2.0-preview.1 -PackageDirectory .\public
+```
+
+macOS or Linux, from the extracted bundle directory:
+
+```sh
+bash public/install.sh --version 1.2.0-preview.1 --package-directory public
+```
+
+Compare this installation with the standalone installer from the same folder and verify both SHA-256 values match. Keep the version and source commit fixed. Public download commands remain pinned to the currently published 1.1.3 release until 1.2.0 acceptance passes. To test the container before GHCR publication, load the matching `containers/container-amd64.tar.gz` or `container-arm64.tar.gz`, then set `FLINTEYE_IMAGE=flinteye:release-amd64` or `flinteye:release-arm64` before using Compose. Do not mistake a downloaded Compose file's future GHCR tag for an already published image.

@@ -3,11 +3,13 @@
 set -euo pipefail
 version='@RELEASE_VERSION@'
 start_app=1
+package_directory=''
 fail() { printf 'FlintEye: %s\n' "$*" >&2; exit 1; }
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --version) [ "$#" -ge 2 ] || fail '--version requires X.Y.Z'; version=$2; shift 2 ;;
     --no-start) start_app=0; shift ;;
+    --package-directory) [ "$#" -ge 2 ] || fail '--package-directory requires an artifact folder'; package_directory=$2; shift 2 ;;
     *) fail "Unknown option: $1" ;;
   esac
 done
@@ -57,10 +59,20 @@ cleanup() {
 trap cleanup EXIT
 base="https://github.com/noguhiro2002/FlintEye/releases/download/v$version"
 fetch() { curl --fail --location --proto '=https' --tlsv1.2 --retry 3 --output "$2" "$1"; }
-fetch "$base/SHA256SUMS" "$work/SHA256SUMS" || fail 'Release not available. Check the version and whether it has been published.'
+if [ -n "$package_directory" ]; then
+  [ -d "$package_directory" ] || fail 'The selected artifact folder does not exist.'
+  printf 'Installing from explicitly selected validation artifacts; no release download will occur.\n'
+  cp -- "$package_directory/SHA256SUMS" "$work/SHA256SUMS" || fail 'The artifact checksum file is missing.'
+else
+  fetch "$base/SHA256SUMS" "$work/SHA256SUMS" || fail 'Release not available. Check the version and whether it has been published.'
+fi
 expected=$(awk -v file="$asset" '$2 == file { print $1 }' "$work/SHA256SUMS")
 [[ "$expected" =~ ^[0-9a-f]{64}$ ]] || fail 'Package checksum is missing or ambiguous.'
-fetch "$base/$asset" "$work/$asset" || fail 'Package download failed.'
+if [ -n "$package_directory" ]; then
+  cp -- "$package_directory/$asset" "$work/$asset" || fail 'The selected package is missing.'
+else
+  fetch "$base/$asset" "$work/$asset" || fail 'Package download failed.'
+fi
 if command -v sha256sum >/dev/null; then
   actual=$(sha256sum "$work/$asset" | awk '{print $1}')
 else

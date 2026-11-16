@@ -109,9 +109,14 @@ def assemble(source: Path, destination: Path, commit: str) -> None:
     for name in ('install.sh', 'install.ps1'):
         text = (ROOT / 'packaging' / name).read_text().replace('@RELEASE_VERSION@', release_value)
         (public / name).write_text(text, encoding='utf-8', newline='\n')
-    for name in ('LICENSE', 'THIRD_PARTY_NOTICES.md', 'compose.yaml'):
+    for name in ('LICENSE', 'THIRD_PARTY_NOTICES.md'):
         shutil.copy2(ROOT / name, public / name)
-    shutil.copy2(ROOT/'deploy/compose.desktop.yaml', public/'compose.desktop.yaml')
+    compose = (ROOT/'compose.yaml').read_text()
+    compose = re.sub(r'ghcr\.io/noguhiro2002/flinteye:[\w.-]+', 'ghcr.io/noguhiro2002/flinteye:'+release_value, compose)
+    (public/'compose.yaml').write_text(compose)
+    desktop_compose = (ROOT/'deploy/compose.desktop.yaml').read_text()
+    desktop_compose = re.sub(r'ghcr\.io/noguhiro2002/flinteye:[\w.-]+', 'ghcr.io/noguhiro2002/flinteye:'+release_value, desktop_compose)
+    (public/'compose.desktop.yaml').write_text(desktop_compose)
     for name in ('ACCEPTANCE.md', 'ACCEPTANCE.ja.md'):
         text = (ROOT / 'docs' / name).read_text()
         text = re.sub(r'\]\(([^)\s]+\.md(?:#[^)\s]+)?)\)',

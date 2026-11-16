@@ -74,6 +74,7 @@ jobs:
         run: |
           python -m unittest discover -s tests -p test_process_lifetime.py -v
           python -m unittest discover -s tests -p test_macos_lifecycle.py -v
+          python -m unittest discover -s tests -p test_network_access.py -v
       - name: Windows profile-scoped shutdown regression (PowerShell 5.1)
         if: matrix.os == 'windows'
         shell: powershell
