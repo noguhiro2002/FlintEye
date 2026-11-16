@@ -408,11 +408,12 @@ def main() -> int:
         return 0
     if args.lan_address or args.disable_lan:
         from flinteye_app.orchestrator_models import NetworkAccessConfig
-        from flinteye_app.network_access import ensure_certificates
+        from flinteye_app.network_access import ensure_certificates, lan_media_patch
         network = NetworkAccessConfig(enabled=not args.disable_lan, address=args.lan_address or '', allowed_subnets=args.lan_source)
         if network.enabled:
             ensure_certificates(root, network.address)
-        store.patch_runtime({'network': network.model_dump(), 'api': {'host': '127.0.0.1'}})
+        store.patch_runtime({'network': network.model_dump(), 'api': {'host': '127.0.0.1'},
+                             **(lan_media_patch(store.get_effective()) if network.enabled else {})})
     if args.export_connection_guide:
         from flinteye_app.network_access import export_guide
         config = store.get_effective()
@@ -420,6 +421,11 @@ def main() -> int:
         print(export_guide(root, config.network.address, args.port or config.api.port))
         return 0
     config = store.get_effective()
+    if config.network.enabled:
+        from flinteye_app.network_access import lan_media_patch
+        # Also reassert the authenticated media bridge after an upgrade or saved edit.
+        store.patch_runtime(lan_media_patch(config))
+        config = store.get_effective()
     if config.network.enabled and config.auth.provider == 'local' and not config.auth.viewer_auth_required:
         store.patch_runtime({'auth': {'viewer_auth_required': True}})
         config = store.get_effective()

@@ -17,6 +17,18 @@ import uuid
 CERTIFICATE_LOCK = threading.RLock()
 
 
+def lan_media_patch(config) -> dict:
+    """Keep internal media HTTP outside the LAN authentication boundary."""
+    media = config.mediamtx
+    if media.control_mode != 'direct' or not media.managed.enabled or media.rtsp_base_url.rstrip('/') != 'rtsp://127.0.0.1:8554':
+        raise ValueError('Built-in LAN mode requires the managed local media server at 127.0.0.1:8554. Keep built-in LAN disabled for an external/custom media deployment.')
+    options = dict(media.managed.global_)
+    options.update(rtspAddress='127.0.0.1:8554', webrtcAddress='127.0.0.1:8889',
+                   api=True, apiAddress='127.0.0.1:9997', apiEncryption=False,
+                   rtspTransports=['tcp'], hls=False, rtmp=False, srt=False, moq=False, playback=False)
+    return {'mediamtx': {'webrtc_base_url': '/media', 'managed': {'global': options}}}
+
+
 def private_write(path: Path, content: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     temporary = path.with_name(path.name + '.tmp')

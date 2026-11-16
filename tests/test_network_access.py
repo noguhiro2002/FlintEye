@@ -86,6 +86,14 @@ class NetworkTests(unittest.TestCase):
             RuntimeConfig(network={'enabled': True, 'address': '192.168.1.10', 'allowed_subnets': ['192.168.1.0/24']})
         self.assertTrue(permitted_source('192.168.1.25', ['192.168.1.0/24']))
         self.assertFalse(permitted_source('192.168.2.25', ['192.168.1.0/24']))
+        from flinteye_app.network_access import lan_media_patch
+        config = RuntimeConfig(mediamtx={'control_mode': 'direct', 'managed': {'enabled': True}})
+        patch = lan_media_patch(config)['mediamtx']
+        self.assertEqual(patch['webrtc_base_url'], '/media')
+        self.assertEqual(patch['managed']['global']['webrtcAddress'], '127.0.0.1:8889')
+        self.assertEqual(patch['managed']['global']['rtspTransports'], ['tcp'])
+        config.mediamtx.control_mode = 'external'
+        with self.assertRaises(ValueError): lan_media_patch(config)
 
     def test_certificates_persist_reissue_for_new_ip_and_export_only_public_data(self):
         from cryptography import x509

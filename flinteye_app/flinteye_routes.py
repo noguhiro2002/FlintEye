@@ -66,11 +66,12 @@ def install_routes(app, context, *, setup_token: str, desktop: bool):
             if payload.get('network') is not None:
                 owner_local(request)
                 from flinteye_app.orchestrator_models import NetworkAccessConfig
-                from flinteye_app.network_access import ensure_certificates
+                from flinteye_app.network_access import ensure_certificates, lan_media_patch
                 try:
                     network = NetworkAccessConfig.model_validate(payload['network'])
                     if network.enabled: ensure_certificates(data, network.address)
-                    connection = {'network': network.model_dump(), 'api': {'host': '127.0.0.1'}}
+                    connection = {'network': network.model_dump(), 'api': {'host': '127.0.0.1'},
+                                  **(lan_media_patch(context.store.get_effective()) if network.enabled else {})}
                 except (ValueError, OSError) as error:
                     raise HTTPException(422, str(error)) from error
             context.store.patch_runtime({**connection, 'auth': {'provider': 'local', 'viewer_auth_required': True,
@@ -111,7 +112,7 @@ def install_routes(app, context, *, setup_token: str, desktop: bool):
     def change_network(request: Request, payload: dict):
         owner_local(request)
         from flinteye_app.orchestrator_models import NetworkAccessConfig
-        from flinteye_app.network_access import backup_profile, ensure_certificates
+        from flinteye_app.network_access import backup_profile, ensure_certificates, lan_media_patch
         try:
             network = NetworkAccessConfig.model_validate(payload)
             if network.enabled and context.store.get_effective().auth.provider != 'local':
@@ -121,7 +122,8 @@ def install_routes(app, context, *, setup_token: str, desktop: bool):
             if network.enabled:
                 ensure_certificates(data, network.address)
             backup_profile(data)
-            context.store.patch_runtime({'network': network.model_dump(), **({'auth': {'viewer_auth_required': True}} if network.enabled else {})})
+            context.store.patch_runtime({'network': network.model_dump(),
+                **({'auth': {'viewer_auth_required': True}, **lan_media_patch(context.store.get_effective())} if network.enabled else {})})
         except (ValueError, OSError) as error:
             raise HTTPException(422, str(error)) from error
         return {'ok': True, 'restart_required': True}
