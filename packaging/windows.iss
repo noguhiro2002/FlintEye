@@ -32,9 +32,6 @@ SetupIconFile=..\images\icons\flinteye.ico
 Source: "..\dist\FlintEye\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 Source: "stop_windows.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "uninstall_windows.ps1"; DestDir: "{app}"; Flags: ignoreversion
-[Registry]
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\FlintEye.Community_is1"; ValueType: string; ValueName: "UninstallString"; ValueData: """{sys}\WindowsPowerShell\v1.0\powershell.exe"" -NoProfile -ExecutionPolicy Bypass -File ""{app}\uninstall_windows.ps1"" -InstallDir ""{app}"""
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\FlintEye.Community_is1"; ValueType: string; ValueName: "QuietUninstallString"; ValueData: """{sys}\WindowsPowerShell\v1.0\powershell.exe"" -NoProfile -ExecutionPolicy Bypass -File ""{app}\uninstall_windows.ps1"" -InstallDir ""{app}"" -Silent"
 [Icons]
 Name: "{autoprograms}\FlintEye"; Filename: "{app}\FlintEye.exe"
 Name: "{autodesktop}\FlintEye"; Filename: "{app}\FlintEye.exe"
@@ -82,7 +79,21 @@ end;
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   ResultCode: Integer;
+  RemovalKey, RemovalCommand: String;
 begin
+  if CurStep = ssPostInstall then
+  begin
+    { Setup creates its standard removal entry after processing [Registry].
+      Override it only once that entry exists, including silent installs. }
+    RemovalKey := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\FlintEye.Community_is1';
+    RemovalCommand := '"' + ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe') +
+      '" -NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\uninstall_windows.ps1') +
+      '" -InstallDir "' + ExpandConstant('{app}') + '"';
+    if not RegWriteStringValue(HKCU, RemovalKey, 'UninstallString', RemovalCommand) then
+      RaiseException('FlintEye could not register its maintenance launcher.');
+    if not RegWriteStringValue(HKCU, RemovalKey, 'QuietUninstallString', RemovalCommand + ' -Silent') then
+      RaiseException('FlintEye could not register its silent maintenance launcher.');
+  end;
   if (CurStep = ssPostInstall) and (not WizardSilent) then
     if not Exec(ExpandConstant('{app}\FlintEye.exe'), '--setup-only', '', SW_SHOWNORMAL,
                 ewWaitUntilTerminated, ResultCode) then

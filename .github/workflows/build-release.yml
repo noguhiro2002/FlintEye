@@ -22,15 +22,19 @@ on:
         description: Diagnose profile-scoped Windows shutdown without compiling installers
         type: boolean
         default: false
+      windows_installer_check_run:
+        description: Diagnose packaging using the x64 installer artifact of a previous failed build (no release output)
+        type: string
+        default: ''
 permissions:
   contents: read
 concurrency:
-  group: build-release-${{ github.ref }}-${{ inputs.desktop_only }}-${{ inputs.windows_arm_only }}-${{ inputs.windows_only }}-${{ inputs.crypto_only }}-${{ inputs.windows_stop_only }}
+  group: build-release-${{ github.ref }}-${{ inputs.desktop_only }}-${{ inputs.windows_arm_only }}-${{ inputs.windows_only }}-${{ inputs.crypto_only }}-${{ inputs.windows_stop_only }}-${{ inputs.windows_installer_check_run }}
   cancel-in-progress: false
 
 jobs:
   checks:
-    if: ${{ !inputs.crypto_only && !inputs.windows_stop_only }}
+    if: ${{ !inputs.crypto_only && !inputs.windows_stop_only && inputs.windows_installer_check_run == '' }}
     uses: ./.github/workflows/check.yml
 
   windows_crypto:
@@ -50,7 +54,7 @@ jobs:
       - run: python -m unittest discover -s tests -p test_network_access.py -v
 
   windows_stop:
-    if: ${{ !inputs.crypto_only }}
+    if: ${{ !inputs.crypto_only && inputs.windows_installer_check_run == '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -65,8 +69,55 @@ jobs:
         shell: powershell
         run: ./packaging/smoke_windows_stop.ps1
 
+  windows_installer_check:
+    if: inputs.windows_installer_check_run != ''
+    runs-on: windows-2022
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    env:
+      APP_ARCH: amd64
+      SOURCE_RUN: ${{ inputs.windows_installer_check_run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.14.10'
+      - name: Refuse user profiles and validate the diagnostic source
+        shell: pwsh
+        run: |
+          if ($env:SOURCE_RUN -notmatch '^[0-9]{1,16}$') { throw 'Expected a numeric build run ID' }
+          ./packaging/smoke_windows_installer.ps1 -PreflightOnly
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: diagnostic-windows-amd64
+          run-id: ${{ inputs.windows_installer_check_run }}
+          github-token: ${{ github.token }}
+          path: diagnostic-input
+      - name: Repackage the diagnostic app with the current installer and test removal
+        shell: pwsh
+        run: |
+          $version = python packaging/release.py version
+          $old = (Resolve-Path "diagnostic-input/FlintEye-$version-windows-amd64-setup.exe").Path
+          $staging = Join-Path $env:RUNNER_TEMP ('FlintEye packaging input ' + [guid]::NewGuid().ToString('N'))
+          $setup = Start-Process $old -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/NOSTART',('/DIR="'+$staging+'"')) -PassThru -Wait
+          if ($setup.ExitCode -ne 0) { throw 'Diagnostic source installer failed' }
+          New-Item -ItemType Directory -Force dist/FlintEye | Out-Null
+          Copy-Item (Join-Path $staging 'FlintEye.exe') dist/FlintEye/
+          Copy-Item (Join-Path $staging '_internal') dist/FlintEye/ -Recurse
+          $compiler = (Get-Command ISCC.exe -ErrorAction SilentlyContinue).Source
+          if (-not $compiler) { throw 'The diagnostic runner has no Inno Setup compiler' }
+          & $compiler "/DAppVersion=$version" /DAppArch=amd64 packaging/windows.iss
+          if ($LASTEXITCODE -ne 0) { throw 'Diagnostic installer compilation failed' }
+          ./packaging/smoke_windows_installer.ps1
+          Remove-Item -LiteralPath $staging -Recurse -Force
+          Write-Host 'PASS: diagnostic packaging only; no release artifacts were created or uploaded.'
+
   desktop:
-    if: ${{ !inputs.crypto_only && !inputs.windows_stop_only }}
+    if: ${{ !inputs.crypto_only && !inputs.windows_stop_only && inputs.windows_installer_check_run == '' }}
     needs: [checks, windows_stop]
     timeout-minutes: 180
     strategy:
@@ -194,7 +245,7 @@ jobs:
           retention-days: 30
 
   linux:
-    if: ${{ !inputs.crypto_only && !inputs.windows_stop_only && !inputs.desktop_only && !inputs.windows_arm_only && !inputs.windows_only }}
+    if: ${{ !inputs.crypto_only && !inputs.windows_stop_only && inputs.windows_installer_check_run == '' && !inputs.desktop_only && !inputs.windows_arm_only && !inputs.windows_only }}
     needs: checks
     timeout-minutes: 180
     strategy:
@@ -234,7 +285,7 @@ jobs:
           retention-days: 30
 
   containers:
-    if: ${{ !inputs.crypto_only && !inputs.windows_stop_only && !inputs.desktop_only && !inputs.windows_arm_only && !inputs.windows_only }}
+    if: ${{ !inputs.crypto_only && !inputs.windows_stop_only && inputs.windows_installer_check_run == '' && !inputs.desktop_only && !inputs.windows_arm_only && !inputs.windows_only }}
     needs: checks
     timeout-minutes: 120
     strategy:
