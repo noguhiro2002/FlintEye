@@ -97,6 +97,13 @@ def _ensure_certificates(root: Path, address: str, *, rotate_ca=False) -> dict:
         renew = (cert.not_valid_after_utc < now + timedelta(days=30)
                  or ipaddress.ip_address(address) not in sans.get_values_for_type(x509.IPAddress)
                  or cert.issuer != ca.subject)
+        from cryptography.exceptions import InvalidSignature
+        try:
+            ca.public_key().verify(cert.signature, cert.tbs_certificate_bytes, ec.ECDSA(cert.signature_hash_algorithm))
+            existing_key = serialization.load_pem_private_key(key_path.read_bytes(), password=None)
+            renew = renew or cert.public_key().public_numbers() != existing_key.public_key().public_numbers()
+        except (InvalidSignature, ValueError):
+            renew = True  # Recover an interrupted CA/leaf update without weakening verification.
     if renew:
         key = ec.generate_private_key(ec.SECP256R1())
         cert = (x509.CertificateBuilder().subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, 'FlintEye')]))

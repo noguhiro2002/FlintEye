@@ -110,6 +110,12 @@ class NetworkTests(unittest.TestCase):
             if os.name != 'nt': self.assertEqual((root/'tls/ca.key').stat().st_mode & 0o777, 0o600)
             rotated = ensure_certificates(root, '192.168.1.11', rotate_ca=True)
             self.assertNotEqual(rotated['fingerprint'], first['fingerprint'])
+            # Simulate a crash after rotating the CA but before replacing the leaf.
+            (root/'tls/server.crt').write_bytes(cert.public_bytes(__import__('cryptography.hazmat.primitives.serialization', fromlist=['Encoding']).Encoding.PEM))
+            ensure_certificates(root, '192.168.1.11')
+            replacement = x509.load_pem_x509_certificate((root/'tls/server.crt').read_bytes())
+            new_ca = x509.load_pem_x509_certificate((root/'tls/ca.crt').read_bytes())
+            new_ca.public_key().verify(replacement.signature, replacement.tbs_certificate_bytes, ec.ECDSA(replacement.signature_hash_algorithm))
 
     def test_bootstrap_expiry_rate_limits_consumption_and_renewal(self):
         with tempfile.TemporaryDirectory() as directory:
