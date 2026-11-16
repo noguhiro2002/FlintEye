@@ -34,17 +34,25 @@ def msvc_environment() -> dict[str, str]:
         raise ValueError('Unsupported Visual Studio command path')
     # Read the compiler environment in memory. Never log or write its contents:
     # the inherited environment can contain CI credentials.
-    result = subprocess.run([os.environ.get('COMSPEC', 'cmd.exe'), '/d', '/u', '/s', '/c',
-        f'call "{developer}" -no_logo -arch=arm64 -host_arch=arm64 >nul && set'],
-        check=True, capture_output=True, encoding='utf-16-le', errors='replace')
-    env = os.environ.copy()
-    for line in result.stdout.splitlines():
-        key, separator, value = line.partition('=')
-        if separator and key:
-            env[key.upper()] = value
-    if env.get('VSCMD_ARG_TGT_ARCH', '').lower() != 'arm64':
-        raise RuntimeError('Visual Studio did not select the ARM64 target')
-    return env
+    comspec = os.environ.get('COMSPEC', r'C:\Windows\System32\cmd.exe')
+    if any(c in comspec for c in '\r\n"%&|^'):
+        raise ValueError('Unsupported command processor path')
+    for host in ('arm64', 'amd64'):
+        # Pass a complete cmd command line. list2cmdline's backslash-escaped
+        # quotes follow C runtime rules, not cmd.exe's batch-path syntax.
+        command = f'"{comspec}" /d /u /s /c "call "{developer}" -no_logo -arch=arm64 -host_arch={host} >nul && set"'
+        result = subprocess.run(command, check=False, capture_output=True,
+                                encoding='utf-16-le', errors='replace')
+        if result.returncode:
+            continue
+        env = os.environ.copy()
+        for line in result.stdout.splitlines():
+            key, separator, value = line.partition('=')
+            if separator and key:
+                env[key.upper()] = value
+        if env.get('VSCMD_ARG_TGT_ARCH', '').lower() == 'arm64':
+            return env
+    raise RuntimeError('Visual Studio could not initialize an ARM64 compiler environment. Check the installed C++ ARM64 tools and Windows SDK.')
 
 
 def main() -> None:
@@ -109,7 +117,8 @@ def main() -> None:
         'openssl': LOCK['sources']['openssl'], 'configure': configure[2:],
         'cryptography': package[0], 'wheel': wheel.name, 'sha256': digest(wheel),
         'rust': subprocess.check_output(['rustc.exe', '--version'], env=env, text=True).strip(),
-        'linkage': 'static', 'architecture': 'arm64'}, indent=2)+'\n')
+        'linkage': 'static', 'architecture': 'arm64',
+        'msvc_host': env.get('VSCMD_ARG_HOST_ARCH')}, indent=2)+'\n')
     print('Verified native ARM64 cryptography installed; OpenSSL sources/notices retained.')
 
 

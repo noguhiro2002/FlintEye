@@ -14,17 +14,39 @@ on:
         description: Build both Windows installers when diagnosing Windows packaging
         type: boolean
         default: false
+      crypto_only:
+        description: Diagnose Windows ARM64 crypto dependencies without compiling all media tools
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
-  group: build-release-${{ github.ref }}-${{ inputs.desktop_only }}-${{ inputs.windows_arm_only }}-${{ inputs.windows_only }}
+  group: build-release-${{ github.ref }}-${{ inputs.desktop_only }}-${{ inputs.windows_arm_only }}-${{ inputs.windows_only }}-${{ inputs.crypto_only }}
   cancel-in-progress: false
 
 jobs:
   checks:
+    if: ${{ !inputs.crypto_only }}
     uses: ./.github/workflows/check.yml
 
+  windows_crypto:
+    if: inputs.crypto_only
+    runs-on: windows-11-arm
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.14.10'
+          architecture: arm64
+      - run: python packaging/build_windows_crypto.py
+      - run: python -m pip install -c packaging/constraints.txt -r requirements.txt
+      - run: python -m unittest discover -s tests -p test_network_access.py -v
+
   desktop:
+    if: ${{ !inputs.crypto_only }}
     needs: checks
     timeout-minutes: 180
     strategy:
@@ -156,7 +178,7 @@ jobs:
           retention-days: 30
 
   linux:
-    if: ${{ !inputs.desktop_only && !inputs.windows_arm_only && !inputs.windows_only }}
+    if: ${{ !inputs.crypto_only && !inputs.desktop_only && !inputs.windows_arm_only && !inputs.windows_only }}
     needs: checks
     timeout-minutes: 180
     strategy:
@@ -196,7 +218,7 @@ jobs:
           retention-days: 30
 
   containers:
-    if: ${{ !inputs.desktop_only && !inputs.windows_arm_only && !inputs.windows_only }}
+    if: ${{ !inputs.crypto_only && !inputs.desktop_only && !inputs.windows_arm_only && !inputs.windows_only }}
     needs: checks
     timeout-minutes: 120
     strategy:
