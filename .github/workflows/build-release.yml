@@ -18,15 +18,19 @@ on:
         description: Diagnose Windows ARM64 crypto dependencies without compiling all media tools
         type: boolean
         default: false
+      windows_stop_only:
+        description: Diagnose profile-scoped Windows shutdown without compiling installers
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
-  group: build-release-${{ github.ref }}-${{ inputs.desktop_only }}-${{ inputs.windows_arm_only }}-${{ inputs.windows_only }}-${{ inputs.crypto_only }}
+  group: build-release-${{ github.ref }}-${{ inputs.desktop_only }}-${{ inputs.windows_arm_only }}-${{ inputs.windows_only }}-${{ inputs.crypto_only }}-${{ inputs.windows_stop_only }}
   cancel-in-progress: false
 
 jobs:
   checks:
-    if: ${{ !inputs.crypto_only }}
+    if: ${{ !inputs.crypto_only && !inputs.windows_stop_only }}
     uses: ./.github/workflows/check.yml
 
   windows_crypto:
@@ -45,9 +49,25 @@ jobs:
       - run: python -m pip install -c packaging/constraints.txt -r requirements.txt
       - run: python -m unittest discover -s tests -p test_network_access.py -v
 
-  desktop:
+  windows_stop:
     if: ${{ !inputs.crypto_only }}
-    needs: checks
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [windows-2022, windows-11-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Profile-scoped shutdown regression (PowerShell 5.1)
+        shell: powershell
+        run: ./packaging/smoke_windows_stop.ps1
+
+  desktop:
+    if: ${{ !inputs.crypto_only && !inputs.windows_stop_only }}
+    needs: [checks, windows_stop]
     timeout-minutes: 180
     strategy:
       fail-fast: false
@@ -100,10 +120,6 @@ jobs:
           python -m unittest discover -s tests -p test_process_lifetime.py -v
           python -m unittest discover -s tests -p test_macos_lifecycle.py -v
           python -m unittest discover -s tests -p test_network_access.py -v
-      - name: Windows profile-scoped shutdown regression (PowerShell 5.1)
-        if: matrix.os == 'windows'
-        shell: powershell
-        run: ./packaging/smoke_windows_stop.ps1
       - name: macOS build tools
         if: matrix.os == 'macos'
         run: brew install cmake pkg-config nasm ninja
@@ -178,7 +194,7 @@ jobs:
           retention-days: 30
 
   linux:
-    if: ${{ !inputs.crypto_only && !inputs.desktop_only && !inputs.windows_arm_only && !inputs.windows_only }}
+    if: ${{ !inputs.crypto_only && !inputs.windows_stop_only && !inputs.desktop_only && !inputs.windows_arm_only && !inputs.windows_only }}
     needs: checks
     timeout-minutes: 180
     strategy:
@@ -218,7 +234,7 @@ jobs:
           retention-days: 30
 
   containers:
-    if: ${{ !inputs.crypto_only && !inputs.desktop_only && !inputs.windows_arm_only && !inputs.windows_only }}
+    if: ${{ !inputs.crypto_only && !inputs.windows_stop_only && !inputs.desktop_only && !inputs.windows_arm_only && !inputs.windows_only }}
     needs: checks
     timeout-minutes: 120
     strategy:
