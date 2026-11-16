@@ -1,6 +1,6 @@
 # 1.2.0-preview.1 開発およびQAフォローアップ
 
-[English](DEVELOPMENT_1_2_0.md) · [Acceptance](ACCEPTANCE.ja.md) · [LAN access](LAN_ACCESS.ja.md)
+[English](DEVELOPMENT_1_2_0.md) · [Acceptance](ACCEPTANCE.ja.md) · [LAN access](LAN_ACCESS.ja.md) · [公開前の必須実機チェック（1.2.0）](RELEASE_CHECKLIST_1_2_0.ja.md)
 
 **UNDER DEVELOPMENT。公開版 1.1.3-preview.1 に変更はありません。本ソースは、報告されているWindowsでの障害が所有者のマシンで回復したことを主張するものではありません。**
 
@@ -28,7 +28,7 @@
 3. ネイティブMac M1、Windows x64、Linux: Open/Start/Stop/Restart/Quitの実際のトレイ/メニュークリック、ログイン時のスタートアップ、正しいアイコン、および表示される状態テキスト。VoiceOver/Narratorおよびキーボードは、ブラウザ内のパスワード入力と操作に到達可能でなければなりません。3つのOSファミリーすべてで、x64/ARM64のビルドとスモークテストを実行してください。
 4. 物理LAN: Windows Edge/Chrome、Mac Safari/Chrome、Linux Firefox/Chrome、iPhone/iPad Safari、Android Chrome。インストール/削除の信頼性、管理者/ビューアの役割、初期所有権、ライブ/マルチビュー、記録/再生、同一URLでのアプリ/OS再起動。証明書のローテーション/有効期限、IP変更、複数のNIC、ファイアウォールによる拒否、不正な範囲、トークンの有効期限切れ/再利用、レート制限をテストします。実際のデバイス/OS/ブラウザのバージョンを記録してください。
 5. 実際のUSBカメラ: 両方の接続デバイス、同時記録、取り外し/再接続、スリープ/復帰、24時間稼働、ストレージのフル/利用不可状態。急な停止/電源喪失のシミュレーションには使い捨てのテストデータとVMを使用します。完了したファイルが再生可能であり、不完全なファイルが誤って終了処理されていないことを確認してください。
-6. Linux専用ホスト: 実際のapt/rpmインストール、更新と削除、SSH設定/正常終了、およびsystemdの開始/停止。Docker Engine: 公開されたイメージ、永続性、SIGTERMによる記録のフラッシュ、およびプロセスクリーンアップ。Docker Desktop: ホストブラウザ認証と実際のWebRTC再生。VM内部の健全性チェックだけでは不十分です。
+6. Linux専用ホスト：実際のapt/rpmインストール、更新、削除、SSHセットアップ/正常終了、およびsystemdの開始/停止。Docker Engine：公開前に一致するロード済みビルドアーカイブを使用して、永続性、SIGTERMによる記録フラッシュ、プロセス・クリーンアップをテストし、承認された公開後にGHCRプルを確認してください。Docker Desktop：ホストブラウザ認証と実際のWebRTC再生。VM内部の健全性チェックだけでは不十分です。
 
 ## ビルド、レビュー、ロールバック
 

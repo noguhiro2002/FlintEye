@@ -24,6 +24,7 @@
 - [Build packages and publish releases / GHCR](RELEASING.md)
 - [Build and verify a local DMG on an M1 / Apple Silicon Mac](LOCAL_MACOS_BUILD.md)
 - [Final checks on your own computers](ACCEPTANCE.md)
+- [Required device checks before 1.2.0 distribution](RELEASE_CHECKLIST_1_2_0.md)
 - [License and permitted uses](LICENSING.md)
 - [Environment reference](advanced/ENV_OPTIONS.md)
 

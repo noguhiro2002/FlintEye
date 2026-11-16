@@ -4,6 +4,8 @@
 
 [Documentation](README.md) · [Build/release procedure](RELEASING.md)
 
+For current 1.2.0 validation, start with the pinned build and eight gates in the [1.2.0 device checklist](RELEASE_CHECKLIST_1_2_0.md). The default-branch build steps below describe formal distribution builds; do not substitute unrelated main-branch artifacts for this development build.
+
 ## Obtain the exact build
 
 1. Push the reviewed changes to the repository's default branch.
@@ -14,7 +16,7 @@
 
 Build artifacts in this public repository are visible to repository readers; downloading them requires GitHub sign-in. They are unapproved development builds, not published releases.
 Artifacts expire after 30 days; keep a local copy while testing.
-The install scripts in a build point to release URLs that do not work until that version is published. Test the downloaded EXE/DMG/DEB/RPM directly during this phase.
+Default script mode downloads published Release URLs. Before 1.2.0 publication, test both the downloaded EXE/DMG/DEB/RPM and the local-artifact one-command mode described in the [1.2.0 device checklist](RELEASE_CHECKLIST_1_2_0.md). This does not require publishing that version first.
 
 Use a clean account/VM with no Python, Node.js, Git, FFmpeg or MediaMTX installed.
 Use test cameras and a disposable recording folder; capacity/retention checks intentionally remove eligible test recordings.

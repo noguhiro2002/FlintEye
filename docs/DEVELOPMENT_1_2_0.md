@@ -1,6 +1,6 @@
 # 1.2.0-preview.1 development and QA follow-up
 
-[日本語](DEVELOPMENT_1_2_0.ja.md) · [Acceptance](ACCEPTANCE.md) · [LAN access](LAN_ACCESS.md)
+[日本語](DEVELOPMENT_1_2_0.ja.md) · [Acceptance](ACCEPTANCE.md) · [Required device checklist](RELEASE_CHECKLIST_1_2_0.md) · [LAN access](LAN_ACCESS.md)
 
 **UNDER DEVELOPMENT. Public 1.1.3-preview.1 is unchanged. This source is not a claim that the reported Windows failures have recovered on the owner's machine.**
 
@@ -28,7 +28,7 @@ Use dedicated profiles, recording folders and container volumes. Preserve existi
 3. Native Mac M1, Windows x64 and Linux: real tray/menu clicks for Open/Start/Stop/Restart/Quit, login startup, correct icons and visible state text. VoiceOver/Narrator and keyboard must reach password inputs and actions in the browser. Run builds and smoke tests for x64/ARM64 on all three OS families.
 4. Physical LAN: Windows Edge/Chrome, Mac Safari/Chrome, Linux Firefox/Chrome, iPhone and iPad Safari, Android Chrome. Trust installation/removal, admin/viewer roles, initial ownership, live/multiview, record/playback, app/OS restart at the same URL. Test certificate rotation/expiry, IP changes, multiple NICs, firewall refusal, unauthorized ranges, token expiry/reuse and rate limits. Record actual device/OS/browser versions.
 5. Real USB cameras: both attached devices, concurrent recording, unplug/replug, sleep/resume, 24 hours, full/unavailable storage. Abrupt-stop/power-loss simulations use disposable test data and a VM. Verify completed files remain playable and incomplete files are not falsely finalized.
-6. Linux dedicated host: actual apt/rpm install, update and removal, SSH setup/normal exit and systemd start/stop. Docker Engine: published image, persistence, SIGTERM recording flush and process cleanup. Docker Desktop: host-browser authentication and real WebRTC playback; VM-internal health alone is insufficient.
+6. Linux dedicated host: actual apt/rpm install, update and removal, SSH setup/normal exit and systemd start/stop. Docker Engine: use the matching loaded build archive before publication to test persistence, SIGTERM recording flush and process cleanup; verify GHCR pull after approved publication. Docker Desktop: host-browser authentication and real WebRTC playback; VM-internal health alone is insufficient.
 
 ## Build, review and rollback
 
