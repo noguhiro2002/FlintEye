@@ -45,7 +45,7 @@ try:
         file_id = recordings[0]['file_id']
         assert client.get('/api/v1/recordings/files/' + file_id).status_code == 200
         segment = pathlib.Path(recordings[0]['record_root']) / recordings[0]['relative_path']
-        os.utime(segment, (time.time() - 60, time.time() - 60))
+        assert recordings[0]['is_stable'], 'Completion receipt did not finalize the recording'
         prepared = client.post('/api/v1/recordings/files/' + file_id + '/prepare')
         assert prepared.status_code == 200, prepared.text
         assert not pathlib.Path(prepared.json()['cache_file']).is_relative_to(root / 'recordings')

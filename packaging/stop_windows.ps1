@@ -100,6 +100,11 @@ function Report-Stop($mode, $code) {
         }
         $entry
     })
+    if ($code -eq 0 -and -not $Force -and @($finalization | Where-Object { -not $_.verified }).Count -gt 0) {
+        $mode = 'recording-finalization-incomplete'
+        $code = 1
+    }
+    $script:stopExitCode = $code
     $report = @{ mode=$mode; exit_code=$code; events=@($events.ToArray()); media_finalization=$finalization }
     $json = $report | ConvertTo-Json -Depth 5
     $receiptRoot = if ($DataDir) { [IO.Path]::GetFullPath($DataDir) } else { $defaultData }
@@ -193,7 +198,7 @@ try {
         if ($remaining.Count -eq 0) {
             $mode=if ($forced) {'forced'} elseif ($original.Count -eq 0) {'already-stopped'} else {'requested-shutdown-completed'}
             Report-Stop $mode 0
-            exit 0
+            exit $script:stopExitCode
         }
         Start-Sleep -Milliseconds 250
     } while ((Get-Date) -lt $deadline)

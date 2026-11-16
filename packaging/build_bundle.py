@@ -62,6 +62,12 @@ command = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', '--one
            '--add-data', f'{ROOT / "LICENSE"}{sep}.',
            '--add-data', f'{identity}{sep}.',
            '--add-data', f'{ROOT / "THIRD_PARTY_NOTICES.md"}{sep}.',
+           '--add-data', f'{ROOT / "images/icons"}{sep}images/icons',
+           '--add-data', f'{ROOT / "docs/LAN_ACCESS.md"}{sep}docs',
+           '--add-data', f'{ROOT / "docs/LAN_ACCESS.ja.md"}{sep}docs',
+           '--add-data', f'{ROOT / "packaging/firewall_windows.ps1"}{sep}packaging',
+           '--add-data', f'{ROOT / "packaging/elevate_firewall.ps1"}{sep}packaging',
+           '--collect-all', 'cryptography',
            '--add-data', f'{vendor / "licenses"}{sep}licenses',
            '--add-data', f'{vendor / "vendor-lock.json"}{sep}.',
            '--add-data', f'{vendor / "ffmpeg-buildconf.txt"}{sep}.',
@@ -72,10 +78,13 @@ command = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', '--one
 for name in ('uvc_to_rtsp', 'ip_camera_to_rtsp', 'multiview_input_to_rtsp', 'multiview_buffer_to_rtsp', 'multiview_raw_compositor', 'multiview_to_rtsp'):
     command += ['--hidden-import', 'flinteye_app.workers.' + name]
 if sys.platform in ('win32', 'darwin'): command += ['--windowed']
+if sys.platform == 'win32': command += ['--icon', str(ROOT/'images/icons/flinteye.ico')]
+if sys.platform == 'darwin': command += ['--icon', str(ROOT/'images/icons/flinteye.icns')]
 if sys.platform == 'darwin': command += ['--osx-bundle-identifier', 'community.flinteye']
 command += [str(ROOT / 'flinteye.py')]
 subprocess.run(command, cwd=ROOT, check=True)
 if sys.platform.startswith('linux'):
+    shutil.copy2(ROOT/'images/icons/flinteye-symbol.png', ROOT/'dist/FlintEye/flinteye.png')
     from native_sources import collect as collect_native_sources
     collect_native_sources(ROOT / 'dist/FlintEye', vendor / 'system-sources', vendor / 'licenses/runtime/system')
     shutil.copytree(vendor / 'licenses', ROOT / 'dist/FlintEye/_internal/licenses', dirs_exist_ok=True)

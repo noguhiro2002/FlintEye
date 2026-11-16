@@ -22,7 +22,8 @@ def active_listener_port(root: Path, fallback: int) -> int:
 
 
 class InstanceControl:
-    def __init__(self, root: Path, stop, *, port: int | None = None):
+    def __init__(self, root: Path, stop, *, port: int | None = None, renew_setup=None):
+        self.renew_setup = renew_setup
         self.path = root / 'instance-control.json'
         self.request = root / 'stop-request.json'
         self.token = secrets.token_hex(32)
@@ -60,7 +61,12 @@ class InstanceControl:
                 token = data.get('token')
                 if isinstance(token, str) and secrets.compare_digest(token, self.token):
                     self.request.unlink(missing_ok=True)
-                    self.stop()
+                    if data.get('action') == 'renew-setup':
+                        if self.renew_setup is not None: self.renew_setup()
+                        continue
+                    if data.get('action', 'stop') != 'stop': continue
+                    if self.stop() is False:
+                        continue  # A failed normal finalization stays available for retry.
                     return
             except (OSError, ValueError, AttributeError):
                 continue

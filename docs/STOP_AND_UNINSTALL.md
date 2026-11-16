@@ -64,3 +64,8 @@ These fixes require a rebuilt installer. Previously downloaded installers are un
 Automated checks cover owned-process cleanup, an exited worker with a surviving child, Windows job ownership under Wine, and the installed-bundle shutdown request. Wine does not replace a real Windows uninstall test. Verify quit, camera release and restart on each target device; check that unrelated applications remain running and that uninstall retains accounts and recordings.
 
 On macOS, the normal Quit action from the Dock also goes through this shutdown sequence. Force Quit and operating-system termination are separate cases; the normal Quit path is the one to use when testing camera release.
+
+
+## 1.2.0 development removal
+
+Windows Settings uses a maintenance launcher that excludes duplicate removal for one installation, requests normal recording completion, checks locks on uninstall data and then runs the uninstaller. Forced termination is not the default. Failure leaves a diagnostic in the default data folder and offers a safe retry. Another program’s lock must not be removed by deleting unins000.dat or killing unrelated processes. The owner’s reported Error 32 still requires real-machine retest. Product-owned Firewall rules are removed with explicit UAC approval; refusal interrupts removal so residual access is not concealed. Client certificate trust must be removed on each viewing device. Settings and recordings remain by default; explicit deletion targets the default data directory only. [LAN trust removal](LAN_ACCESS.md)

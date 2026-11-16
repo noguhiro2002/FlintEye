@@ -3,6 +3,7 @@ import type { ApiClient } from "../api/client";
 import type { MultiviewStatus, MultiviewViewItem } from "../types";
 import { usePolling } from "../hooks/usePolling";
 import { WebRtcEmbed } from "../components/WebRtcEmbed";
+import { useMediaPaused } from '../hooks/MonitoringContext';
 
 interface MultiviewPageProps {
   api: ApiClient;
@@ -16,13 +17,14 @@ function healthClass(state: string | undefined): string {
   if (state === "degraded" || state === "starting" || state === "buffering" || state === "holding" || state === "reconnecting") {
     return "warn";
   }
-  if (state === "disabled" || state === "excluded") {
+  if (state === "disabled" || state === "excluded" || state === 'Stopped') {
     return "muted";
   }
   return "ng";
 }
 
 export function MultiviewPage({ api, onConfigure }: MultiviewPageProps): JSX.Element {
+  const paused = useMediaPaused();
   const [views, setViews] = useState<MultiviewViewItem[]>([]);
   const [selectedViewId, setSelectedViewId] = useState<string | null>(null);
   const [status, setStatus] = useState<MultiviewStatus>({ updated_at: null, views: [] });
@@ -61,7 +63,7 @@ export function MultiviewPage({ api, onConfigure }: MultiviewPageProps): JSX.Ele
     <div className="page">
       <h2>Multiview</h2>
       {error && <div className="panel-error">{error}</div>}
-      {healthError && <div className="panel-note">{healthError}</div>}
+      {!paused && healthError && <div className="panel-note">{healthError}</div>}
       {initialLoading && <p role="status">Loading multiview outputs…</p>}
       <div className="live-layout">
         <div className="panel-list">
@@ -90,8 +92,8 @@ export function MultiviewPage({ api, onConfigure }: MultiviewPageProps): JSX.Ele
                     : ""}
                 </small>
                 {status.views.find((item) => item.id === view.id) && (
-                  <span className={`status-tag ${healthClass(status.views.find((item) => item.id === view.id)?.state)}`}>
-                    {status.views.find((item) => item.id === view.id)?.state}
+                  <span className={`status-tag ${paused ? 'muted' : healthClass(status.views.find((item) => item.id === view.id)?.state)}`}>
+                    {paused ? 'Stopped' : status.views.find((item) => item.id === view.id)?.state}
                   </span>
                 )}
               </button>
@@ -103,7 +105,7 @@ export function MultiviewPage({ api, onConfigure }: MultiviewPageProps): JSX.Ele
                 const input = selectedStatus?.inputs.find(
                   (item) => item.path === source.path || item.path.endsWith(`/${source.path}`),
                 );
-                const state = input?.state ?? source.health.state;
+                const state = paused ? 'Stopped' : input?.state ?? source.health.state;
                 return (
                 <div key={source.path} className="source-health-item">
                   <div>
@@ -115,7 +117,7 @@ export function MultiviewPage({ api, onConfigure }: MultiviewPageProps): JSX.Ele
                     {input?.buffer_delay_sec != null && (
                       <small>{input.buffered_frames ?? 0} frames / {input.buffer_delay_sec}s delayed</small>
                     )}
-                    {input?.reason && <small>{input.reason}</small>}
+                    {!paused && input?.reason && <small>{input.reason}</small>}
                   </div>
                 </div>
                 );

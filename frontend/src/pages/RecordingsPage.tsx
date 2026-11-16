@@ -14,6 +14,7 @@ import {
 } from "@heroicons/react/24/outline";
 import type { ApiClient } from "../api/client";
 import type { RecordingItem } from "../types";
+import { usePolling } from '../hooks/usePolling';
 
 interface RecordingsPageProps {
   api: ApiClient;
@@ -294,6 +295,10 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedStream, statusFilter, recordedFrom, recordedTo, sortKey, sortDir, pageIndex, pageSize]);
 
+  usePolling(async () => {
+    if (!loading && !playbackOpen && !rangeInvalid && hasLoaded) await load();
+  }, 5000);
+
   useLayoutEffect(() => {
     if (!playbackOpen || !dialogRef.current) return undefined;
     const dialog = dialogRef.current;
@@ -410,6 +415,7 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
       <div className="page-header">
         <div>
           <h2>Recordings</h2>
+          <p className="panel-note">Times shown in {Intl.DateTimeFormat().resolvedOptions().timeZone}. Unknown recording times are not inferred from file modification time.</p>
           <div className="recording-root" title={recordRoot}>
             {recordRoot || "Recording root unavailable"}
           </div>
@@ -557,7 +563,7 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
               <div className="recording-grid">
                 {section.items.map((item) => {
                   const unavailable = Boolean(thumbnailErrors[item.file_id]);
-                  const statusText = item.is_stable ? "Stable" : `Recording · ${formatAgeSec(item.age_sec)}`;
+                  const statusText = item.is_stable ? "Stable" : item.completion_state === 'unavailable' ? 'Completion unavailable' : `Recording / finalizing · ${formatAgeSec(item.age_sec)}`;
                   const downloadFilename = buildDownloadFilename(item);
                   return (
                     <article key={item.file_id} className="recording-card">
@@ -597,6 +603,9 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
                           <span className={item.is_stable ? "status-badge ok" : "status-badge ng"}>{statusText}</span>
                         </div>
                         <div className="recording-card-meta">
+                          <span>Start: {item.started_at != null ? formatDateTime(item.started_at) : 'Unknown'}</span>
+                          <span>End: {item.ended_at != null ? formatDateTime(item.ended_at) : 'Unknown'}</span>
+                          <span>Length: {item.duration_sec != null ? `${item.duration_sec.toFixed(1)} s` : 'Unknown'}</span>
                           <span>
                             <CalendarDaysIcon aria-hidden="true" />
                             <span className="recording-meta-label">Updated</span>

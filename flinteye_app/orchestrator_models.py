@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import ipaddress
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -15,6 +16,30 @@ IpTimestampMode = Literal["auto", "source", "wallclock", "cfr"]
 OnvifMode = Literal["auto", "manual", "disabled"]
 PtzAccess = Literal["admin", "viewer"]
 MultiviewInputMode = Literal["inherit", "primary", "normalized_primary", "onvif", "manual"]
+
+
+class NetworkAccessConfig(BaseModel):
+    """Opt-in LAN access; absent in old profiles means local-only."""
+    enabled: bool = False
+    address: str = ""
+    allowed_subnets: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_lan(self):
+        if self.address:
+            address = ipaddress.IPv4Address(self.address)
+            if not address.is_private or address.is_loopback or address.is_unspecified or address.is_multicast or address.is_link_local:
+                raise ValueError("Choose a private IPv4 address assigned to this server")
+        self.allowed_subnets = [str(ipaddress.IPv4Network(item, strict=False)) for item in self.allowed_subnets]
+        if len(self.allowed_subnets) > 16:
+            raise ValueError("Use at most 16 LAN source ranges")
+        for item in self.allowed_subnets:
+            network = ipaddress.IPv4Network(item)
+            if not network.is_private or network.prefixlen < 8:
+                raise ValueError("Source ranges must be private IPv4 networks")
+        if self.enabled and (not self.address or not self.allowed_subnets):
+            raise ValueError("LAN access requires a server address and permitted source ranges")
+        return self
 
 
 class ApiConfig(BaseModel):
@@ -77,6 +102,7 @@ class UiConfig(BaseModel):
 
 
 class MediamtxDirectConfig(BaseModel):
+    source: Literal['auto', 'bundled', 'external'] = 'auto'
     command: list[str] = Field(default_factory=list)
     working_dir: str | None = None
 
@@ -696,6 +722,7 @@ class DeviceDiscoveryConfig(BaseModel):
 
 
 class RuntimeConfig(BaseModel):
+    network: NetworkAccessConfig = Field(default_factory=NetworkAccessConfig)
     api: ApiConfig = Field(default_factory=ApiConfig)
     auth: AuthConfig = Field(default_factory=AuthConfig)
     ui: UiConfig = Field(default_factory=UiConfig)
@@ -706,3 +733,9 @@ class RuntimeConfig(BaseModel):
     multiview: MultiviewConfig = Field(default_factory=MultiviewConfig)
     recording: RecordingConfig = Field(default_factory=RecordingConfig)
     device_discovery: DeviceDiscoveryConfig = Field(default_factory=DeviceDiscoveryConfig)
+
+    @model_validator(mode='after')
+    def require_lan_authentication(self):
+        if self.network.enabled and (self.auth.provider != 'local' or not self.auth.viewer_auth_required):
+            raise ValueError('Built-in LAN access requires local administrator and viewer authentication')
+        return self

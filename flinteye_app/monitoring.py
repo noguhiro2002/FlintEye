@@ -90,6 +90,7 @@ class MonitoringController:
         self.phase = 'starting' if self.desired else 'stopped'
         self.error = self.preference_error
         self.busy = False
+        self.active_action = None
         self.quitting = False
         self.started = False
         self.tracking_configured = False
@@ -158,6 +159,7 @@ class MonitoringController:
                 if action in {'start', 'restart'} and self.phase == 'finalizing':
                     raise MonitoringConflict('Finish or retry the pending recording stop first')
                 self.busy = True
+                self.active_action = action
                 self.error = ''
                 if action in {'start', 'stop'}:
                     previous = self.desired
@@ -211,6 +213,7 @@ class MonitoringController:
             return {'ok': False, 'message': self.error}
         finally:
             self.busy = False
+            self.active_action = None
             self.operation.release()
 
     def _stop(self, *, force=False) -> dict:
@@ -285,6 +288,8 @@ class MonitoringController:
         self.quitting = True
         if not self.started:
             self.context.supervisor.set_monitoring_enabled(False)
+            recording_events.write_stop_result(self.root, ok=True, pending=0, forced=False,
+                                              reason='Monitoring was not started; no recording publishers were launched.')
             self.done.set()
             if self.thread:
                 self.thread.join(timeout=2)
@@ -356,10 +361,12 @@ class MonitoringController:
             recording = sum(camera.path in active and item['receiving'] for camera, item in zip(targets, cameras))
             counts = {'configured': configured, 'targets': len(targets), 'receiving': receiving, 'recording': recording}
             color, state, label, reason = 'green', 'running', 'Running', 'Receiving camera video'
-            if setup or not targets:
-                color, state, label, reason = 'gray', 'idle', 'Setup needed' if setup else 'No cameras', 'Complete setup and add a camera to begin.'
+            if setup:
+                color, state, label, reason = 'gray', 'idle', 'Setup needed', 'Complete setup and add a camera to begin.'
             elif not self.desired:
-                color, state, label, reason = 'red', 'stopped', 'Stopped', 'Monitoring is stopped. Settings remain available.'
+                color, state, label, reason = 'gray', 'stopped', 'Stopped', 'Monitoring is stopped. Settings remain available.'
+            elif not targets:
+                color, state, label, reason = 'gray', 'idle', 'No cameras', 'Monitoring is enabled; add a camera to begin.'
             elif media_running is False:
                 color, state, label, reason = 'red', 'error', 'Media server unavailable', 'Open logs and restart monitoring.'
             elif not available:
@@ -382,6 +389,7 @@ class MonitoringController:
             result = copy.deepcopy(self._snapshot) or {
                 'state': 'unknown', 'color': 'amber', 'label': 'Checking status', 'message': '',
                 'counts': {'configured': 0, 'targets': 0, 'receiving': 0, 'recording': 0}, 'cameras': []}
+            result['active_action'] = self.active_action
             if self.last_poll and time.monotonic() - self.last_poll > 6 and self.desired:
                 result.update(state='unknown', color='amber', label='Status unavailable', message='Waiting for a fresh health check.')
             if self.busy or self.phase == 'finalizing':
@@ -393,8 +401,8 @@ class MonitoringController:
                     camera.update(receiving=False, reason='Stopped')
                 if self.error:
                     result.update(state='warning', color='amber', label='Action needed', message=self.error)
-                elif result['counts']['targets']:
-                    result.update(state='stopped', color='red', label='Stopped', message='Monitoring is stopped. Settings remain available.')
+                else:
+                    result.update(state='stopped', color='gray', label='Stopped', message='Monitoring is stopped. Settings remain available.' + (' No cameras are configured.' if not result['counts']['configured'] else ''))
             result.update(desired_running=self.desired, busy=self.busy, phase=self.phase,
                           resume_on_startup=self.resume_on_startup)
             return result

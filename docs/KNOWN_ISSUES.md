@@ -38,3 +38,8 @@ Report new reproducible problems through [Issues](https://github.com/noguhiro200
 ## Monitoring controls in 1.1.3
 
 The tray and WebApp share monitoring state. See [monitoring controls](MONITORING.md) and the [acceptance checklist](ACCEPTANCE.md). Native menu clicks, sleep/resume, physical USB reconnects and 24-hour operation must be recorded separately for each target computer. Automated process tests do not certify those behaviors. Timeline, bulk export, diagnostic ZIP and a fully Japanese UI remain deferred.
+
+
+## 1.2.0 source follow-up
+
+The [rev11 follow-up matrix](DEVELOPMENT_1_2_0.md) describes this source’s next development changes and pending acceptance. It supersedes the older statement that no diagnostic ZIP exists: the new export is allowlisted and excludes raw logs/configuration, camera URLs, footage and secrets. The Web UI remains English. Signing/notarization, a recording timeline and bulk export remain deferred. The owner’s WinError 2 and Error 32 are not declared recovered by source changes. Built-in LAN access and Docker Desktop require the new build and dedicated real-device acceptance; public 1.1.3 packages do not acquire these changes automatically.

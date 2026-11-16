@@ -4,6 +4,7 @@ import type { ViewerCameraItem } from "../types";
 import { usePolling } from "../hooks/usePolling";
 import { WebRtcEmbed } from "../components/WebRtcEmbed";
 import { PtzControls } from "../components/PtzControls";
+import { useMediaPaused } from '../hooks/MonitoringContext';
 
 interface LiveViewPageProps {
   api: ApiClient;
@@ -47,6 +48,9 @@ function healthClass(state: string | undefined): string {
 }
 
 export function LiveViewPage({ api, canManage = false, authRole = null, onConfigure }: LiveViewPageProps): JSX.Element {
+  const paused = useMediaPaused();
+  const pausedRef = useRef(paused); pausedRef.current = paused;
+  const fetchingSnapshots = useRef(false);
   const [cameras, setCameras] = useState<ViewerCameraItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [snapshotMap, setSnapshotMap] = useState<Record<string, string>>({});
@@ -100,6 +104,8 @@ export function LiveViewPage({ api, canManage = false, authRole = null, onConfig
   );
 
   const refreshSnapshots = async (): Promise<void> => {
+    if (pausedRef.current || fetchingSnapshots.current) return;
+    fetchingSnapshots.current = true;
     const request = ++snapshotRequest.current;
     if (cameras.length === 0) {
       Object.values(snapshotMapRef.current).forEach(url => URL.revokeObjectURL(url));
@@ -108,6 +114,7 @@ export function LiveViewPage({ api, canManage = false, authRole = null, onConfig
       setSnapshotUpdatedAtMap({});
       setSnapshotErrorMap({});
       setLoadingSnapshots(false);
+      fetchingSnapshots.current = false;
       return;
     }
     setLoadingSnapshots(true);
@@ -125,7 +132,7 @@ export function LiveViewPage({ api, canManage = false, authRole = null, onConfig
           }
         }),
       );
-      if (request !== snapshotRequest.current) {
+      if (request !== snapshotRequest.current || pausedRef.current) {
         Object.values(nextSuccessful).forEach(url => URL.revokeObjectURL(url));
         return;
       }
@@ -161,9 +168,16 @@ export function LiveViewPage({ api, canManage = false, authRole = null, onConfig
       });
       setSnapshotErrorMap(nextErrors);
     } finally {
+      fetchingSnapshots.current = false;
       if (request === snapshotRequest.current) setLoadingSnapshots(false);
     }
   };
+
+  useEffect(() => {
+    snapshotRequest.current++;
+    if (paused) setLoadingSnapshots(false);
+    else void refreshSnapshots();
+  }, [paused]);
 
   useEffect(() => {
     void refreshSnapshots();
@@ -223,7 +237,7 @@ export function LiveViewPage({ api, canManage = false, authRole = null, onConfig
         <h2>Live View</h2>
         <div className="button-row">
           <div className="panel-note">Auto refresh: {(thumbnailRefreshIntervalMs / 1000).toFixed(1)}s</div>
-          <button type="button" onClick={() => void refreshSnapshots()} disabled={loadingSnapshots || cameras.length === 0}>
+          <button type="button" onClick={() => void refreshSnapshots()} disabled={paused || loadingSnapshots || cameras.length === 0}>
             {loadingSnapshots ? "Refreshing..." : "Refresh Thumbnails"}
           </button>
         </div>
@@ -251,7 +265,7 @@ export function LiveViewPage({ api, canManage = false, authRole = null, onConfig
                 <button type="button" className="thumb-select" aria-label={`View ${camera.label || camera.id}`} aria-pressed={selected} onClick={() => setSelectedId(camera.id)}>
                 <div className="thumb-title-row">
                   <span className="thumb-title">{camera.label || camera.id}</span>
-                  <span className={`status-tag ${healthClass(health?.state)}`}>{healthLabel(health?.state)}</span>
+                  <span className={`status-tag ${paused ? 'muted' : healthClass(health?.state)}`}>{paused ? 'Stopped' : healthLabel(health?.state)}</span>
                 </div>
                 {snapshotMap[camera.id] ? (
                   <div className="thumb-image-wrap">
@@ -260,12 +274,12 @@ export function LiveViewPage({ api, canManage = false, authRole = null, onConfig
                   </div>
                 ) : (
                   <div className="thumb-empty">
-                    <div>No snapshot</div>
-                    {snapshotErrorMap[camera.id] ? <small>{snapshotErrorMap[camera.id]}</small> : null}
+                    <div>{paused ? 'Monitoring stopped' : 'No snapshot'}</div>
+                    {!paused && snapshotErrorMap[camera.id] ? <small>{snapshotErrorMap[camera.id]}</small> : null}
                   </div>
                 )}
                 <div className="thumb-meta">
-                  {health?.reason && health.reason !== "OK" ? <small>{health.reason}</small> : null}
+                  {!paused && health?.reason && health.reason !== "OK" ? <small>{health.reason}</small> : null}
                   {hasStaleSnapshot && updatedAt ? (
                     <small>Last snapshot: {new Date(updatedAt).toLocaleTimeString()}</small>
                   ) : null}
@@ -294,7 +308,7 @@ export function LiveViewPage({ api, canManage = false, authRole = null, onConfig
             url={selectedCamera?.addresses.webrtc_url ?? null}
             title={selectedCamera ? `Camera: ${selectedCamera.label || selectedCamera.id}` : "Camera"}
           />}
-          {selectedCamera && canControlSelectedPtz ? (
+          {selectedCamera && canControlSelectedPtz && !paused ? (
             <PtzControls key={selectedCamera.id} api={api} camera={selectedCamera} isAdmin={canManage} />
           ) : null}
         </div>

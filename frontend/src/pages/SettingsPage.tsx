@@ -1,4 +1,5 @@
 import { StartupSettings } from "../components/StartupSettings";
+import { NetworkAccess } from '../components/NetworkAccess';
 import { useConfirmChanges } from "../components/ConfirmChanges";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -634,6 +635,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
   const [notice, setNotice] = useState("");
   const [installation, setInstallation] = useState<{ folder_picker: boolean } | null>(null);
   const [viewerPassword, setViewerPassword] = useState("");
+  const [networkDirty, setNetworkDirty] = useState(false);
   const [updateMessage, setUpdateMessage] = useState("");
   const [listener, setListener] = useState<{ host?: string; port?: number; source?: string }>({});
 
@@ -788,13 +790,13 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
   const jsonDirty = Boolean(savedJsonText) && runtimeJsonText !== savedJsonText;
   const hasUnsavedChanges = formDirty || jsonDirty;
   useEffect(() => {
-    onDirtyChange?.(hasUnsavedChanges);
+    onDirtyChange?.(hasUnsavedChanges || networkDirty);
     const beforeUnload = (event: BeforeUnloadEvent) => {
-      if (hasUnsavedChanges) { event.preventDefault(); event.returnValue = ""; }
+      if (hasUnsavedChanges || networkDirty) { event.preventDefault(); event.returnValue = ""; }
     };
     window.addEventListener("beforeunload", beforeUnload);
     return () => window.removeEventListener("beforeunload", beforeUnload);
-  }, [hasUnsavedChanges, onDirtyChange]);
+  }, [hasUnsavedChanges, networkDirty, onDirtyChange]);
   useEffect(() => () => { onDirtyChange?.(false); loadRequest.current++; probeRequests.current.clear(); }, [onDirtyChange]);
   const confirmDiscard = async (): Promise<boolean> => !hasUnsavedChanges || await ask("Discard all unsaved settings, including Advanced JSON edits, and reload the saved configuration?");
   const requireSavedDraft = (): boolean => {
@@ -1945,6 +1947,11 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
           )}
 
           <div className="section settings-section settings-section-runtime">
+            <NetworkAccess api={api} blocked={hasUnsavedChanges} onDirtyChange={setNetworkDirty} onSaved={() => loadAll()} />
+            <div className="button-row">
+              <a href={api.buildUrl('/api/v1/diagnostics')} download="FlintEye-diagnostics.zip">Save diagnostics (no raw logs or secrets)</a>
+              {installation && <button type="button" disabled={loading || hasUnsavedChanges} onClick={() => { if (window.confirm('Use the MediaMTX bundled with this installation? Custom media commands will be replaced; recordings and accounts are preserved.')) void onInstallationAction(async () => {await api.useBundledMedia(); setNotice('Saved bundled MediaMTX. Use Start or Restart on Dashboard to apply it.');}); }}>Repair media command using bundled MediaMTX…</button>}
+            </div>
             <h3>Core Runtime</h3>
             <div className="form-grid">
               <div className="runtime-subsection-title form-span-3">
@@ -2050,16 +2057,17 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
                 <div className="form-field form-span-3">
                   <label htmlFor="viewer-password">New viewer password</label>
                   <div className="settings-field-actions">
-                    <input id="viewer-password" type="password" autoComplete="new-password" minLength={12} maxLength={1024}
+                    <input id="viewer-password" type="password" autoComplete="new-password"
+                      aria-describedby="viewer-password-help" aria-invalid={Boolean(viewerPassword && (Array.from(viewerPassword).length < 12 || Array.from(viewerPassword).length > 1024))}
                       value={viewerPassword} disabled={loading} onChange={e => setViewerPassword(e.target.value)} />
-                    <button type="button" disabled={loading || hasUnsavedChanges || viewerPassword.length < 12 || viewerPassword.length > 1024}
+                    <button type="button" disabled={loading || hasUnsavedChanges || Array.from(viewerPassword).length < 12 || Array.from(viewerPassword).length > 1024}
                       onClick={() => void onInstallationAction(async () => {
                         await api.setViewerPassword(viewerPassword);
                         setViewerPassword("");
                         onUiConfigChanged?.();
                       })}>Set viewer password and sign in again</button>
                   </div>
-                  <small className="field-help">Use 12–1024 characters. Changing this password signs everyone out.</small>
+                  <small id="viewer-password-help" className="field-help" role="status">{viewerPassword && Array.from(viewerPassword).length < 12 ? `${12 - Array.from(viewerPassword).length} more characters required. ` : Array.from(viewerPassword).length > 1024 ? 'Password exceeds 1024 characters. ' : ''}Use 12–1024 characters. Changing this password signs everyone out.</small>
                   {hasUnsavedChanges && <small className="field-help">Save or discard your other changes before changing the password.</small>}
                 </div>
               )}

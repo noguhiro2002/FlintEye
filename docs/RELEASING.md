@@ -139,3 +139,8 @@ Existing tags, installer contents and versioned image tags are never overwritten
 Preview desktop builds check published previews and stable releases using their full version; stable builds ignore previews. An update link points to the exact tag. Source snapshots are updated from Git. Users install manually after stopping monitoring.
 Docker administrators change the image version and run `docker compose pull` followed by `docker compose up -d`.
 Retain previous release artifacts and document any configuration migration/rollback requirements.
+
+
+## 1.2.0 publication gate
+
+The 1.2.0 development cycle adds a stricter P1 physical-device gate. Keep `packaging/acceptance-1.2.0.json` pending until every listed case is actually passed, then record the exact tested application commit and evidence links. The publishing guard and publishing entry reject pending, failed or mismatched evidence before uploading images. Builds and test artifacts are allowed while publication is blocked. An evidence-only follow-up commit can update this record while preserving the tested application. Package both Compose routes, bilingual LAN guides, current source/notices and checksums. Keep 1.1.3 assets immutable and do not create a stable release or image latest tag. [Full 1.2.0 acceptance](DEVELOPMENT_1_2_0.md)

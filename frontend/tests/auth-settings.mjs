@@ -3,7 +3,7 @@ import { mkdirSync } from 'node:fs';
 process.chdir(fileURLToPath(new URL('../..', import.meta.url)));
 mkdirSync('dist/terra-webapp-fixes', { recursive: true });
 import assert from 'node:assert/strict';
-import { chromium } from 'playwright';
+import { chromium } from './browser.mjs';
 import { readFile } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
 const root = process.cwd();
@@ -36,7 +36,7 @@ async function context(scenario, width = 1440, height = 900, colorScheme = 'ligh
         calls.push([req.method(), u.pathname, req.postData()]);
         switch (u.pathname) {
             case '/api/v1/status/monitoring':
-                v = { state: 'stopped', color: 'gray', label: 'Monitoring stopped', message: 'Monitoring is stopped.', desired_running: false, busy: false, phase: 'stopped', resume_on_startup: false, counts: { configured: 0, targets: 0, receiving: 0, recording: 0 }, cameras: [] };
+                v = { state: 'running', color: 'green', label: 'Running', message: 'Receiving video', desired_running: true, busy: false, phase: 'running', resume_on_startup: false, counts: { configured: 0, targets: 0, receiving: 0, recording: 0 }, cameras: [] };
                 break;
             case '/api/v1/monitoring/preferences':
                 v = { resume_on_startup: false };

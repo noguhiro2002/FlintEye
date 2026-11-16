@@ -1,0 +1,15 @@
+{
+  "version": "1.2.0",
+  "commit": null,
+  "cases": {
+    "windows-owner-startup": {"status": "pending", "evidence": "WinError 2 requires owner retest"},
+    "windows-owner-removal": {"status": "pending", "evidence": "Error 32 requires owner retest"},
+    "native-menus-and-accessibility": {"status": "pending", "evidence": "Windows, Mac and Linux native controls"},
+    "lan-pc": {"status": "pending", "evidence": "Separate PCs, trust, roles, video and reboot"},
+    "lan-mobile": {"status": "pending", "evidence": "iPhone, iPad and Android"},
+    "physical-cameras-and-long-run": {"status": "pending", "evidence": "Two USB cameras, reconnect, sleep and 24 hours"},
+    "linux-native-and-docker": {"status": "pending", "evidence": "OS install/update/remove and Docker lifecycle"},
+    "docker-desktop-host-video": {"status": "pending", "evidence": "Host browser and WebRTC"},
+    "all-native-architectures": {"status": "pending", "evidence": "Windows, Mac, Linux x64 and ARM64 builds and smoke"}
+  }
+}

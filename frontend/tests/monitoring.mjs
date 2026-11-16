@@ -3,7 +3,7 @@ import { mkdirSync } from 'node:fs';
 process.chdir(fileURLToPath(new URL('../..', import.meta.url)));
 mkdirSync('dist/terra-webapp-fixes', { recursive: true });
 import assert from 'node:assert/strict';
-import { chromium } from 'playwright';
+import { chromium } from './browser.mjs';
 import { readFile } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
 const root = process.cwd();
@@ -136,9 +136,17 @@ try {
   assert.equal(await panel.getByRole('button', {name: 'Start monitoring', exact: true}).isEnabled(), true);
   assert.equal(await panel.getByRole('button', {name: 'Stop monitoring'}).isDisabled(), true);
   assert.equal(await panel.getByRole('button', {name: 'Restart monitoring'}).isDisabled(), true);
+  for (const pageName of ['Live View', 'Multiview', 'Information', 'Recordings', 'Settings']) {
+    await p.locator('.sidebar').getByRole('button', {name: pageName, exact: true}).click();
+    assert.equal(await p.getByRole('region', {name: 'Monitoring status'}).count(), 0, 'Dashboard panel leaked into '+pageName);
+    if (pageName === 'Live View' || pageName === 'Multiview') {
+      assert.equal(await p.locator('iframe.webrtc-frame').count(), 0, 'Stopped monitoring still opens WebRTC');
+    }
+  }
+  await p.locator('.sidebar').getByRole('button', {name:'Dashboard', exact:true}).click();
   delayControl = true;
   await panel.getByRole('button', {name: 'Start monitoring', exact: true}).click();
-  await panel.getByText(/Please wait/).waitFor();
+  await panel.getByText(/Starting monitoring/).waitFor();
   assert.equal(await panel.getByRole('button', {name: 'Start monitoring', exact: true}).isDisabled(), true);
   await p.waitForTimeout(1000); delayControl = false;
   failControl = true;

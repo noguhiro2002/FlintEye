@@ -9,6 +9,7 @@ import subprocess
 from flinteye_app.process_lifetime import run_background
 from flinteye_app.subprocess_utils import background_process_options
 import sys
+import time
 from urllib.parse import urlsplit
 
 import httpx
@@ -23,9 +24,26 @@ from flinteye_app.flinteye_storage import suggested_quota
 def install_routes(app, context, *, setup_token: str, desktop: bool):
     from flinteye_app.orchestrator_api import require_admin, require_viewer
     data = Path(context.store.runtime_file).resolve().parent
+    from flinteye_app.network_access import Bootstrap, permitted_source
+    bootstrap = Bootstrap(data, setup_token)
+    context.bootstrap = bootstrap
+    # Snapshot the effective listener policy. Saved changes apply on restart.
+    active_network = context.store.get_effective().network.model_copy(deep=True)
+
+    def owner_local(request):
+        if not request.client or request.client.host not in {'127.0.0.1', '::1'}:
+            raise HTTPException(403, 'Change connection settings on the server itself')
 
     @app.middleware('http')
     async def same_origin_mutations(request: Request, call_next):
+        if active_network.enabled:
+            peer = request.client.host if request.client else ''
+            if not permitted_source(peer, active_network.allowed_subnets):
+                return Response('This device is outside the permitted LAN ranges', status_code=403)
+            if peer not in {'127.0.0.1', '::1'} and request.url.scheme != 'https':
+                return Response('Use the HTTPS address shown on the server', status_code=403)
+            if request.url.hostname not in {'127.0.0.1', 'localhost', '::1', active_network.address}:
+                return Response('Unexpected server address', status_code=400)
         # Cookies authenticate media requests too. Reject cross-site form/fetch mutations.
         if request.method not in {'GET', 'HEAD', 'OPTIONS'}:
             origin = request.headers.get('origin')
@@ -40,19 +58,113 @@ def install_routes(app, context, *, setup_token: str, desktop: bool):
             if local_auth_is_configured(context.store.get_effective().auth):
                 raise HTTPException(409, 'Setup is already complete')
             supplied = payload.get('token', '')
-            if not setup_token or not isinstance(supplied, str) or not hmac.compare_digest(supplied, setup_token):
-                raise HTTPException(403, 'Enter the setup token from the server')
+            bootstrap.verify(supplied, request.client.host if request.client else 'unknown')
             password = payload.get('password', '')
             if not isinstance(password, str) or not 12 <= len(password) <= 1024:
                 raise HTTPException(422, 'Use a password with 12–1024 characters')
-            context.store.patch_runtime({'auth': {'provider': 'local', 'viewer_auth_required': True,
+            connection = {}
+            if payload.get('network') is not None:
+                owner_local(request)
+                from flinteye_app.orchestrator_models import NetworkAccessConfig
+                from flinteye_app.network_access import ensure_certificates
+                try:
+                    network = NetworkAccessConfig.model_validate(payload['network'])
+                    if network.enabled: ensure_certificates(data, network.address)
+                    connection = {'network': network.model_dump(), 'api': {'host': '127.0.0.1'}}
+                except (ValueError, OSError) as error:
+                    raise HTTPException(422, str(error)) from error
+            context.store.patch_runtime({**connection, 'auth': {'provider': 'local', 'viewer_auth_required': True,
                 'session_secret': generate_session_secret(),
                 'local': {'admin': {'username': 'admin', 'password_hash': hash_password(password)}}}})
             setup_token = ''
-            (data / 'setup-token').unlink(missing_ok=True)
+            bootstrap.consume()
             from flinteye_app.orchestrator_api import _on_startup
             _on_startup()
         return {'ok': True}
+
+    @app.post('/api/v1/setup/renew')
+    def renew_setup(request: Request):
+        owner_local(request)
+        if local_auth_is_configured(context.store.get_effective().auth):
+            raise HTTPException(409, 'Setup is already complete')
+        # Requires existing token proof; expired tokens can only be renewed via native CLI.
+        raise HTTPException(403, 'Use Renew setup token in the server control window, or restart the server')
+
+    @app.get('/api/v1/network', dependencies=[Depends(require_admin)])
+    def network_status(request: Request):
+        owner_local(request)
+        config = context.store.get_effective()
+        listeners = context.listener or {}
+        metadata = {}
+        if active_network.enabled and (data/'tls/ca.crt').is_file():
+            from cryptography import x509
+            from cryptography.hazmat.primitives import hashes
+            ca = x509.load_pem_x509_certificate((data/'tls/ca.crt').read_bytes())
+            metadata = {'fingerprint': ca.fingerprint(hashes.SHA256()).hex(), 'ca_expires': ca.not_valid_after_utc.isoformat()}
+        group = getattr(context, 'listener_group', None)
+        return {'saved': config.network.model_dump(), 'active': active_network.model_dump(),
+                'restart_required': config.network != active_network,
+                'local_url': listeners.get('url'), 'lan_url': listeners.get('lan_url'),
+                'error': group.lan_error if group else '', **metadata}
+
+    @app.put('/api/v1/network', dependencies=[Depends(require_admin)])
+    def change_network(request: Request, payload: dict):
+        owner_local(request)
+        from flinteye_app.orchestrator_models import NetworkAccessConfig
+        from flinteye_app.network_access import backup_profile, ensure_certificates
+        try:
+            network = NetworkAccessConfig.model_validate(payload)
+            if network.enabled and context.store.get_effective().auth.provider != 'local':
+                raise ValueError('Built-in LAN access requires local administrator and viewer authentication')
+            if network.enabled and context.store.get_effective().api.host != '127.0.0.1':
+                raise ValueError('Set API host to 127.0.0.1 before enabling built-in LAN access')
+            if network.enabled:
+                ensure_certificates(data, network.address)
+            backup_profile(data)
+            context.store.patch_runtime({'network': network.model_dump(), **({'auth': {'viewer_auth_required': True}} if network.enabled else {})})
+        except (ValueError, OSError) as error:
+            raise HTTPException(422, str(error)) from error
+        return {'ok': True, 'restart_required': True}
+
+    @app.post('/api/v1/network/guide', dependencies=[Depends(require_admin)])
+    def connection_guide(request: Request):
+        owner_local(request)
+        from flinteye_app.network_access import export_guide
+        config = context.store.get_effective()
+        if not config.network.enabled:
+            raise HTTPException(409, 'Enable LAN access first')
+        folder = export_guide(data, config.network.address, config.api.port)
+        return {'path': str(folder), 'message': 'Public certificate and instructions saved. Transfer them to your viewing devices and compare the fingerprint on this server.'}
+
+    @app.post('/api/v1/network/renew-trust', dependencies=[Depends(require_admin)])
+    def renew_trust(request: Request, payload: dict):
+        owner_local(request)
+        if payload != {'confirm': True}:
+            raise HTTPException(422, 'Confirm that every viewing device must trust the new certificate')
+        config = context.store.get_effective()
+        if not config.network.enabled:
+            raise HTTPException(409, 'Enable LAN access first')
+        from flinteye_app.network_access import ensure_certificates, export_guide
+        ensure_certificates(data, config.network.address, rotate_ca=True)
+        export_guide(data, config.network.address, config.api.port)
+        return {'ok': True, 'restart_required': True, 'message': 'Install the new trust certificate on every viewing device'}
+
+    @app.post('/api/v1/network/firewall', dependencies=[Depends(require_admin)])
+    def firewall(request: Request, payload: dict):
+        owner_local(request)
+        if payload.get('action') not in {'apply', 'remove'} or set(payload) != {'action'}:
+            raise HTTPException(422, 'Choose apply or remove')
+        from flinteye_app.windows_maintenance import manage_firewall
+        try:
+            return manage_firewall(data, context.store.get_effective(), payload['action'])
+        except (OSError, ValueError, subprocess.SubprocessError) as error:
+            raise HTTPException(409, 'Firewall change was not completed. Local access is still available. Check server diagnostics.') from error
+
+    @app.get('/api/v1/diagnostics', dependencies=[Depends(require_admin)])
+    def diagnostics():
+        from flinteye_app.diagnostics import diagnostic_archive
+        return Response(diagnostic_archive(context), media_type='application/zip',
+                        headers={'Content-Disposition': 'attachment; filename="FlintEye-diagnostics.zip"', 'Cache-Control': 'no-store'})
 
     @app.post('/api/v1/accounts/viewer', dependencies=[Depends(require_admin)])
     def viewer_password(payload: dict):
@@ -62,6 +174,21 @@ def install_routes(app, context, *, setup_token: str, desktop: bool):
         context.store.patch_runtime({'auth': {'local': {'viewer': {'username': 'viewer', 'password_hash': hash_password(password)}},
                                             'session_secret': generate_session_secret()}})
         return {'ok': True, 'login_required': True}
+
+    @app.post('/api/v1/media/use-bundled', dependencies=[Depends(require_admin)])
+    def use_bundled_media(request: Request):
+        owner_local(request)
+        from flinteye_app.network_access import private_write, backup_profile
+        binary = application_dir()/'bin'/('mediamtx.exe' if sys.platform == 'win32' else 'mediamtx')
+        if not binary.is_file():
+            raise HTTPException(409, 'Bundled MediaMTX executable is missing. Reinstall the complete package.')
+        backup_profile(data)
+        configuration = data/'mediamtx.yml'
+        if not configuration.exists(): private_write(configuration, b'paths:\n  all_others: {}\n')
+        context.store.patch_runtime({'mediamtx': {'control_mode': 'direct',
+            'direct': {'source': 'bundled', 'command': [str(binary), str(configuration)], 'working_dir': str(data)},
+            'managed': {'enabled': True}}})
+        return {'ok': True, 'message': 'Saved bundled MediaMTX. Use Start or Restart on Dashboard to apply it.'}
 
     update_cache = {}
 

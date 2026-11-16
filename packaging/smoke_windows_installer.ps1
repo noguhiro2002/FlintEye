@@ -74,7 +74,10 @@ try {
     if($customResult.mode -ne 'requested-shutdown-completed') { throw 'Custom profile required force.' }
     $marker = Join-Path $testDataRoot 'keep-after-uninstall.txt'
     Set-Content -LiteralPath $marker -Value 'Synthetic recording/config retention marker'
-    $uninstall = Start-Process -FilePath (Join-Path $installDir 'unins000.exe') -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -PassThru
+    $registration = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\FlintEye.Community_is1'
+    if ($registration.UninstallString -notlike '*uninstall_windows.ps1*') { throw 'Windows Settings does not point to the maintenance launcher.' }
+    $arguments = '-NoProfile -ExecutionPolicy Bypass -File "' + (Join-Path $installDir 'uninstall_windows.ps1') + '" -InstallDir "' + $installDir + '" -Silent'
+    $uninstall = Start-Process -FilePath powershell.exe -ArgumentList $arguments -PassThru
     if (-not $uninstall.WaitForExit(180000)) { throw 'Uninstall timed out.' }
     if ($uninstall.ExitCode -ne 0) { throw "Uninstall exited $($uninstall.ExitCode)." }
     if ((Get-StartupCommand) -ne $foreignStartup) { throw 'Uninstall removed another installation login registration.' }
@@ -87,7 +90,7 @@ try {
     if (Test-Path -LiteralPath (Join-Path $installDir '_internal')) { throw 'Bundled runtime/media were not removed.' }
     if (Test-Path -LiteralPath (Join-Path $testDataRoot 'instance-control.json')) { throw 'Graceful shutdown did not clean its control file.' }
     $stopResult=Get-Content -LiteralPath (Join-Path $testDataRoot 'last-stop-result.json') -Raw | ConvertFrom-Json
-    if($stopResult.mode -ne 'requested-shutdown-completed') { throw 'Installer smoke required forced parent termination.' }
+    if($stopResult.mode -notin @('requested-shutdown-completed', 'already-stopped')) { throw 'Installer smoke required forced parent termination.' }
     Write-Host 'PASS: Windows setup, active API shutdown, bundled-file uninstall and default data retention.'
 } finally {
     if ((Get-StartupCommand) -eq $foreignStartup) {

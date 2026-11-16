@@ -84,6 +84,32 @@ Recordings stay on your computer. Initial limits are **7 days** and **up to 50 G
 
 Closing the browser keeps monitoring running. Use **Stop monitoring** to pause cameras while keeping settings open, or **Quit FlintEye** in the desktop menu to exit completely. [Status colors and startup preferences →](docs/MONITORING.md)
 
+<details>
+<summary>Linux server / SSH — after package installation</summary>
+
+Start as your normal server user:
+
+```sh
+/opt/flinteye/FlintEye --headless
+```
+
+Read `setup-token` in the data directory printed at startup, using another SSH session. On your own computer open a tunnel:
+
+```sh
+ssh -N -L 127.0.0.1:18080:127.0.0.1:18080 your-server
+```
+
+Open `http://127.0.0.1:18080` locally and enter the token to create the administrator account. If that local port is in use, change the left-hand forwarding port and the browser URL. This tunnel carries the HTTP management connection; it does not forward WebRTC UDP video. Stop the foreground server with Ctrl+C and wait for recordings to finish. For operation after SSH disconnect, follow [systemd setup](docs/DISTRIBUTION.md#systemd), which uses its own service user and `/var/lib/flinteye`. Do not run manual and service instances on the same port or profile.
+
+</details>
+
+<details>
+<summary>1.2.0 development: other PCs and phones on your LAN</summary>
+
+The source for the next development version adds opt-in HTTPS at `https://SERVER-IP:18080`, with one-time certificate trust on each viewing PC/iPhone/iPad/Android device. **Public 1.1.3 does not include this feature.** See [LAN connection and trust](docs/LAN_ACCESS.md) and [1.2.0 changes and acceptance status](docs/DEVELOPMENT_1_2_0.md) before testing a rebuilt package.
+
+</details>
+
 [Full user guide →](docs/USER_GUIDE.md)
 
 

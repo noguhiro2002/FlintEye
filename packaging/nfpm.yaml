@@ -38,7 +38,7 @@ contents:
     dst: /usr/share/applications/flinteye.desktop
   - src: ./packaging/flinteye.service
     dst: /usr/lib/systemd/system/flinteye.service
-  - src: ./images/FlintEyeLogo.png
+  - src: ./images/icons/flinteye-symbol.png
     dst: /usr/share/pixmaps/flinteye.png
   - src: ./LICENSE
     dst: /usr/share/licenses/flinteye/LICENSE

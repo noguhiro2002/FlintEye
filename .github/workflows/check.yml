@@ -29,12 +29,20 @@ jobs:
         working-directory: frontend
       - name: Frontend build leaves tracked sources clean
         run: git diff --exit-code -- frontend
-      - name: Install Chromium for synthetic WebApp regressions
+      - name: Install browser engines for synthetic WebApp regressions
         working-directory: frontend
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium firefox webkit
       - name: WebApp behavior and responsive layout
         working-directory: frontend
         run: npm test
+      - name: Firefox and WebKit monitoring, setup and recording checks
+        working-directory: frontend
+        run: |
+          for engine in firefox webkit; do
+            for test in monitoring setup recordings; do
+              FLINTEYE_BROWSER=$engine node tests/$test.mjs
+            done
+          done
       - run: npm audit --audit-level=high
         working-directory: frontend
       - run: docker build --build-arg "FLINTEYE_REVISION=$GITHUB_SHA" -t flinteye:check .

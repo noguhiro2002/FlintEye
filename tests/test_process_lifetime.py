@@ -15,6 +15,22 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ProcessLifetimeTests(unittest.TestCase):
+    def test_failed_normal_quit_keeps_control_available_for_retry(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            attempts = []
+            def stop():
+                attempts.append(True)
+                return len(attempts) > 1
+            control = InstanceControl(root, stop)
+            try:
+                for expected in (1, 2):
+                    (root/'stop-request.json').write_text(json.dumps({'token': control.token}))
+                    for _ in range(40):
+                        if len(attempts) == expected: break
+                        time.sleep(.05)
+                    self.assertEqual(len(attempts), expected)
+            finally: control.close()
     def isolated(self, script):
         result = subprocess.run([sys.executable, '-c', script], cwd=ROOT,
                                 capture_output=True, text=True, timeout=30)

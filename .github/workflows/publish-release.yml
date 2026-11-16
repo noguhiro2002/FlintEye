@@ -21,7 +21,7 @@ on:
         type: string
         default: '1'
       device_tests_confirmed:
-        description: Required for stable; leave false for a preview still undergoing real-device acceptance
+        description: Confirm device acceptance; 1.2.0 also requires all recorded P1 acceptance cases
         default: false
         type: boolean
       license_review_confirmed:

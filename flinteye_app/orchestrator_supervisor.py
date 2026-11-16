@@ -530,6 +530,19 @@ class OrchestratorSupervisor:
             return
         try:
             safe_command, secret_input = _protected_worker_command(proc.command)
+            if proc.key == 'mediamtx:direct':
+                import shutil
+                executable = safe_command[0]
+                working_dir = proc.cwd or self.workspace_dir
+                if not Path(working_dir).is_dir():
+                    raise FileNotFoundError(2, 'MediaMTX working directory does not exist', working_dir)
+                resolved = str(Path(executable).resolve()) if Path(executable).is_absolute() else shutil.which(executable)
+                if not resolved or not Path(resolved).is_file():
+                    raise FileNotFoundError(2, 'MediaMTX executable does not exist; select the bundled version or reinstall FlintEye', executable)
+                if len(safe_command) >= 2 and not Path(safe_command[1]).is_file():
+                    raise FileNotFoundError(2, 'MediaMTX configuration file does not exist', safe_command[1])
+                safe_command[0] = resolved
+                logger.info('Starting MediaMTX executable=%s cwd=%s', resolved, working_dir)
             popen_env = os.environ.copy()
             if proc.env:
                 popen_env.update(proc.env)

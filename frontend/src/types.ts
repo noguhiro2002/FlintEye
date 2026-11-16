@@ -554,6 +554,10 @@ export interface RecordingStreamListResponse {
 }
 
 export interface RecordingItem {
+  started_at?: number | null;
+  ended_at?: number | null;
+  duration_sec?: number | null;
+  completion_state?: string;
   file_id: string;
   relative_path: string;
   stream_id: string;

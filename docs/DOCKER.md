@@ -103,3 +103,8 @@ The importer verifies the three selected files against the pinned MediaMTX/HLS c
 This bypasses the MediaMTX source, HLS bundle and license downloads only. Base images, system packages, Go modules, Python packages and frontend dependencies still need network access. If those fail, check the Docker daemon/build network and proxy settings rather than disabling verification.
 
 Keep `FLINTEYE_VENDOR_CACHE` set when rebuilding with this cache. Without it, Compose uses the empty cache context and downloads normally. The project name and `flinteye-data` volume are unchanged; do not use `down -v` during recovery.
+
+
+## 1.2.0 development: Docker Desktop
+
+For a rebuilt 1.2.0 image, use `docker compose -f deploy/compose.desktop.yaml up -d` from the checkout; after distribution use the same release’s `compose.desktop.yaml` and its exact image tag. This separate bridge configuration publishes HTTP TCP 18080 and WebRTC UDP 8189 on the host loopback only. The container binds its HTTP listener to its own interfaces and advertises the host-loopback ICE candidate. Open http://127.0.0.1:18080 in the host browser. USB forwarding and ONVIF multicast discovery are not included; manually configure reachable IP cameras. It is not the LAN-server configuration. The existing root Compose keeps Linux host networking and its volume. Do not switch project names or erase volumes when updating. Both routes allow 60 seconds for normal recording finalization on stop; verify the stop receipt and decode the last recording, rather than treating exit 143 alone as proof of completion. [LAN server setup](LAN_ACCESS.md) · [Required acceptance](DEVELOPMENT_1_2_0.md)

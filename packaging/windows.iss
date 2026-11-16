@@ -25,10 +25,16 @@ LicenseFile=..\LICENSE
 Compression=lzma2
 SolidCompression=yes
 CloseApplications=yes
+SetupMutex=FlintEye.Setup
 UninstallDisplayIcon={app}\FlintEye.exe
+SetupIconFile=..\images\icons\flinteye.ico
 [Files]
 Source: "..\dist\FlintEye\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 Source: "stop_windows.ps1"; DestDir: "{app}"; Flags: ignoreversion
+Source: "uninstall_windows.ps1"; DestDir: "{app}"; Flags: ignoreversion
+[Registry]
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\FlintEye.Community_is1"; ValueType: string; ValueName: "UninstallString"; ValueData: """{sys}\WindowsPowerShell\v1.0\powershell.exe"" -NoProfile -ExecutionPolicy Bypass -File ""{app}\uninstall_windows.ps1"" -InstallDir ""{app}"""
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\FlintEye.Community_is1"; ValueType: string; ValueName: "QuietUninstallString"; ValueData: """{sys}\WindowsPowerShell\v1.0\powershell.exe"" -NoProfile -ExecutionPolicy Bypass -File ""{app}\uninstall_windows.ps1"" -InstallDir ""{app}"" -Silent"
 [Icons]
 Name: "{autoprograms}\FlintEye"; Filename: "{app}\FlintEye.exe"
 Name: "{autodesktop}\FlintEye"; Filename: "{app}\FlintEye.exe"
@@ -45,7 +51,7 @@ var
   StartupValue, OwnExecutable, QuotedExecutable: String;
 begin
   Arguments := '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' +
-    ExpandConstant('{app}\stop_windows.ps1') + '" -InstallDir "' + ExpandConstant('{app}') + '" -Force';
+    ExpandConstant('{app}\stop_windows.ps1') + '" -InstallDir "' + ExpandConstant('{app}') + '"';
   Result := Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
     Arguments, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   if Result then Result := ResultCode = 0;

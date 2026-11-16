@@ -8,11 +8,14 @@ export function SetupAccount({ api, onDone }: { api: ApiClient; onDone: () => vo
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [lan, setLan] = useState(false);
+  const [address, setAddress] = useState('');
+  const [sources, setSources] = useState('');
   return <form className="login-form" onSubmit={async e => {
     e.preventDefault(); setError('');
     if (password !== confirm) { setError('Passwords do not match.'); return; }
     setBusy(true);
-    try { await api.setup(token, password); await api.login('admin', password); onDone(); }
+    try { await api.setup(token, password, lan ? {enabled:true, address, allowed_subnets:sources.split(',').map(s=>s.trim()).filter(Boolean)} : undefined); await api.login('admin', password); onDone(); }
     catch (err) { setError(String(err)); } finally { setBusy(false); }
   }}>
     <h2>Welcome to FlintEye</h2>
@@ -22,6 +25,15 @@ export function SetupAccount({ api, onDone }: { api: ApiClient; onDone: () => vo
     <p>For Docker or systemd, read the setup-token file in the server data directory.</p>
     <label>Password<input type="password" required minLength={12} maxLength={1024} value={password} onChange={e => setPassword(e.target.value)} autoComplete="new-password" aria-describedby="setup-password-help" /></label>
     <label>Confirm password<input type="password" required minLength={12} value={confirm} onChange={e => setConfirm(e.target.value)} autoComplete="new-password" /></label>
+    {['127.0.0.1', 'localhost', '[::1]'].includes(window.location.hostname) && <details>
+      <summary>Optional LAN access for other computers and phones</summary>
+      <label className="check"><input type="checkbox" checked={lan} onChange={e => setLan(e.target.checked)}/>Enable HTTPS on my LAN</label>
+      {lan && <>
+        <label>Server IPv4 address<input required value={address} onChange={e=>setAddress(e.target.value)} placeholder="192.168.1.10"/></label>
+        <label>Permitted source networks<input required value={sources} onChange={e=>setSources(e.target.value)} placeholder="192.168.1.0/24"/></label>
+        <p>After setup, save the certificate guide in Settings → Runtime & access, approve the necessary Firewall access, and restart FlintEye. Each viewing device must trust this installation’s certificate before using https://SERVER-IP:18080. No network access is enabled until restart.</p>
+      </>}
+    </details>}
     {error && <p role="alert">{error}</p>}
     <button disabled={busy}>{busy ? 'Creating account…' : 'Create administrator account'}</button>
   </form>;

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import subprocess
+import threading
+import time
+from concurrent.futures import Future
 from flinteye_app.process_lifetime import run_background
 from flinteye_app.subprocess_utils import background_process_options
 from flinteye_app.flinteye_runtime import private_media_input_command
@@ -8,6 +11,44 @@ from flinteye_app.flinteye_runtime import private_media_input_command
 
 class SnapshotError(RuntimeError):
     pass
+
+
+class SnapshotPool:
+    """Coalesce one camera's requests and bound competing FFmpeg processes."""
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.slots = threading.BoundedSemaphore(2)
+        self.pending = {}
+        self.cache = {}
+
+    def capture(self, **arguments):
+        key = (arguments['ffmpeg_bin'], arguments['rtsp_url'])
+        with self.lock:
+            cached = self.cache.get(key)
+            if cached and time.monotonic() - cached[0] < 2:
+                return cached[1]
+            future = self.pending.get(key)
+            owner = future is None
+            if owner:
+                future = self.pending[key] = Future()
+        if not owner:
+            try: return future.result(timeout=arguments['timeout_sec'] + 3)
+            except TimeoutError as error: raise SnapshotError('Thumbnail is busy; retry shortly') from error
+        try:
+            if not self.slots.acquire(timeout=2):
+                raise SnapshotError('Thumbnail queue is busy; live video is unaffected. Retry shortly.')
+            try: image = capture_snapshot_jpeg(**arguments)
+            finally: self.slots.release()
+            with self.lock:
+                self.cache[key] = (time.monotonic(), image)
+                if len(self.cache) > 128: self.cache.pop(next(iter(self.cache)))
+            future.set_result(image)
+            return image
+        except Exception as error:
+            future.set_exception(error)
+            raise
+        finally:
+            with self.lock: self.pending.pop(key, None)
 
 
 def capture_snapshot_jpeg(

@@ -16,6 +16,8 @@ def database(root: Path, *, timeout=5):
         db.execute('''CREATE TABLE IF NOT EXISTS events (
             session TEXT, path TEXT, stream TEXT, created REAL, completed REAL,
             indexed INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(session, path))''')
+        db.execute('''CREATE TABLE IF NOT EXISTS completed_files (
+            path TEXT PRIMARY KEY, size INTEGER, mtime INTEGER, started REAL, ended REAL, duration REAL)''')
         with db:
             yield db
     finally:
@@ -55,7 +57,42 @@ def record_event(root: Path, segment: Path, *, complete: bool, session: str | No
                 indexed = MAX(events.indexed, excluded.indexed)''',
                 (session, str(path), relative.parts[0], None if complete else now,
                  now if complete else None, int(indexed)))
+            if complete and indexed:
+                stat = path.stat()
+                try:
+                    duration = float(os.environ.get('MTX_SEGMENT_DURATION', 'nan'))
+                    import math
+                    if not math.isfinite(duration) or duration <= 0: duration = None
+                except ValueError: duration = None
+                started = None
+                # The filename is created by our managed recorder in local time.
+                try:
+                    from datetime import datetime
+                    started = datetime.strptime(path.parent.name + '_' + path.stem, '%Y-%m-%d_%H-%M-%S-%f').timestamp()
+                except ValueError: pass
+                db.execute('INSERT OR REPLACE INTO completed_files VALUES (?, ?, ?, ?, ?, ?)',
+                           (str(path), stat.st_size, stat.st_mtime_ns, started,
+                            started + duration if started is not None and duration is not None else None, duration))
         return
+
+
+def file_evidence(root: Path, paths: list[Path]) -> dict:
+    """Read once per list. An unfinished tracked file never becomes stable by age."""
+    if not (root/'recording-events.sqlite3').is_file(): return {}
+    with database(root, timeout=.5) as db:
+        events = {row[0]: (row[1], row[2]) for row in db.execute('SELECT path, MAX(completed), MAX(indexed) FROM events GROUP BY path')}
+        completed = {row[0]: row[1:] for row in db.execute('SELECT path,size,mtime,started,ended,duration FROM completed_files')}
+    result = {}
+    for path in paths:
+        key = str(path.resolve())
+        if key not in events: continue
+        stat = path.stat()
+        record = completed.get(key)
+        matches = bool(record and record[0] == stat.st_size and record[1] == stat.st_mtime_ns)
+        result[key] = {'is_stable': matches, 'completion_state': 'complete' if matches else 'pending',
+                       'started_at': record[2] if matches else None, 'ended_at': record[3] if matches else None,
+                       'duration_sec': record[4] if matches else None}
+    return result
 
 
 def summary(root: Path, session: str, *, timeout=5) -> dict:

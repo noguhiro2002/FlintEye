@@ -100,6 +100,7 @@ def prepare(bundle: Path, output: Path, commit: str, run_id: str, channel: str, 
     compose = (ROOT / 'compose.yaml').read_text()
     compose = re.sub(r'ghcr\.io/noguhiro2002/flinteye:[\w.-]+', IMAGE + ':' + image_version, compose)
     (output / 'compose.yaml').write_text(compose)
+    (output/'compose.desktop.yaml').write_text((ROOT/'deploy/compose.desktop.yaml').read_text())
     for language in ('en', 'ja'):
         source = ROOT / 'docs' / ('RELEASE_NOTES.md' if language == 'en' else 'RELEASE_NOTES.ja.md')
         text = source.read_text()
@@ -202,6 +203,9 @@ def publish(args) -> None:
     repo = api('repos/'+REPOSITORY)
     build = api(f'repos/{REPOSITORY}/actions/runs/{args.run_id}')
     commit = build['head_sha']
+    if args.channel in {'public-preview', 'stable'}:
+        from release import check_development_acceptance
+        check_development_acceptance(commit)
     check_publication_revision(commit, publication_commit)
     flag = 'PUBLIC_PREVIEW_ENABLED' if args.channel == 'public-preview' else 'PUBLIC_RELEASE_ENABLED'
     validate_publish_context(repo, build, commit=commit, ref=os.environ['GITHUB_REF'], channel=args.channel,

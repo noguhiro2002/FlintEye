@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
-import { chromium } from 'playwright';
+import { chromium } from './browser.mjs';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const browser = await chromium.launch({
@@ -42,7 +42,7 @@ async function scenario({ conflict = false, timeout = false } = {}) {
     }
     let body = { items: [] }, status = 200;
     switch (url.pathname) {
-      case '/api/v1/status/monitoring': body = { state: 'stopped', color: 'gray', label: 'Monitoring stopped', message: 'Monitoring is stopped.', desired_running: false, busy: false, phase: 'stopped', resume_on_startup: false, counts: { configured: 0, targets: 0, receiving: 0, recording: 0 }, cameras: [] }; break;
+      case '/api/v1/status/monitoring': body = { state: 'running', color: 'green', label: 'Running', message: 'Receiving video', desired_running: true, busy: false, phase: 'running', resume_on_startup: false, counts: { configured: 0, targets: 0, receiving: 0, recording: 0 }, cameras: [] }; break;
       case '/api/v1/monitoring/preferences': body = { resume_on_startup: false }; break;
       case '/api/v1/build': body = { version: '1.1.1', release: '1.1.1', channel: 'stable', commit: null, dirty: false }; break;
       case '/api/v1/auth/me':

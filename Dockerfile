@@ -36,6 +36,8 @@ COPY flinteye.py ./
 COPY flinteye_app/ ./flinteye_app/
 COPY LICENSE THIRD_PARTY_NOTICES.md ./
 COPY packaging/collect_licenses.py packaging/container_sources.py ./packaging/
+COPY packaging/container_health.py ./packaging/
+COPY docs/LAN_ACCESS.md docs/LAN_ACCESS.ja.md ./docs/
 RUN python packaging/collect_licenses.py /opt/flinteye/licenses
 COPY --from=ui /src/frontend/dist ./frontend/dist
 COPY --from=ui /licenses/frontend ./licenses/frontend
@@ -57,5 +59,5 @@ USER 10001:10001
 ENV FLINTEYE_DATA_DIR=/data
 VOLUME ["/data"]
 EXPOSE 18080/tcp 8189/udp
-HEALTHCHECK --interval=30s --start-period=30s CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:18080/api/v1/health', timeout=5)"
+HEALTHCHECK --interval=30s --start-period=30s CMD python /opt/flinteye/packaging/container_health.py
 ENTRYPOINT ["python", "/opt/flinteye/flinteye.py", "--headless"]

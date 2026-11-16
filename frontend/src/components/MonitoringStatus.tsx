@@ -1,26 +1,16 @@
 import { useState } from 'react';
 import type { ApiClient } from '../api/client';
-import type { MonitoringStatusResponse } from '../types';
-import { usePolling } from '../hooks/usePolling';
+import { useMonitoring } from '../hooks/MonitoringContext';
 
 export function MonitoringStatus({ api, canManage }: { api: ApiClient; canManage: boolean }) {
-  const [status, setStatus] = useState<MonitoringStatusResponse | null>(null);
+  const {status, unavailable, refresh} = useMonitoring();
   const [error, setError] = useState('');
   const [acting, setActing] = useState(false);
-  const [unavailable, setUnavailable] = useState(false);
-  usePolling(async isCurrent => {
-    try {
-      const next = await api.getMonitoringStatus();
-      if (!next.counts || !Array.isArray(next.cameras) || !next.state) throw new Error('Invalid monitoring status');
-      if (isCurrent()) { setStatus(next); setUnavailable(false); }
-    } catch {
-      if (isCurrent()) setUnavailable(true);
-    }
-  }, 2000);
+  const [activeAction, setActiveAction] = useState('');
   const act = async (action: 'start' | 'stop' | 'restart') => {
     if (acting) return;
-    setActing(true); setError('');
-    try { await api.monitoringControl(action); setStatus(await api.getMonitoringStatus()); }
+    setActing(true); setActiveAction(action); setError('');
+    try { await api.monitoringControl(action); await refresh(); }
     catch (error) { setError(error instanceof Error ? error.message : 'The operation could not be completed.'); }
     finally { setActing(false); }
   };
@@ -40,7 +30,7 @@ export function MonitoringStatus({ api, canManage }: { api: ApiClient; canManage
       <button type="button" disabled={disabled || status.desired_running || status.phase === 'finalizing'} onClick={() => void act('start')}>Start monitoring</button>
       <button type="button" disabled={disabled || (!status.desired_running && status.phase !== 'finalizing')} onClick={() => void act('stop')}>{status.phase === 'finalizing' && !status.busy ? 'Retry Stop' : 'Stop monitoring'}</button>
       <button type="button" disabled={disabled || !status.desired_running || status.phase === 'finalizing'} onClick={() => void act('restart')}>Restart monitoring</button>
-      {acting && <span role="status">Please wait while recordings finish…</span>}
+      {acting && <span role="status">{activeAction === 'start' ? 'Starting monitoring…' : activeAction === 'restart' ? 'Restarting monitoring; finishing recordings first…' : 'Stopping monitoring; finishing recordings…'}</span>}
     </div>}
     {status?.phase === 'finalizing' && Boolean(status.pending_segments) && <p>{status.pending_segments} recording segment(s) awaiting completion.</p>}
     {Boolean(status?.previous_incomplete_segments) && <p className="panel-note">{status?.previous_incomplete_segments} segment(s) from a previous session have no completion record. Check storage and logs.</p>}

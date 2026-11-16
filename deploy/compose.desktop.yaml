@@ -1,0 +1,17 @@
+# Docker Desktop: local host browser only, no USB forwarding or ONVIF discovery.
+# Existing Linux host-network installs continue to use ../compose.yaml.
+services:
+  flinteye:
+    image: ${FLINTEYE_IMAGE:-ghcr.io/noguhiro2002/flinteye:1.2.0-preview.1}
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 60s
+    environment:
+      FLINTEYE_CONTAINER_BRIDGE: "1"
+    ports:
+      - "127.0.0.1:18080:18080/tcp"
+      - "127.0.0.1:8189:8189/udp"
+    volumes:
+      - flinteye-data:/data
+volumes:
+  flinteye-data:

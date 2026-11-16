@@ -143,6 +143,8 @@ class ReleaseTests(unittest.TestCase):
         from unittest.mock import patch
         source = self.root/'docs-source'; (source/'docs').mkdir(parents=True)
         (source/'images').mkdir(); (source/'.github').mkdir()
+        (source/'packaging').mkdir()
+        (source/'packaging/acceptance-1.2.0.json').write_text('{}')
         for name in ('README.md', 'README.ja.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'docs/INSTALL.md'):
             (source/name).write_text('Retained text: '+name)
         with patch('release.ROOT', source):
@@ -151,6 +153,18 @@ class ReleaseTests(unittest.TestCase):
                 os.utime(path, (1_700_000_000, 1_700_000_000))
             release.write_documentation(self.root/'second.zip')
         self.assertEqual((self.root/'first.zip').read_bytes(), (self.root/'second.zip').read_bytes())
+
+    def test_new_preview_is_blocked_until_every_p1_case_is_evidenced(self):
+        root = self.root/'acceptance-source'; (root/'packaging').mkdir(parents=True)
+        path = root/'packaging/acceptance-1.2.0.json'
+        data = {'version': version(), 'commit': self.commit,
+                'cases': {name: {'status': 'passed', 'evidence': 'https://example.test/qa/'+name} for name in release.ACCEPTANCE_CASES}}
+        path.write_text(json.dumps(data))
+        release.check_development_acceptance(self.commit, root=root)
+        case = next(iter(data['cases'])); data['cases'][case]['status'] = 'pending'
+        path.write_text(json.dumps(data))
+        with self.assertRaisesRegex(ValueError, 'pending or failed'): release.check_development_acceptance(self.commit, root=root)
+        with self.assertRaisesRegex(ValueError, 'commit'): release.check_development_acceptance('b'*40, root=root)
 
     def test_actions_rejects_workflow_mismatch_before_distribution(self):
         release.validate_publication_revision(self.commit, 'b'*40, ['docs/INSTALL.md'], workflow_token=True)

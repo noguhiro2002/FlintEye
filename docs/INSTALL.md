@@ -76,3 +76,8 @@ The macOS command installer retains the previous app as `FlintEye.previous.app`;
 
 Normal removal keeps recordings and settings. The Windows uninstaller offers a separate default-No data deletion prompt.
 See [data locations](DISTRIBUTION.md#recording-lifecycle) before manually removing data.
+
+
+## 1.2.0 development installer checks
+
+The next development build uses the browser for the administrator password form. The native setup window provides the local URL and a one-use token with copy actions. It does not reset an existing account after reinstalling. Compare one-command and standalone installers using clean, retained and unfinished profiles. Linux automatic installation checks sudo and the package manager before downloading. Windows removal first finishes recordings and checks the uninstall-data lock; a reported lock is not permission to delete unins000.dat. See [1.2.0 acceptance](DEVELOPMENT_1_2_0.md) and [LAN setup](LAN_ACCESS.md). The published 1.1.3 installers remain unchanged.

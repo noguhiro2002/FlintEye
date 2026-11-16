@@ -40,6 +40,8 @@ elif [ "$os" = Linux ]; then
     *) fail "Unsupported automatic installation target: $ID. See the manual installation guide." ;;
   esac
   asset="FlintEye-$application_version-linux-$arch.$kind"
+  command -v sudo >/dev/null || fail 'sudo is required before downloading the package. Ask your administrator to install it, or download the package for administrator installation. See docs/MANUAL_INSTALL.md.'
+  if [ "$kind" = deb ]; then command -v apt-get >/dev/null || fail 'apt-get is required.'; else command -v dnf >/dev/null || fail 'dnf is required.'; fi
 else
   fail "Unsupported OS: $os"
 fi

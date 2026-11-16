@@ -45,12 +45,10 @@ def inhibit_sleep():
 def tray_image(status):
     """The eye mark and a high-contrast shape convey status without color alone."""
     from PIL import Image, ImageDraw
-    image = Image.new('RGBA', (96, 96))
+    from flinteye_app.flinteye_runtime import application_dir
+    asset = application_dir()/'images/icons/flinteye-symbol.png'
+    image = Image.open(asset).convert('RGBA').resize((96, 96), Image.Resampling.LANCZOS) if asset.is_file() else Image.new('RGBA', (96, 96))
     draw = ImageDraw.Draw(image)
-    draw.ellipse((4, 18, 86, 76), fill='#8fbf72', outline='white', width=3)
-    draw.ellipse((22, 22, 70, 70), fill='#123047', outline='white', width=3)
-    draw.ellipse((32, 32, 60, 60), fill='#33758e')
-    draw.ellipse((45, 34, 54, 43), fill='white')
     draw.ellipse((50, 50, 94, 94), fill=COLORS.get(status['color'], COLORS['amber']), outline='white', width=3)
     state = status['state']
     if state == 'running':
@@ -158,6 +156,11 @@ def _run_tray(url, server, root, controller, actions):
     done = threading.Event()
     def open_web():
         webbrowser.open(url)
+    def connection_info():
+        from flinteye_app.flinteye_runtime import launch_command
+        from flinteye_app.process_lifetime import popen_background
+        from flinteye_app.subprocess_utils import background_process_options
+        popen_background(launch_command() + ['--connection-info', '--data-dir', str(root)], **background_process_options())
     def force_quit():
         if _confirm_force_quit():
             actions.submit('quit', force=True)
@@ -166,6 +169,7 @@ def _run_tray(url, server, root, controller, actions):
         pystray.MenuItem(lambda item: (actions.message or snapshot['message'])[:140], None, enabled=False),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem('Open FlintEye', open_web, default=True),
+        pystray.MenuItem('Address and setup assistance', connection_info),
         pystray.MenuItem('Start monitoring', lambda: actions.submit('start'),
                          enabled=lambda item: not actions.busy and not snapshot['desired_running'] and snapshot['phase'] != 'finalizing'),
         pystray.MenuItem('Stop monitoring', lambda: actions.submit('stop'),
@@ -228,19 +232,31 @@ def _run_control_window(url, server, root, controller, actions):
     from flinteye_app.cli import autostart_status
     window = tk.Tk()
     window.title('FlintEye')
-    window.geometry('480x420')
-    window.minsize(420, 380)
-    frame = ttk.Frame(window, padding=18)
+    window.geometry('440x420')
+    window.minsize(360, 340)
+    from flinteye_app.flinteye_runtime import application_dir
+    asset = application_dir()/'images/icons/flinteye-symbol.png'
+    if asset.is_file():
+        from PIL import Image, ImageTk
+        app_icon = ImageTk.PhotoImage(Image.open(asset).resize((64, 64)))
+        window.iconphoto(True, app_icon)
+    frame = ttk.Frame(window, padding=12)
     frame.pack(fill='both', expand=True)
     state = ttk.Label(frame, font=('', 13, 'bold'), wraplength=430)
     state.pack(anchor='w', pady=(0, 10))
     message = ttk.Label(frame, wraplength=430)
     message.pack(anchor='w', pady=(0, 10))
-    ttk.Button(frame, text='Open FlintEye', command=lambda: webbrowser.open(url)).pack(fill='x', pady=3)
+    ttk.Label(frame, text=url, wraplength=400).pack(anchor='w')
+    def copy_url():
+        window.clipboard_clear(); window.clipboard_append(url); window.update()
+    row = ttk.Frame(frame); row.pack(fill='x')
+    ttk.Button(row, text='Open FlintEye', command=lambda: webbrowser.open(url)).pack(side='left', pady=3)
+    ttk.Button(row, text='Copy address', command=copy_url).pack(side='left', padx=6)
+    controls = ttk.Frame(frame); controls.pack(fill='x')
     buttons = {}
     for action in ('start', 'stop', 'restart'):
-        buttons[action] = ttk.Button(frame, text=action.capitalize() + ' monitoring', command=lambda a=action: actions.submit(a))
-        buttons[action].pack(fill='x', pady=3)
+        buttons[action] = ttk.Button(controls, text=action.capitalize(), command=lambda a=action: actions.submit(a))
+        buttons[action].pack(side='left', padx=(0, 5), pady=4)
     ttk.Button(frame, text='Open logs', command=lambda: webbrowser.open((root / 'logs').as_uri())).pack(fill='x', pady=3)
     startup_value = tk.BooleanVar()
     startup_button = ttk.Checkbutton(frame, text='Start at login', variable=startup_value,

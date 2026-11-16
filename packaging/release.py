@@ -12,11 +12,25 @@ import zipfile
 
 from release_lib import ARCHES, REPOSITORY, ROOT, digest, package_names, version, release_identity
 
+ACCEPTANCE_CASES = {'windows-owner-startup', 'windows-owner-removal', 'native-menus-and-accessibility',
+                    'lan-pc', 'lan-mobile', 'physical-cameras-and-long-run', 'linux-native-and-docker',
+                    'docker-desktop-host-video', 'all-native-architectures'}
+
+
+def check_development_acceptance(commit: str, *, root=ROOT) -> None:
+    record = json.loads((root/'packaging/acceptance-1.2.0.json').read_text())
+    if record.get('version') != version() or record.get('commit') != commit:
+        raise ValueError('Acceptance evidence must identify this tested application version and commit')
+    cases = record.get('cases', {})
+    if set(cases) != ACCEPTANCE_CASES or any(item.get('status') != 'passed' or not item.get('evidence') for item in cases.values()):
+        raise ValueError('1.2.0 publication blocked: P1 physical-device acceptance is pending or failed')
+
 
 def write_documentation(destination: Path) -> None:
     """Keep publication notes current, with reproducible bytes across both phases."""
     paths = [ROOT / name for name in ('README.md', 'README.ja.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md')]
     paths += sorted((ROOT / 'docs').rglob('*.md'))
+    paths += [ROOT/'packaging/acceptance-1.2.0.json']
     paths += sorted((ROOT / '.github').glob('*.md'))
     paths += sorted(p for p in (ROOT / 'images').iterdir() if p.is_file())
     with zipfile.ZipFile(destination, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
@@ -36,7 +50,7 @@ def validate_publication_revision(build_commit: str, publication_commit: str, ch
     if not all(re.fullmatch('[0-9a-f]{40}', value) for value in (build_commit, publication_commit)):
         raise ValueError('Expected full build and publication commit hashes')
     allowed = {'README.md', 'README.ja.md', 'compose.yaml',
-               'packaging/release.py', 'packaging/publish_release.py',
+               'packaging/release.py', 'packaging/publish_release.py', 'packaging/acceptance-1.2.0.json',
                '.github/workflows/publish-release.yml', 'tests/test_release_packaging.py'}
     for name in changed_paths:
         path = Path(name)
@@ -97,6 +111,7 @@ def assemble(source: Path, destination: Path, commit: str) -> None:
         (public / name).write_text(text, encoding='utf-8', newline='\n')
     for name in ('LICENSE', 'THIRD_PARTY_NOTICES.md', 'compose.yaml'):
         shutil.copy2(ROOT / name, public / name)
+    shutil.copy2(ROOT/'deploy/compose.desktop.yaml', public/'compose.desktop.yaml')
     for name in ('ACCEPTANCE.md', 'ACCEPTANCE.ja.md'):
         text = (ROOT / 'docs' / name).read_text()
         text = re.sub(r'\]\(([^)\s]+\.md(?:#[^)\s]+)?)\)',
@@ -196,6 +211,8 @@ def main() -> None:
         repo = api('repos/' + REPOSITORY)
         run = api(f'repos/{REPOSITORY}/actions/runs/{args.run_id}')
         build_commit = run['head_sha']
+        if args.channel in {'public-preview', 'stable'}:
+            check_development_acceptance(build_commit)
         check_publication_revision(build_commit, args.commit)
         validate_publish_context(repo, run, commit=build_commit,
             enabled=os.environ.get('PUBLIC_PREVIEW_ENABLED' if args.channel == 'public-preview' else 'PUBLIC_RELEASE_ENABLED') == 'true',

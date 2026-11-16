@@ -3,7 +3,7 @@ import { mkdirSync } from 'node:fs';
 process.chdir(fileURLToPath(new URL('../..', import.meta.url)));
 mkdirSync('dist/terra-webapp-fixes', { recursive: true });
 import assert from 'node:assert/strict';
-import { chromium } from 'playwright';
+import { chromium } from './browser.mjs';
 import { readFile } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
 const root = process.cwd();
@@ -30,7 +30,7 @@ async function create(role = 'admin', width = 1440, height = 900, mode = 'normal
         }
         let v = { items: [] }, status = 200;
         requests.push(u.pathname + u.search);
-        if (u.pathname === '/api/v1/status/monitoring') v = { state: 'stopped', color: 'gray', label: 'Monitoring stopped', message: 'Monitoring is stopped.', desired_running: false, busy: false, phase: 'stopped', resume_on_startup: false, counts: { configured: 0, targets: 0, receiving: 0, recording: 0 }, cameras: [] };
+        if (u.pathname === '/api/v1/status/monitoring') v = { state: 'running', color: 'green', label: 'Running', message: 'Receiving video', desired_running: true, busy: false, phase: 'running', resume_on_startup: false, counts: { configured: 0, targets: 0, receiving: 0, recording: 0 }, cameras: [] };
         else if (u.pathname === '/api/v1/monitoring/preferences') v = { resume_on_startup: false };
         else if (u.pathname === '/api/v1/build') v = { version: '1.1.1', release: '1.1.1', channel: 'stable', commit: null, dirty: false };
         else if (u.pathname === '/api/v1/auth/me')

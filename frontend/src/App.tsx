@@ -1,6 +1,7 @@
 import { UpdateNotice } from "./components/UpdateNotice";
 import { StorageStatus } from "./components/StorageStatus";
 import { MonitoringStatus } from "./components/MonitoringStatus";
+import { MonitoringProvider } from './hooks/MonitoringContext';
 import { useConfirmChanges } from "./components/ConfirmChanges";
 import { FirstRun } from "./components/FirstRun";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -109,7 +110,7 @@ export default function App(): JSX.Element {
   }
 
   return (
-    <div className="app">
+    <MonitoringProvider api={api}><div className="app">
       {confirmation}
       <Sidebar active={page} onSelect={navigate} brandTitle={sidebarTitle} canAccessSettings={hasAdminAccess} />
       <main className="content">
@@ -135,7 +136,7 @@ export default function App(): JSX.Element {
         </header>
 
         <StorageStatus />
-        <MonitoringStatus api={api} canManage={hasAdminAccess} />
+        {page === 'dashboard' && <MonitoringStatus api={api} canManage={hasAdminAccess} />}
         {hasAdminAccess && <UpdateNotice />}
         {hasAdminAccess && showGuide && <FirstRun api={api} navigate={navigate} onClose={() => setShowGuide(false)} />}
         {page === "dashboard" && <DashboardPage api={api} />}
@@ -150,6 +151,6 @@ export default function App(): JSX.Element {
         {page === "recordings" && <RecordingsPage api={api} canDownload={hasAdminAccess} />}
         <footer className="app-footer">{footerText}</footer>
       </main>
-    </div>
+    </div></MonitoringProvider>
   );
 }

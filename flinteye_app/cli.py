@@ -32,7 +32,7 @@ def _repair_bundled_media_path(runtime: Path, root: Path) -> None:
     store = RuntimeStore(env_file='', runtime_file=str(runtime), use_env=False)
     media = store.get_effective().mediamtx
     command = media.direct.command
-    if media.control_mode != 'direct' or len(command) != 2 or command[1] != str(root / 'mediamtx.yml'):
+    if media.control_mode != 'direct' or media.direct.source == 'external' or len(command) != 2:
         return
     old = Path(command[0])
     name = 'mediamtx.exe' if sys.platform == 'win32' else 'mediamtx'
@@ -40,15 +40,19 @@ def _repair_bundled_media_path(runtime: Path, root: Path) -> None:
         ('FlintEye.app', 'Contents', 'Frameworks', 'bin', name),
         ('FlintEye.app', 'Contents', 'Resources', 'bin', name),
     )
-    onedir_bundle = old.parts[-4:] == ('FlintEye', '_internal', 'bin', name)
-    if command[0] != name and not mac_bundle and not onedir_bundle:
+    onedir_bundle = old.parts[-3:] == ('_internal', 'bin', name)
+    own_config = Path(command[1]).name == 'mediamtx.yml' and (
+        command[1] == str(root / 'mediamtx.yml') or media.direct.working_dir == str(Path(command[1]).parent))
+    if not own_config or (command[0] != name and not mac_bundle and not onedir_bundle):
         return
     binary = application_dir() / 'bin' / name
     if not binary.is_file():
         raise FileNotFoundError(f'Bundled MediaMTX is missing: {binary}. Reinstall the complete FlintEye application.')
     changes = {}
-    if command[0] != str(binary):
-        changes['direct'] = {'command': [str(binary), command[1]]}
+    if command[0] != str(binary) or command[1] != str(root/'mediamtx.yml'):
+        changes['direct'] = {'command': [str(binary), str(root/'mediamtx.yml')]}
+    if media.direct.working_dir != str(root) and (media.direct.source == 'bundled' or media.direct.working_dir == str(Path(command[1]).parent)):
+        changes.setdefault('direct', {})['working_dir'] = str(root)
     # MediaMTX 1.21 enables MoQ by default. The desktop uses RTSP/WebRTC;
     # avoid starting an unused listener when upgrading an older profile.
     if media.managed.enabled and 'moq' not in media.managed.global_:
@@ -66,6 +70,8 @@ def initialize(root: Path) -> Path:
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
     runtime = root / 'runtime.json'
     if runtime.exists():
+        from flinteye_app.network_access import backup_profile
+        backup_profile(root)
         _repair_bundled_media_path(runtime, root)
         return runtime
     exe = 'mediamtx.exe' if sys.platform == 'win32' else 'mediamtx'
@@ -86,55 +92,89 @@ def initialize(root: Path) -> Path:
         'multiview': {'enabled': False, 'status_file': str(root / 'logs/runtime/multiview.json')},
         'cameras': [],
         'mediamtx': {'control_mode': 'direct', 'webrtc_base_url': '/media',
-                    'direct': {'command': [str(binary) if binary.exists() else exe, str(config)],
+                    'direct': {'source': 'bundled' if getattr(sys, 'frozen', False) else 'auto',
+                               'command': [str(binary) if binary.exists() else exe, str(config)],
                                'working_dir': str(root)},
                     'managed': {'enabled': True, 'global': {
                         'rtspAddress': '127.0.0.1:8554', 'webrtcAddress': '127.0.0.1:8889',
                         'api': True, 'apiAddress': '127.0.0.1:9997', 'apiEncryption': False, 'hls': False, 'rtmp': False,
-                        'srt': False, 'moq': False, 'playback': False}}}})
+                        'srt': False, 'moq': False, 'playback': False,
+                        'rtspTransports': ['tcp'], 'webrtcLocalUDPAddress': '127.0.0.1:8189',
+                        'webrtcIPsFromInterfaces': False, 'webrtcAdditionalHosts': ['127.0.0.1']}}}})
     return runtime
 
 
 def setup_dialog(runtime: Path) -> None:
-    """The installer opens this window in the installing user's session."""
+    """Accessible password form lives in the browser; this window conveys ownership."""
     from flinteye_app.orchestrator_store import RuntimeStore
-    from flinteye_app.orchestrator_auth import local_auth_is_configured, hash_password, generate_session_secret
-    store = RuntimeStore(env_file='', runtime_file=str(runtime), use_env=False)
-    if local_auth_is_configured(store.get_effective().auth):
+    from flinteye_app.orchestrator_auth import local_auth_is_configured
+    from flinteye_app.instance_control import active_listener_port
+    if local_auth_is_configured(RuntimeStore(env_file='', runtime_file=str(runtime), use_env=False).get_effective().auth):
         return
     import tkinter as tk
-    from tkinter import messagebox
+    from tkinter import ttk
+    root = runtime.parent
     window = tk.Tk()
-    window.title('FlintEye Setup')
+    window.title('FlintEye — Complete setup in your browser')
     window.resizable(False, False)
-    frame = tk.Frame(window, padx=28, pady=24)
-    frame.pack()
-    tk.Label(frame, text='Create your administrator password', font=('', 15, 'bold')).pack(pady=8)
-    tk.Label(frame, text='Username: admin\nUse at least 12 characters. You can set the viewer password later.').pack()
-    password = tk.Entry(frame, show='*', width=38)
-    confirm = tk.Entry(frame, show='*', width=38)
-    for label, entry in [('Password', password), ('Confirm password', confirm)]:
-        tk.Label(frame, text=label).pack(anchor='w', pady=(12, 0))
-        entry.pack()
-    def save():
-        value = password.get()
-        if len(value) < 12 or len(value) > 1024 or value != confirm.get():
-            messagebox.showerror('Check password', 'Passwords must match and contain 12–1024 characters.')
-            return
-        store.patch_runtime({'auth': {'provider': 'local', 'session_secret': generate_session_secret(),
-                             'local': {'admin': {'username': 'admin', 'password_hash': hash_password(value)}}}})
-        window.destroy()
-    tk.Button(frame, text='Finish setup and open FlintEye', command=save).pack(pady=18)
-    password.focus_set()
+    frame = ttk.Frame(window, padding=20); frame.pack()
+    ttk.Label(frame, text='Create your administrator account in the browser', wraplength=460).pack(anchor='w')
+    ttk.Label(frame, text='Copy this one-use setup token into the web form. It expires in 30 minutes.', wraplength=460).pack(anchor='w', pady=8)
+    token = tk.StringVar(value=(root/'setup-token').read_text())
+    entry = ttk.Entry(frame, textvariable=token, width=48, state='readonly'); entry.pack(fill='x')
+    def copy_token():
+        window.clipboard_clear(); window.clipboard_append(token.get()); window.update()
+    ttk.Button(frame, text='Copy setup token', command=copy_token).pack(anchor='w', pady=8)
+    port = active_listener_port(root, 18080)
+    url = f'http://127.0.0.1:{port}'
+    ttk.Label(frame, text=url).pack(anchor='w')
+    ttk.Button(frame, text='Open setup in browser', command=lambda: webbrowser.open(url)).pack(anchor='w', pady=8)
+    ttk.Label(frame, text='If the browser did not open, enter the address above manually. LAN access can be configured in Settings after setup.', wraplength=460).pack(anchor='w')
+    def check():
+        if local_auth_is_configured(RuntimeStore(env_file='', runtime_file=str(runtime), use_env=False).get_effective().auth):
+            window.destroy()
+        else:
+            try: token.set((root/'setup-token').read_text())
+            except FileNotFoundError: pass
+            window.after(1000, check)
+    window.after(1000, check)
+    entry.focus_set()
     window.mainloop()
-    if not local_auth_is_configured(store.get_effective().auth):
-        raise SystemExit(0)
 
 
 def _startup_command() -> list[str]:
     if sys.platform == 'darwin' and getattr(sys, 'frozen', False):
         return ['/usr/bin/open', '-a', str(Path(sys.executable).resolve().parents[2]), '--args']
     return launch_command()
+
+
+def connection_information(root: Path, url: str) -> None:
+    import tkinter as tk
+    from tkinter import ttk
+    window = tk.Tk(); window.title('FlintEye connection information')
+    frame = ttk.Frame(window, padding=18); frame.pack(fill='both', expand=True)
+    ttk.Label(frame, text='Open this address in your browser:').pack(anchor='w')
+    text = tk.StringVar(value=url)
+    ttk.Entry(frame, textvariable=text, width=50, state='readonly').pack(fill='x', pady=8)
+    def copy(value):
+        window.clipboard_clear(); window.clipboard_append(value); window.update()
+    ttk.Button(frame, text='Copy address', command=lambda: copy(url)).pack(anchor='w')
+    ttk.Button(frame, text='Open FlintEye', command=lambda: webbrowser.open(url)).pack(anchor='w', pady=6)
+    token = tk.StringVar()
+    ttk.Label(frame, text='Initial setup token (only shown before administrator setup):', wraplength=420).pack(anchor='w')
+    ttk.Entry(frame, textvariable=token, width=50, state='readonly').pack(fill='x', pady=6)
+    ttk.Button(frame, text='Copy setup token', command=lambda: copy(token.get())).pack(anchor='w')
+    def renew():
+        from flinteye_app.network_access import private_write
+        owner = json.loads((root/'instance-control.json').read_text())
+        private_write(root/'stop-request.json', json.dumps({'token': owner['token'], 'action': 'renew-setup'}).encode())
+    ttk.Button(frame, text='Renew setup token (30 minutes)', command=renew).pack(anchor='w', pady=6)
+    def refresh():
+        try: token.set((root/'setup-token').read_text())
+        except FileNotFoundError: token.set('Setup already completed')
+        window.after(1000, refresh)
+    window.after(0, refresh)
+    window.mainloop()
 
 
 def _read_startup():
@@ -311,6 +351,12 @@ def main() -> int:
     startup.add_argument('--disable-autostart', action='store_true', help='Remove FlintEye login startup and exit; preserve data')
     startup.add_argument('--enable-autostart', action='store_true', help='Enable FlintEye login startup and exit')
     parser.add_argument('--data-dir', type=Path, default=data_dir())
+    parser.add_argument('--lan-address', help='Explicitly enable LAN HTTPS on this server IPv4 address')
+    parser.add_argument('--lan-source', action='append', default=[], help='Allowed private IPv4 CIDR; repeat for more ranges')
+    parser.add_argument('--disable-lan', action='store_true', help='Disable LAN access; keep local HTTP and recordings')
+    parser.add_argument('--export-connection-guide', action='store_true', help='Write public certificate and trust guide, then exit')
+    parser.add_argument('--remove-firewall-rules', action='store_true', help='Remove only this profile installation Firewall rules with explicit UAC approval')
+    parser.add_argument('--connection-info', action='store_true', help='Show the running profile address and initial setup assistance')
     parser.add_argument('--port', type=int, help='Override the saved API port for this launch only')
     args = parser.parse_args()
     args.headless = args.headless or not desktop_available()
@@ -318,6 +364,10 @@ def main() -> int:
         parser.error('--port must be between 1 and 65535')
     root = args.data_dir.expanduser().resolve()
     os.environ['FLINTEYE_DATA_DIR'] = str(root)
+    if args.connection_info:
+        from flinteye_app.instance_control import active_listener_port
+        connection_information(root, f'http://127.0.0.1:{active_listener_port(root, 18080)}')
+        return 0
     if args.disable_autostart:
         disable_autostart()
         return 0
@@ -348,9 +398,45 @@ def main() -> int:
             webbrowser.open(f'http://127.0.0.1:{active_listener_port(root, existing.get_effective().api.port)}')
         return 0
     runtime = initialize(root)
+    from flinteye_app.orchestrator_store import RuntimeStore
+    store = RuntimeStore(env_file='', runtime_file=str(runtime), use_env=False)
+    if args.remove_firewall_rules:
+        from flinteye_app.windows_maintenance import manage_firewall
+        manage_firewall(root, store.get_effective(), 'remove')
+        return 0
+    if args.lan_address or args.disable_lan:
+        from flinteye_app.orchestrator_models import NetworkAccessConfig
+        from flinteye_app.network_access import ensure_certificates
+        network = NetworkAccessConfig(enabled=not args.disable_lan, address=args.lan_address or '', allowed_subnets=args.lan_source)
+        if network.enabled:
+            ensure_certificates(root, network.address)
+        store.patch_runtime({'network': network.model_dump(), 'api': {'host': '127.0.0.1'}})
+    if args.export_connection_guide:
+        from flinteye_app.network_access import export_guide
+        config = store.get_effective()
+        if not config.network.enabled: parser.error('Enable LAN access before exporting the connection guide')
+        print(export_guide(root, config.network.address, args.port or config.api.port))
+        return 0
+    config = store.get_effective()
+    if config.network.enabled and config.auth.provider == 'local' and not config.auth.viewer_auth_required:
+        store.patch_runtime({'auth': {'viewer_auth_required': True}})
+        config = store.get_effective()
+    if config.mediamtx.control_mode == 'direct' and config.mediamtx.managed.enabled:
+        options = dict(config.mediamtx.managed.global_)
+        # The built-in bridge owns its internal transports, never a user's external MediaMTX.
+        options.update(rtspTransports=['tcp'])
+        if config.network.enabled:
+            options.update(webrtcLocalUDPAddress=config.network.address + ':8189', webrtcIPsFromInterfaces=False,
+                           webrtcAdditionalHosts=[config.network.address])
+        elif not os.environ.get('FLINTEYE_CONTAINER_BRIDGE'):
+            options.update(webrtcLocalUDPAddress='127.0.0.1:8189', webrtcIPsFromInterfaces=False,
+                           webrtcAdditionalHosts=['127.0.0.1'])
+        if os.environ.get('FLINTEYE_CONTAINER_BRIDGE') == '1':
+            options.update(webrtcLocalUDPAddress=':8189', webrtcIPsFromInterfaces=False,
+                           webrtcAdditionalHosts=['127.0.0.1'])
+        if options != config.mediamtx.managed.global_:
+            store.patch_runtime({'mediamtx': {'managed': {'global': options}}})
     if not args.headless:
-        setup_dialog(runtime)
-        if args.setup_only: return 0
         enable_autostart()
     from flinteye_app.orchestrator_api import app, AppContext, set_app_context
     from flinteye_app.orchestrator_auth import local_auth_is_configured
@@ -364,18 +450,30 @@ def main() -> int:
         with os.fdopen(fd, 'w') as stream: stream.write(token)
         print(f'Initial setup: open the web UI and enter the token from {token_file}', flush=True)
     install_routes(app, context, setup_token=token, desktop=not args.headless)
-    host = context.store.get_effective().api.host
+    host = '0.0.0.0' if os.environ.get('FLINTEYE_CONTAINER_BRIDGE') == '1' else context.store.get_effective().api.host
     port = args.port or context.store.get_effective().api.port
-    context.listener = {'host': host, 'port': port,
-                        'source': 'command line' if args.port else 'saved configuration'}
     url = f'http://127.0.0.1:{port}'
-    import uvicorn
-    server = uvicorn.Server(uvicorn.Config(app, host=host,
-                                          port=port, log_config=None, proxy_headers=True,
-                                          timeout_graceful_shutdown=5,
-                                          forwarded_allow_ips='127.0.0.1,::1'))
+    network = context.store.get_effective().network
+    context.listener = {'host': host, 'port': port, 'scheme': 'http', 'url': url,
+                        'lan_url': f'https://{network.address}:{port}' if network.enabled else None,
+                        'source': 'command line' if args.port else 'saved configuration'}
+    from flinteye_app.server_runtime import ListenerGroup
+    server = ListenerGroup(app, root=root, host=host, port=port, network=network)
+    context.listener_group = server
     from flinteye_app.instance_control import InstanceControl
-    control = InstanceControl(root, lambda: setattr(server, 'should_exit', True), port=port)
+    def renew_setup():
+        if not local_auth_is_configured(context.store.get_effective().auth): context.bootstrap.renew()
+    def requested_quit():
+        from flinteye_app.monitoring import MonitoringConflict
+        try:
+            result = context.monitoring.perform('quit')
+        except MonitoringConflict:
+            return False
+        if not result['ok']:
+            return False
+        server.should_exit = True
+        return True
+    control = InstanceControl(root, requested_quit, port=port, renew_setup=renew_setup)
     thread = None
     try:
         if args.headless:
@@ -390,6 +488,8 @@ def main() -> int:
         else: raise RuntimeError('FlintEye did not become ready.')
         from flinteye_app.flinteye_desktop import run_desktop
         if not args.background: webbrowser.open(url)
+        setup_dialog(runtime)
+        if args.setup_only: return 0
         run_desktop(url, server, root, context.monitoring)
     finally:
         server.should_exit = True

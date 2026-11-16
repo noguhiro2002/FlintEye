@@ -90,3 +90,8 @@ Use the [device QA follow-up](DEVICE_QA_FOLLOWUP.md) alongside this checklist. I
 - [ ] Repeat physical USB disconnect/reconnect and manual sleep/resume. Record a separate 24-hour soak result; a short test does not pass this item.
 
 Signing contracts, notarization and public Release promotion are outside this development-build test cycle.
+
+
+## 1.2.0 development acceptance
+
+The additional [1.2.0 test matrix](DEVELOPMENT_1_2_0.md) and [LAN trust procedure](LAN_ACCESS.md) apply to rebuilt 1.2.0 artifacts. Separate tests are required for the owner’s Windows startup and removal failures, native menu clicks/accessibility, PC and mobile LAN clients, two real USB cameras/24 hours, Linux OS packages, Docker Desktop host video and all native CPU builds. These are pending until actual evidence exists. Update `packaging/acceptance-1.2.0.json` with the tested app commit and passing evidence before publication.

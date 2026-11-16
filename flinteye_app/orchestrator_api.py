@@ -12,6 +12,7 @@ import os
 import re
 import shutil
 import subprocess
+import sqlite3
 from flinteye_app.process_lifetime import run_background
 from flinteye_app.subprocess_utils import background_process_options
 import tempfile
@@ -80,6 +81,8 @@ class AppContext:
             log_manager=self.log_manager,
         )
         self.uvc_probe_cache = UvcProbeCache()
+        from flinteye_app.orchestrator_snapshot import SnapshotPool
+        self.snapshot_pool = SnapshotPool()
         self.ptz_controller = OnvifPtzController()
         self.storage_problem = None
         self.started_at = time.time()
@@ -998,7 +1001,9 @@ def _prepare_recording_playback_file(
 ) -> Path:
     stat_result = file_path.stat()
     age_sec = max(0.0, time.time() - float(stat_result.st_mtime))
-    if age_sec < RECORDING_STABLE_AGE_SEC:
+    from flinteye_app.recording_events import file_evidence
+    evidence = file_evidence(Path(context.store.runtime_file).resolve().parent, [file_path]).get(str(file_path.resolve()))
+    if (evidence is not None and not evidence['is_stable']) or (evidence is None and age_sec < RECORDING_STABLE_AGE_SEC):
         raise HTTPException(
             status_code=409,
             detail="recording file is still being written; wait until it becomes stable",
@@ -1568,10 +1573,24 @@ def get_config_runtime(request: Request) -> dict[str, Any]:
     return context.store.get_runtime()
 
 
+def _guard_connection_change(request, payload, config, *, replace=False):
+    peer = request.client.host if request.client else ''
+    if peer in {'127.0.0.1', '::1'}: return
+    network = payload.get('network', {} if replace else config.network.model_dump())
+    api = payload.get('api', {})
+    if network != config.network.model_dump() or any(key in api and api[key] != getattr(config.api, key) for key in ('host', 'port')):
+        raise HTTPException(403, 'Change connection settings on the server itself')
+    # Managed media transport cannot be opened through a remote JSON edit.
+    media = payload.get('mediamtx')
+    if media is not None and media != config.mediamtx.model_dump(by_alias=True):
+        raise HTTPException(403, 'Change media server settings on the server itself')
+
+
 @app.put("/api/v1/config/runtime", dependencies=[Depends(require_admin)])
 def put_config_runtime(request: Request, response: Response, payload: dict[str, Any]) -> dict[str, Any]:
     context = get_context(request)
     old_cfg = context.store.get_effective()
+    _guard_connection_change(request, payload, old_cfg, replace=True)
     try:
         new_cfg = context.store.set_runtime(
             payload, expected_revision=request.headers.get("if-match"), protect_credentials=True
@@ -1589,6 +1608,7 @@ def put_config_runtime(request: Request, response: Response, payload: dict[str, 
 def patch_config_runtime(request: Request, response: Response, payload: dict[str, Any]) -> dict[str, Any]:
     context = get_context(request)
     old_cfg = context.store.get_effective()
+    _guard_connection_change(request, payload, old_cfg)
     try:
         new_cfg = context.store.patch_runtime(
             payload, expected_revision=request.headers.get("if-match"), protect_credentials=True
@@ -2207,8 +2227,10 @@ def get_camera_snapshot(request: Request, camera_id: str) -> Response:
         if camera.type == "uvc" and camera.uvc and camera.uvc.env
         else config.multiview.ffmpeg_bin
     )
+    if not context.monitoring.desired:
+        raise HTTPException(409, 'Monitoring is stopped; thumbnails are paused')
     try:
-        image = capture_snapshot_jpeg(
+        image = context.snapshot_pool.capture(
             ffmpeg_bin=ffmpeg_bin,
             rtsp_url=rtsp_url,
             timeout_sec=config.snapshot.timeout_sec,
@@ -2445,7 +2467,9 @@ def get_multiview_view_snapshot(request: Request, view_id: str) -> Response:
         if view["id"].lower() != normalized.lower():
             continue
         try:
-            image = capture_snapshot_jpeg(
+            if not context.monitoring.desired:
+                raise HTTPException(409, 'Monitoring is stopped; thumbnails are paused')
+            image = context.snapshot_pool.capture(
                 ffmpeg_bin=config.multiview.ffmpeg_bin,
                 rtsp_url=view["rtsp_url"],
                 timeout_sec=config.snapshot.timeout_sec,
@@ -2512,6 +2536,15 @@ def get_recordings(
     # even if the periodic maintenance thread was delayed or not started.
     context.cleanup_recording_playback_cache(config)
     files = _all_recording_files(config, context.workspace_dir)
+    from flinteye_app.recording_events import file_evidence
+    paths = [Path(item['record_root']) / item['relative_path'] for item in files]
+    try:
+        evidence = file_evidence(Path(context.store.runtime_file).resolve().parent, paths)
+    except (OSError, sqlite3.Error):
+        evidence = {str(path.resolve()): {'is_stable': False, 'completion_state': 'unavailable'} for path in paths}
+    for item, path in zip(files, paths):
+        item.update(started_at=None, ended_at=None, duration_sec=None, completion_state='untracked')
+        item.update(evidence.get(str(path.resolve()), {}))
     if stream_id:
         normalized = stream_id.strip().strip("/").lower()
         files = [item for item in files if str(item["stream_id"]).lower() == normalized]
