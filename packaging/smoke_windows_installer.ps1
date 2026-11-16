@@ -76,8 +76,10 @@ try {
     Set-Content -LiteralPath $marker -Value 'Synthetic recording/config retention marker'
     $registration = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\FlintEye.Community_is1'
     if ($registration.UninstallString -notlike '*uninstall_windows.ps1*') { throw 'Windows Settings does not point to the maintenance launcher.' }
-    $arguments = '-NoProfile -ExecutionPolicy Bypass -File "' + (Join-Path $installDir 'uninstall_windows.ps1') + '" -InstallDir "' + $installDir + '" -Silent'
-    $uninstall = Start-Process -FilePath powershell.exe -ArgumentList $arguments -PassThru
+    if ($registration.QuietUninstallString -ne ($registration.UninstallString + ' -Silent')) { throw 'Normal and silent removal registrations differ.' }
+    $command = [regex]::Match($registration.QuietUninstallString, '^"([^"]+)"\s+(.+)$')
+    if (-not $command.Success) { throw 'The registered removal command could not be parsed.' }
+    $uninstall = Start-Process -FilePath $command.Groups[1].Value -ArgumentList $command.Groups[2].Value -PassThru
     if (-not $uninstall.WaitForExit(180000)) { throw 'Uninstall timed out.' }
     if ($uninstall.ExitCode -ne 0) { throw "Uninstall exited $($uninstall.ExitCode)." }
     if ((Get-StartupCommand) -ne $foreignStartup) { throw 'Uninstall removed another installation login registration.' }
