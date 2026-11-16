@@ -36,6 +36,8 @@ After setup, the existing admin account remains in place after application/OS re
 
 Server certificates last 90 days and renew within 30 days of expiry using the same installation CA. New TLS connections use the renewed certificate; clients do not need a new CA. The CA lasts five years. Its expiry is shown in local connection settings; renew it explicitly before expiry and redistribute the guide to every device. **Renew trust certificate** replaces the CA and requires renewed trust on every viewing device. Keep the private data directory secure; its TLS private keys should never be sent for support.
 
+After choosing **Renew trust certificate**, restart FlintEye so its HTTPS listener uses the new certificate, then reconnect from each device after updating trust.
+
 If DHCP changes the server IP, FlintEye does not silently expose another interface. Open the local server address, select the new IP, export the updated guide and restart. A new leaf certificate is issued under the same CA. If the local port is occupied, stop the conflicting instance or use the launcher's `--port` override; the control window shows the actual local URL.
 
 An unreachable page, an untrusted certificate, a rejected source network, incorrect credentials and a page with no video are different problems. Check the local settings error, selected bind address, firewall and certificate fingerprint first. For video, check the selected IP advertised by WebRTC and UDP 8189. HTTPS page access alone does not prove video reachability. A browser may also request local-network access; make a deliberate per-site decision. Public network profiles are not automatically opened.

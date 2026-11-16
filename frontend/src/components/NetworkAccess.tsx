@@ -21,7 +21,15 @@ export function NetworkAccess({api, blocked, onDirtyChange, onSaved}: {api: ApiC
   const act = async (action: () => Promise<unknown>, reload = false) => {
     if (busy || blocked) return;
     setBusy(true); setError(''); setMessage('');
-    try { const result = await action() as {message?: string; path?: string}; setMessage(result.message || 'Saved. Restart FlintEye to apply connection changes.'); if (result.path) setMessage(`${result.message} Folder: ${result.path}`); if (reload) await onSaved(); await refresh(); }
+    try {
+      const result = await action() as {message?: string; path?: string; restart_required?: boolean};
+      let feedback = result.message || 'Saved.';
+      if (result.path) feedback += ` Folder: ${result.path}`;
+      if (result.restart_required) feedback += ' Restart FlintEye to apply connection changes.';
+      setMessage(feedback);
+      if (reload) await onSaved();
+      await refresh();
+    }
     catch (e) { setError(e instanceof Error ? e.message : 'Operation failed'); }
     finally { setBusy(false); }
   };

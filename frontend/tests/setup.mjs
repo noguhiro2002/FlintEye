@@ -165,6 +165,10 @@ try {
             for (const b of boxes.slice(i + 1)) assert.ok(a.y + a.height <= b.y + 1 || b.y + b.height <= a.y + 1 || a.x + a.width <= b.x + 1 || b.x + b.width <= a.x + 1, 'LAN setting labels overlap');
         }
         await p.screenshot({ path: `dist/terra-webapp-fixes/network-settings-${width}.png`, fullPage: true });
+        await ctx.route('**/api/v1/network/renew-trust', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, restart_required: true, message: 'Install the new trust certificate on every viewing device.' }) }));
+        p.once('dialog', dialog => dialog.accept());
+        await p.getByRole('button', { name: 'Renew trust certificate…', exact: true }).click();
+        await p.getByText('Install the new trust certificate on every viewing device. Restart FlintEye to apply connection changes.', { exact: true }).waitFor();
         await address.fill('192.168.1.20');
         await p.locator('.sidebar').getByRole('button', { name: 'Dashboard', exact: true }).click();
         await p.getByRole('button', { name: 'Continue editing', exact: true }).click();
