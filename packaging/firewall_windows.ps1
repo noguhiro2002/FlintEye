@@ -8,17 +8,32 @@ function Test-PrivateIPv4([string]$value) {
     $bytes = $ip.GetAddressBytes()
     return $bytes.Length -eq 4 -and ($bytes[0] -eq 10 -or ($bytes[0] -eq 172 -and $bytes[1] -ge 16 -and $bytes[1] -le 31) -or ($bytes[0] -eq 192 -and $bytes[1] -eq 168))
 }
-if ($config.action -notin @('apply', 'remove')) { throw 'Invalid Firewall action' }
+if ($config.action -notin @('apply', 'remove', 'remove-installation')) { throw 'Invalid Firewall action' }
 $exitCode = 1
 Add-Type -AssemblyName System.Windows.Forms
 $installRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 if ([IO.Path]::GetFullPath($config.application) -ne (Join-Path $installRoot 'FlintEye.exe')) { throw 'Unexpected application path' }
 if ([IO.Path]::GetFullPath($config.media) -ne (Join-Path (Split-Path $PSScriptRoot -Parent) 'bin\mediamtx.exe')) { throw 'Unexpected media path' }
+. (Join-Path $PSScriptRoot 'firewall_rules.ps1')
+if($config.action -eq 'remove-installation') {
+    $rules=@(Get-InstallationFirewallRules $config.application $config.media)
+    $question='Remove this FlintEye installation''s LAN access rules for all saved profiles?' + [Environment]::NewLine +
+        'Application: ' + $config.application + [Environment]::NewLine + 'Media: ' + $config.media +
+        [Environment]::NewLine + 'Matching HTTPS/WebRTC rules: ' + $rules.Count
+    if([Windows.Forms.MessageBox]::Show($question, 'Confirm FlintEye LAN removal', 'YesNo', 'Question') -ne 'Yes') { exit 2 }
+    foreach($rule in $rules) {
+        $current=Get-NetFirewallRule -Name $rule.Name -ErrorAction Stop
+        if(-not (Test-InstallationFirewallRule $current $config.application $config.media)) { throw 'A rule changed; retry removal.' }
+        $current | Remove-NetFirewallRule -ErrorAction Stop
+    }
+    if(@(Get-InstallationFirewallRules $config.application $config.media).Count -ne 0) { throw 'Some installation rules remain. Retry removal.' }
+    exit 0
+}
 $question = 'FlintEye Firewall: ' + $config.action + [Environment]::NewLine + 'Server: ' + $config.address + [Environment]::NewLine + 'HTTPS TCP ' + $config.port + ', WebRTC UDP 8189' + [Environment]::NewLine + 'Sources: ' + ($config.subnets -join ', ') + [Environment]::NewLine + 'Private profile only. Installation: ' + $identity
 if ([Windows.Forms.MessageBox]::Show($question, 'Confirm FlintEye LAN access', 'YesNo', 'Question') -ne 'Yes') { exit 2 }
 try {
     # Only exact names belonging to this installation; never broad wildcard removal.
-    $names = @($group + '-HTTPS', $group + '-WebRTC')
+    $names = @(($group + '-HTTPS'), ($group + '-WebRTC'))
     $previous = @()
     foreach ($name in $names) {
         $rule = Get-NetFirewallRule -Name $name -ErrorAction SilentlyContinue

@@ -66,6 +66,7 @@ command = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', '--one
            '--add-data', f'{ROOT / "docs/LAN_ACCESS.md"}{sep}docs',
            '--add-data', f'{ROOT / "docs/LAN_ACCESS.ja.md"}{sep}docs',
            '--add-data', f'{ROOT / "packaging/firewall_windows.ps1"}{sep}packaging',
+           '--add-data', f'{ROOT / "packaging/firewall_rules.ps1"}{sep}packaging',
            '--add-data', f'{ROOT / "packaging/elevate_firewall.ps1"}{sep}packaging',
            '--collect-all', 'cryptography',
            '--add-data', f'{vendor / "licenses"}{sep}licenses',

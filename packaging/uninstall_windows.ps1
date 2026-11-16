@@ -33,12 +33,24 @@ try {
     & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $stop -InstallDir $installRoot
     if ($LASTEXITCODE -ne 0) { throw 'FlintEye could not finish recordings and stop. Removal was cancelled; retry Stop or restart Windows.' }
     $firewallOwner = Join-Path $data 'firewall-owner.json'
+    $needsFirewallCleanup=$false
     if (Test-Path -LiteralPath $firewallOwner) {
         $registration = Get-Content -LiteralPath $firewallOwner -Raw | ConvertFrom-Json
-        if ($registration.applied) {
-            $cleanup = Start-Process -FilePath (Join-Path $installRoot 'FlintEye.exe') -ArgumentList '--remove-firewall-rules' -Wait -PassThru
-            if ($cleanup.ExitCode -ne 0) { throw 'Firewall removal was not approved or completed. Retry removal to clean this installation rules.' }
+        $needsFirewallCleanup=$registration.applied -and (-not $registration.application -or
+            [IO.Path]::GetFullPath($registration.application).Equals((Join-Path $installRoot 'FlintEye.exe'), [StringComparison]::OrdinalIgnoreCase))
+    }
+    $inventory=Join-Path $env:LOCALAPPDATA 'FlintEyeMaintenance\firewall-installations'
+    if(Test-Path -LiteralPath $inventory) {
+        foreach($file in @(Get-ChildItem -LiteralPath $inventory -Filter '*.json' -File)) {
+            $registration=Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json
+            if([IO.Path]::GetFullPath($registration.application).Equals((Join-Path $installRoot 'FlintEye.exe'), [StringComparison]::OrdinalIgnoreCase)) {
+                $needsFirewallCleanup=$true; break
+            }
         }
+    }
+    if($needsFirewallCleanup) {
+        $cleanup=Start-Process -FilePath (Join-Path $installRoot 'FlintEye.exe') -ArgumentList '--remove-installation-firewall-rules' -Wait -PassThru
+        if($cleanup.ExitCode -ne 0) { throw 'Firewall removal was not approved or completed. Removal was cancelled; retry to clean this installation and its saved profiles.' }
     }
     # Register only the uninstall log, retrieve lock holders without ending them.
     if (-not ('FlintEyeLocks' -as [type])) { Add-Type -TypeDefinition @'

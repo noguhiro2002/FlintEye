@@ -357,6 +357,7 @@ def main() -> int:
     parser.add_argument('--disable-lan', action='store_true', help='Disable LAN access; keep local HTTP and recordings')
     parser.add_argument('--export-connection-guide', action='store_true', help='Write public certificate and trust guide, then exit')
     parser.add_argument('--remove-firewall-rules', action='store_true', help='Remove only this profile installation Firewall rules with explicit UAC approval')
+    parser.add_argument('--remove-installation-firewall-rules', action='store_true', help='Remove this executable installation LAN rules across profiles, with explicit UAC approval')
     parser.add_argument('--connection-info', action='store_true', help='Show the running profile address and initial setup assistance')
     parser.add_argument('--port', type=int, help='Override the saved API port for this launch only')
     args = parser.parse_args()
@@ -365,6 +366,10 @@ def main() -> int:
         parser.error('--port must be between 1 and 65535')
     root = args.data_dir.expanduser().resolve()
     os.environ['FLINTEYE_DATA_DIR'] = str(root)
+    if args.remove_installation_firewall_rules:
+        from flinteye_app.windows_maintenance import remove_installation_firewall
+        remove_installation_firewall()
+        return 0
     if args.connection_info:
         from flinteye_app.instance_control import active_listener_port, active_listener_url
         connection_information(root, active_listener_url(root, f'http://127.0.0.1:{active_listener_port(root, 18080)}'))

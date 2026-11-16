@@ -44,6 +44,8 @@ An unreachable page, an untrusted certificate, a rejected source network, incorr
 
 Disable LAN access and restart to close the HTTPS listener. On Windows remove this installation's firewall rules with the dedicated button. Remove the FlintEye CA from every viewing device when it is no longer needed. Uninstall does not remotely remove client trust; retained data includes the existing installation's certificates. Explicit data deletion removes those certificates too, so reinstalling with erased data requires fresh trust.
 
+Windows removal also checks the Firewall ownership records saved by this FlintEye installation, including custom profiles that have already stopped or been deleted. With explicit UAC and confirmation it removes only the recognized HTTPS/WebRTC rules whose program paths belong to this installation, including interrupted staging rules. Other installations and manually named rules are preserved. If approval or cleanup fails, removal stops and the records remain available for retry. The local recovery command is `FlintEye.exe --remove-installation-firewall-rules`; it does not initialize a new camera profile. If you tested an earlier experimental 1.2 build without these ownership records, run this recovery command from the updated installation before uninstalling it.
+
 ## Headless and existing proxy deployments
 
 For an explicit headless opt-in, run the installed executable as its normal service user with the same data directory used by the service:

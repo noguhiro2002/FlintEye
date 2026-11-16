@@ -68,6 +68,9 @@ jobs:
       - name: Profile-scoped shutdown regression (PowerShell 5.1)
         shell: powershell
         run: ./packaging/smoke_windows_stop.ps1
+      - name: Firewall ownership selection without changing real rules
+        shell: powershell
+        run: ./packaging/smoke_windows_firewall.ps1
 
   windows_installer_check:
     if: inputs.windows_installer_check_run != ''
@@ -171,6 +174,7 @@ jobs:
           python -m unittest discover -s tests -p test_process_lifetime.py -v
           python -m unittest discover -s tests -p test_macos_lifecycle.py -v
           python -m unittest discover -s tests -p test_network_access.py -v
+          python -m unittest discover -s tests -p test_windows_maintenance.py -v
       - name: macOS build tools
         if: matrix.os == 'macos'
         run: brew install cmake pkg-config nasm ninja
