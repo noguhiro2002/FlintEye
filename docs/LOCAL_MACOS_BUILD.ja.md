@@ -8,6 +8,9 @@
 結果はローカルのテストビルドになります。アップロード、公開、「アプリケーション」フォルダーへのインストール、既存の FlintEye データの変更などは一切行われません。既存の GitHub インストーラーは変更されません。この手順はご自身の Mac を対象としており、サポートされているすべての macOS バージョンとの互換性を確立するものではありません。
 
 <a id="1-prepare-the-mac-once"></a>
+
+1.2.0-preview.1のテストに向けて、本ガイドでは開発ブランチ`codex/1.2.0-preview`を明示的に選択します。組み込まれたLAN HTTPSおよびQAの修正には新しいビルドが必要であり、既存のパブリック版1.1.3パッケージおよびmainブランチはこれらのコマンドによって変更されることはありません。ビルド時に表示されるソースコミットを記録し、隔離されたテストプロファイルを使用してください。実機での受け入れテストは現在保留中です。
+
 ## 1. Mac の事前準備を 1 回行う
 
 Mac 本体でターミナルを使用し、**Rosetta を使用して開く**が無効になっている状態にします。電源を接続し、ソースアーカイブ、メディアコンパイル、Python パッケージ、DMG に十分な空き容量を確保してください。初期段階でおおよそ 15〜20 GB の作業スペースが必要です。ビルド時間は Mac とネットワーク環境に依存するため、初回実行時は時間がかかることがあります。
@@ -34,7 +37,7 @@ Python 3.14.10 以降の 3.14 パッチバージョン、Node.js 22.12 以降の
 ```sh
 mkdir -p ~/Developer
 cd ~/Developer
-git clone https://github.com/noguhiro2002/FlintEye.git FlintEye-build
+git clone --branch codex/1.2.0-preview https://github.com/noguhiro2002/FlintEye.git FlintEye-build
 cd FlintEye-build
 ```
 
@@ -42,7 +45,7 @@ cd FlintEye-build
 
 ```sh
 cd ~/Developer/FlintEye-build
-git switch main
+git switch codex/1.2.0-preview
 git pull --ff-only
 ```
 

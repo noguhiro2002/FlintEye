@@ -8,6 +8,24 @@ from pathlib import Path
 import secrets
 import sys
 import threading
+from urllib.parse import urlsplit
+
+
+def browser_url(host: str, port: int) -> str:
+    address = '127.0.0.1' if host == '0.0.0.0' else '::1' if host == '::' else host
+    if ':' in address and not address.startswith('['): address = '[' + address + ']'
+    return f'http://{address}:{port}'
+
+
+def active_listener_url(root: Path, fallback: str) -> str:
+    try:
+        url = json.loads((root/'instance-control.json').read_text(encoding='utf-8')).get('url', '')
+        parsed = urlsplit(url)
+        if parsed.scheme in {'http', 'https'} and parsed.hostname and parsed.hostname not in {'0.0.0.0', '::'} and not (parsed.username or parsed.password or parsed.query or parsed.fragment) and parsed.path in {'', '/'}:
+            return url
+    except (OSError, ValueError, TypeError, AttributeError):
+        pass
+    return fallback
 
 
 def active_listener_port(root: Path, fallback: int) -> int:
@@ -22,7 +40,7 @@ def active_listener_port(root: Path, fallback: int) -> int:
 
 
 class InstanceControl:
-    def __init__(self, root: Path, stop, *, port: int | None = None, renew_setup=None):
+    def __init__(self, root: Path, stop, *, port: int | None = None, renew_setup=None, url: str | None = None):
         self.renew_setup = renew_setup
         self.path = root / 'instance-control.json'
         self.request = root / 'stop-request.json'
@@ -34,7 +52,7 @@ class InstanceControl:
         fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, 'w', encoding='utf-8') as stream:
             json.dump({'token': self.token, 'pid': os.getpid(),
-                       'executable': str(Path(sys.executable).resolve()), 'port':port}, stream)
+                       'executable': str(Path(sys.executable).resolve()), 'port':port, 'url':url}, stream)
         temporary.replace(self.path)
         self.index = None
         if sys.platform == 'win32' and getattr(sys, 'frozen', False):

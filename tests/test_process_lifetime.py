@@ -15,6 +15,15 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ProcessLifetimeTests(unittest.TestCase):
+    def test_browser_address_uses_live_binding_and_rejects_wildcard_destinations(self):
+        from flinteye_app.instance_control import active_listener_url, browser_url
+        self.assertEqual(browser_url('0.0.0.0', 18080), 'http://127.0.0.1:18080')
+        self.assertEqual(browser_url('::', 18080), 'http://[::1]:18080')
+        self.assertEqual(browser_url('192.168.1.10', 18081), 'http://192.168.1.10:18081')
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root/'instance-control.json').write_text(json.dumps({'url': 'http://192.168.1.10:18081'}))
+            self.assertEqual(active_listener_url(root, 'http://127.0.0.1:18080'), 'http://192.168.1.10:18081')
     def test_failed_normal_quit_keeps_control_available_for_retry(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

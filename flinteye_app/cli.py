@@ -108,7 +108,7 @@ def setup_dialog(runtime: Path) -> None:
     """Accessible password form lives in the browser; this window conveys ownership."""
     from flinteye_app.orchestrator_store import RuntimeStore
     from flinteye_app.orchestrator_auth import local_auth_is_configured
-    from flinteye_app.instance_control import active_listener_port
+    from flinteye_app.instance_control import active_listener_port, active_listener_url, browser_url
     if local_auth_is_configured(RuntimeStore(env_file='', runtime_file=str(runtime), use_env=False).get_effective().auth):
         return
     import tkinter as tk
@@ -126,7 +126,8 @@ def setup_dialog(runtime: Path) -> None:
         window.clipboard_clear(); window.clipboard_append(token.get()); window.update()
     ttk.Button(frame, text='Copy setup token', command=copy_token).pack(anchor='w', pady=8)
     port = active_listener_port(root, 18080)
-    url = f'http://127.0.0.1:{port}'
+    config = RuntimeStore(env_file='', runtime_file=str(runtime), use_env=False).get_effective()
+    url = active_listener_url(root, browser_url(config.api.host, port))
     ttk.Label(frame, text=url).pack(anchor='w')
     ttk.Button(frame, text='Open setup in browser', command=lambda: webbrowser.open(url)).pack(anchor='w', pady=8)
     ttk.Label(frame, text='If the browser did not open, enter the address above manually. LAN access can be configured in Settings after setup.', wraplength=460).pack(anchor='w')
@@ -365,8 +366,8 @@ def main() -> int:
     root = args.data_dir.expanduser().resolve()
     os.environ['FLINTEYE_DATA_DIR'] = str(root)
     if args.connection_info:
-        from flinteye_app.instance_control import active_listener_port
-        connection_information(root, f'http://127.0.0.1:{active_listener_port(root, 18080)}')
+        from flinteye_app.instance_control import active_listener_port, active_listener_url
+        connection_information(root, active_listener_url(root, f'http://127.0.0.1:{active_listener_port(root, 18080)}'))
         return 0
     if args.disable_autostart:
         disable_autostart()
@@ -394,8 +395,9 @@ def main() -> int:
         if not args.headless:
             from flinteye_app.orchestrator_store import RuntimeStore
             existing = RuntimeStore(env_file='', runtime_file=str(root/'runtime.json'), use_env=False)
-            from flinteye_app.instance_control import active_listener_port
-            webbrowser.open(f'http://127.0.0.1:{active_listener_port(root, existing.get_effective().api.port)}')
+            from flinteye_app.instance_control import active_listener_port, active_listener_url, browser_url
+            api = existing.get_effective().api
+            webbrowser.open(active_listener_url(root, browser_url(api.host, active_listener_port(root, api.port))))
         return 0
     runtime = initialize(root)
     from flinteye_app.orchestrator_store import RuntimeStore
@@ -452,7 +454,8 @@ def main() -> int:
     install_routes(app, context, setup_token=token, desktop=not args.headless)
     host = '0.0.0.0' if os.environ.get('FLINTEYE_CONTAINER_BRIDGE') == '1' else context.store.get_effective().api.host
     port = args.port or context.store.get_effective().api.port
-    url = f'http://127.0.0.1:{port}'
+    from flinteye_app.instance_control import browser_url
+    url = browser_url(host, port)
     network = context.store.get_effective().network
     context.listener = {'host': host, 'port': port, 'scheme': 'http', 'url': url,
                         'lan_url': f'https://{network.address}:{port}' if network.enabled else None,
@@ -473,7 +476,7 @@ def main() -> int:
             return False
         server.should_exit = True
         return True
-    control = InstanceControl(root, requested_quit, port=port, renew_setup=renew_setup)
+    control = InstanceControl(root, requested_quit, port=port, renew_setup=renew_setup, url=url)
     thread = None
     try:
         if args.headless:

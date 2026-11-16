@@ -6,6 +6,8 @@ This procedure builds the current committed source on an Apple Silicon Mac witho
 
 The result is a local test build. Nothing is uploaded, published, installed into Applications, or changed in your existing FlintEye data. Existing GitHub installers remain unchanged. This procedure targets your own Mac; it does not establish compatibility with every supported macOS version.
 
+For 1.2.0-preview.1 testing, this guide selects the development branch `codex/1.2.0-preview` explicitly. Its built-in LAN HTTPS and QA fixes require a new build; the existing public 1.1.3 package and main branch are not changed by these commands. Record the source commit printed by the build and use an isolated test profile. Physical-device acceptance remains pending.
+
 ## 1. Prepare the Mac once
 
 Use Terminal on the Mac itself, with **Open using Rosetta** disabled. Connect power and leave enough free space for source archives, media compilation, Python packages and the DMG; allow roughly 15–20 GB of working space initially. Build time depends on the Mac and network, so the first run can take a while.
@@ -31,7 +33,7 @@ Create a dedicated checkout of the public source; no GitHub login is required. C
 ```sh
 mkdir -p ~/Developer
 cd ~/Developer
-git clone https://github.com/noguhiro2002/FlintEye.git FlintEye-build
+git clone --branch codex/1.2.0-preview https://github.com/noguhiro2002/FlintEye.git FlintEye-build
 cd FlintEye-build
 ```
 
@@ -39,7 +41,7 @@ For subsequent builds, update that checkout instead of cloning again:
 
 ```sh
 cd ~/Developer/FlintEye-build
-git switch main
+git switch codex/1.2.0-preview
 git pull --ff-only
 ```
 
