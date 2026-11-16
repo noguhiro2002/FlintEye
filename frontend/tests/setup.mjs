@@ -144,6 +144,34 @@ try {
         await ctx.close();
         console.log('PASS 9 setup', width);
     }
+    for (const width of [320, 1440]) {
+        const { ctx, p } = await context('admin', width, 900);
+        await ctx.route('**/api/v1/network', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ saved: { enabled: true, address: '192.168.1.10', allowed_subnets: ['192.168.1.0/24'] }, restart_required: false, local_url: 'http://127.0.0.1:18080', lan_url: 'https://192.168.1.10:18080', fingerprint: '0123456789abcdef'.repeat(4), ca_expires: '2031-11-16T00:00:00Z', guide_url: 'https://example.test/guide', error: '' }) }));
+        await p.locator('.sidebar').getByRole('button', { name: 'Settings', exact: true }).click();
+        await p.getByRole('complementary', { name: 'Settings categories' }).getByRole('button', { name: 'Runtime & access', exact: true }).click();
+        await p.getByText('LAN connection and certificate trust', { exact: true }).click();
+        const address = p.getByRole('textbox', { name: 'Server IPv4 address', exact: true });
+        await address.waitFor();
+        const widths = await p.evaluate(() => [innerWidth, document.documentElement.scrollWidth]);
+        assert.ok(widths[1] <= widths[0] + 1, `LAN settings overflow: ${widths}`);
+        const fields = p.locator('.network-access form label');
+        const boxes = await fields.evaluateAll(labels => labels.map(label => {
+            const { x, y, width, height } = label.getBoundingClientRect();
+            return { x, y, width, height };
+        }));
+        for (let i = 0; i < boxes.length; i++) {
+            const a = boxes[i];
+            assert.ok(a.x >= 0 && a.x + a.width <= width + 1, JSON.stringify(a));
+            for (const b of boxes.slice(i + 1)) assert.ok(a.y + a.height <= b.y + 1 || b.y + b.height <= a.y + 1 || a.x + a.width <= b.x + 1 || b.x + b.width <= a.x + 1, 'LAN setting labels overlap');
+        }
+        await p.screenshot({ path: `dist/terra-webapp-fixes/network-settings-${width}.png`, fullPage: true });
+        await address.fill('192.168.1.20');
+        await p.locator('.sidebar').getByRole('button', { name: 'Dashboard', exact: true }).click();
+        await p.getByRole('button', { name: 'Continue editing', exact: true }).click();
+        assert.equal(await address.inputValue(), '192.168.1.20');
+        await ctx.close();
+        console.log('PASS LAN settings layout and unsaved navigation', width);
+    }
 }
 catch (e) {
     console.error('FAIL 9', e);

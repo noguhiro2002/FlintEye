@@ -25,23 +25,31 @@ export function NetworkAccess({api, blocked, onDirtyChange, onSaved}: {api: ApiC
     catch (e) { setError(e instanceof Error ? e.message : 'Operation failed'); }
     finally { setBusy(false); }
   };
-  return <details className="runtime-advanced form-span-3" onToggle={e => setOpen(e.currentTarget.open)}>
-    <summary>LAN connection and certificate trust</summary>
-    <p>Use this PC only by default. Optional LAN access uses HTTPS on port 18080 (or your configured API port). Each viewing PC, iPhone, iPad or Android device must first trust this installation’s certificate.</p>
-    {error && <p role="alert">{error}</p>}
+  return <details className="runtime-advanced network-access form-span-3" onToggle={e => setOpen(e.currentTarget.open)}>
+    <summary><span><strong>LAN connection and certificate trust</strong><small>Optional access from other computers and mobile devices.</small></span></summary>
+    <div className="network-access-body">
+    <p className="field-help">Use this PC only by default. Optional LAN access uses HTTPS on port 18080 (or your configured API port). Each viewing PC, iPhone, iPad or Android device must first trust this installation’s certificate.</p>
+    {error && <p className="panel-error" role="alert">{error}</p>}
     {status && <>
-      <p>Active local address: {status.local_url || 'Unavailable'}{status.lan_url && <> · LAN: {status.lan_url}</>}</p>
-      {status.error && <p role="alert">{status.error}</p>}
-      {status.restart_required && <p role="status">Connection changes take effect after restarting FlintEye.</p>}
-      {status.fingerprint && <p className="panel-note">CA SHA-256: <code style={{overflowWrap: 'anywhere'}}>{status.fingerprint}</code><br/>Expires: {status.ca_expires}</p>}
-      <form onSubmit={e => {e.preventDefault(); void act(() => api.networkAction('', {enabled, address, allowed_subnets: sources.split(',').map(s => s.trim()).filter(Boolean)}, 'PUT'), true);}}>
-        <fieldset disabled={busy || blocked}>
-          <label className="check"><input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} />Enable LAN HTTPS</label>
-          <label>Server IPv4 address<input value={address} onChange={e => setAddress(e.target.value)} placeholder="192.168.1.10" required={enabled}/></label>
-          <label>Permitted source networks (comma separated)<input value={sources} onChange={e => setSources(e.target.value)} placeholder="192.168.1.0/24" required={enabled}/></label>
-          <p>Choose an IP assigned to this server. Reserve it in your router to keep the same address after reboot. Saving does not change the current connection.</p>
-          <button type="submit">Save connection settings</button>
+      <dl className="network-addresses">
+        <div><dt>This computer</dt><dd>{status.local_url || 'Unavailable'}</dd></div>
+        {status.lan_url && <div><dt>Other devices</dt><dd>{status.lan_url}</dd></div>}
+      </dl>
+      {status.error && <p className="panel-error" role="alert">{status.error}</p>}
+      {status.restart_required && <p className="panel-note" role="status">Connection changes take effect after restarting FlintEye.</p>}
+      {status.fingerprint && <div className="network-certificate"><strong>CA SHA-256 fingerprint</strong><code>{status.fingerprint}</code><span>Expires: {status.ca_expires}</span></div>}
+      <form aria-busy={busy} onSubmit={e => {e.preventDefault(); void act(() => api.networkAction('', {enabled, address, allowed_subnets: sources.split(',').map(s => s.trim()).filter(Boolean)}, 'PUT'), true);}}>
+        <fieldset className="settings-fields" disabled={busy || blocked}>
+          <div className="form-grid">
+          <label className="check form-span-3"><input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} /><span>Enable LAN HTTPS</span></label>
+          <label>Server IPv4 address<input value={address} onChange={e => setAddress(e.target.value)} placeholder="192.168.1.10" required={enabled} aria-describedby="network-address-help"/></label>
+          <label className="form-span-2">Permitted source networks (comma separated)<input value={sources} onChange={e => setSources(e.target.value)} placeholder="192.168.1.0/24" required={enabled}/></label>
+          <p id="network-address-help" className="field-help form-span-3">Choose an IP assigned to this server. Reserve it in your router to keep the same address after reboot. Saving does not change the current connection.</p>
+          </div>
+          <div className="button-row">
+          <button type="submit" disabled={!dirty}>Save connection settings</button>
           <button type="button" disabled={!dirty} onClick={() => {if (window.confirm('Discard the unsaved LAN connection changes?')) void refresh();}}>Discard connection changes</button>
+          </div>
         </fieldset>
       </form>
       <div className="button-row">
@@ -50,10 +58,11 @@ export function NetworkAccess({api, blocked, onDirtyChange, onSaved}: {api: ApiC
         <button disabled={busy || blocked} onClick={() => void act(() => api.networkAction('/firewall', {action:'remove'}))}>Windows: remove this installation’s rules…</button>
         <button disabled={busy || blocked || !status.saved.enabled} onClick={() => {if (window.confirm('Replace the trust certificate? Every viewing device will need to trust the new certificate.')) void act(() => api.networkAction('/renew-trust', {confirm:true}));}}>Renew trust certificate…</button>
       </div>
-      <p><a href={status.guide_url} target="_blank" rel="noreferrer">Trust, Firewall and recovery instructions / 日本語の手順</a></p>
-      {message && <p role="status">{message}</p>}
-      {blocked && <p>Save or discard your other settings before changing LAN access.</p>}
-      <p>Use the public connection guide to transfer the CA certificate; compare its fingerprint on the server. Do not ignore browser certificate warnings or share private keys.</p>
+      <p className="field-help"><a href={status.guide_url} target="_blank" rel="noreferrer">Trust, Firewall and recovery instructions / 日本語の手順</a></p>
+      {message && <p className="panel-ok" role="status">{message}</p>}
+      {blocked && <p className="field-help">Save or discard your other settings before changing LAN access.</p>}
+      <p className="field-help">Use the public connection guide to transfer the CA certificate; compare its fingerprint on the server. Do not ignore browser certificate warnings or share private keys.</p>
     </>}
+    </div>
   </details>;
 }

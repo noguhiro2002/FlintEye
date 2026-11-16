@@ -3256,6 +3256,26 @@ button.recording-thumbnail:disabled {
   margin: 0 15px 15px;
 }
 
+.network-access-body {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  border-top: 1px solid #e3eaf2;
+  line-height: 1.5;
+}
+
+.network-access-body > p,
+.network-access-body .panel-note,
+.network-addresses { margin: 0; }
+
+.network-addresses { display: grid; gap: 10px; font-size: 13px; }
+.network-addresses dt { color: #6a7f94; }
+.network-addresses dd { margin: 0; overflow-wrap: anywhere; }
+.network-certificate { display: grid; gap: 6px; padding: 12px; background: #edf4fb; border: 1px solid #d6e4f2; border-radius: 8px; font-size: 12px; }
+.network-certificate code { overflow-wrap: anywhere; }
+.network-access-body .button-row { align-items: center; }
+.network-access-body .button-row button { flex: 0 1 auto; }
+
 .settings-section-runtime .setting-help {
   display: none;
 }
@@ -3264,6 +3284,7 @@ button.recording-thumbnail:disabled {
   .runtime-advanced-grid {
     grid-template-columns: 1fr;
   }
+  .network-access-body .button-row button { width: 100%; }
 }
 
 .first-run { position: sticky; top: 0; z-index: 20; background: #173647; color: #fff; border: 2px solid #57d6aa; border-radius: 12px; padding: 18px; margin: 12px 0; box-shadow: 0 8px 24px #0003; }
