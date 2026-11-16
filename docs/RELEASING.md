@@ -6,7 +6,7 @@
 
 ## Source-first public development
 
-The public history begins with a single **1.1.1 source snapshot**. The next build is application **1.1.3**, distribution **`v1.1.3-preview.1`**. Old private installers and emulated local builds are not republished as public releases. Existing private checkouts must be cloned again into a new directory; do not merge the unrelated old history into this repository.
+The public history begins with a single **1.1.1 source snapshot**. The current public package is **`v1.1.3-preview.1`**. The development branch targets application **1.2.0**, distribution **`v1.2.0-preview.1`**, with publication blocked until its acceptance checks pass. Old private installers and emulated local builds are not republished as public releases. Existing private checkouts must be cloned again into a new directory; do not merge the unrelated old history into this repository.
 
 Normal pushes run **Distribution checks**. **Build release** is manual and creates Actions artifacts, including desktop installers and tested container archives. On a public repository these artifacts and logs are accessible to repository readers (artifact downloads require GitHub sign-in); they are development build results, not approved releases. No camera credentials, recordings or personal profiles belong in CI inputs or logs.
 

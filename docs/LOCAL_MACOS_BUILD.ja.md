@@ -27,7 +27,7 @@ xcode-select --install
 /opt/homebrew/bin/brew install python@3.14 python-tk@3.14 node@22 go cmake pkgconf ninja gh
 ```
 
-Python 3.14.10 以降の 3.14 パッチバージョン、Node.js 22.12 以降の 22.x、および Go 1.27 以降を使用してください。このスクリプトは、シェルでアクティブな Conda 環境がある場合でも、ネイティブの Homebrew ツールを明示的に選択します。独自の Python 環境を作成します。Homebrew は [Python 3.14 用の Tk を個別に提供](https://formulae.brew.sh/formula/python-tk@3.14)しており、Tk はパスワードおよびフォルダーウィンドウに必要です。[Node.js 22](https://formulae.brew.sh/formula/node@22) は既存のビルドワークフローと一致しており、ピン留めされた MediaMTX ソースには [Go 1.27 以降](https://formulae.brew.sh/formula/go)が必要です。
+Python 3.14.10以降の3.14パッチバージョン、Node.js 22.12以降の22.x、およびGo 1.27以降を使用してください。このスクリプトは、シェルでConda環境がアクティブであっても、明示的にネイティブのHomebrewツールを選択し、独自のPython環境を作成します。Homebrewは [Python 3.14用のTk](https://formulae.brew.sh/formula/python-tk@3.14) を個別に提供しています。Tkは、セットアップや接続情報、フォルダー選択ウィンドウに必要です。初期管理者パスワードはブラウザーで入力します。[Node.js 22](https://formulae.brew.sh/formula/node@22) は既存のビルドワークフローと一致しており、固定されたMediaMTXソースには [Go 1.27以降](https://formulae.brew.sh/formula/go) が必要です。
 
 <a id="2-get-the-updated-source"></a>
 ## 2. 更新されたソースを取得する

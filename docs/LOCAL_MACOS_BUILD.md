@@ -24,7 +24,7 @@ If they are already installed, continue. Install native Apple Silicon Homebrew u
 /opt/homebrew/bin/brew install python@3.14 python-tk@3.14 node@22 go cmake pkgconf ninja gh
 ```
 
-Use Python 3.14.10 or a newer 3.14 patch, Node.js 22.12 or newer 22.x, and Go 1.27 or newer. The script selects native Homebrew tools explicitly, even if your shell has an active Conda environment. It creates its own Python environment. Homebrew provides [Tk separately for Python 3.14](https://formulae.brew.sh/formula/python-tk@3.14); Tk is needed for the password and folder windows. [Node.js 22](https://formulae.brew.sh/formula/node@22) matches the existing build workflow, and the pinned MediaMTX source requires [Go 1.27 or newer](https://formulae.brew.sh/formula/go).
+Use Python 3.14.10 or a newer 3.14 patch, Node.js 22.12 or newer 22.x, and Go 1.27 or newer. The script selects native Homebrew tools explicitly, even if your shell has an active Conda environment. It creates its own Python environment. Homebrew provides [Tk separately for Python 3.14](https://formulae.brew.sh/formula/python-tk@3.14); Tk is needed for the setup/connection information and folder-selection windows. The initial administrator password is entered in the browser. [Node.js 22](https://formulae.brew.sh/formula/node@22) matches the existing build workflow, and the pinned MediaMTX source requires [Go 1.27 or newer](https://formulae.brew.sh/formula/go).
 
 ## 2. Get the updated source
 

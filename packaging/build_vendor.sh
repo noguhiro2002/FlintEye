@@ -21,7 +21,20 @@ if [ "${MSYSTEM:-}" = CLANGARM64 ]; then
   x264_options+=(--host=aarch64-w64-mingw32)
 fi
 pycmd=${FLINTEYE_PYTHON:-python}
-if command -v cygpath >/dev/null; then pycmd=$(cygpath -u "$pycmd"); fi
+if command -v cygpath >/dev/null; then
+  pycmd=$(cygpath -u "$pycmd")
+  # Native Meson may find Strawberry Perl's incompatible pkg-config.bat on
+  # the inherited Windows PATH. Select the active CPU's MSYS2 pkgconf by path.
+  # https://www.msys2.org/docs/pkgconfig/
+  native_pkgconf="${MINGW_PREFIX:?Use the UCRT64 or CLANGARM64 MSYS2 shell}/bin/pkgconf.exe"
+  if [ ! -x "$native_pkgconf" ]; then
+    printf 'Install pkgconf for the active MSYS2 environment: %s\n' "$MINGW_PREFIX" >&2
+    exit 1
+  fi
+  export PATH="$MINGW_PREFIX/bin:$PATH"
+  export PKG_CONFIG="$(cygpath -m "$native_pkgconf")"
+  "$native_pkgconf" --version
+fi
 "$pycmd" packaging/vendor.py fetch ffmpeg x264 freetype harfbuzz mediamtx
 mkdir -p vendor/prefix vendor/build vendor/bin
 prefix="$PWD/vendor/prefix"
@@ -34,6 +47,7 @@ cmake -S vendor/src/freetype -B vendor/build/freetype -G Ninja \
   -DFT_DISABLE_PNG=TRUE -DFT_DISABLE_HARFBUZZ=TRUE -DFT_DISABLE_BROTLI=TRUE
 cmake --build vendor/build/freetype --parallel "$jobs"
 cmake --install vendor/build/freetype
+"${PKG_CONFIG:-pkg-config}" --print-errors --exists --static freetype2
 meson setup vendor/build/harfbuzz vendor/src/harfbuzz --prefix="$prefix" --libdir=lib \
   --buildtype=release --default-library=static -Dfreetype=enabled -Dglib=disabled \
   -Dgobject=disabled -Dicu=disabled -Dcairo=disabled -Dtests=disabled -Ddocs=disabled \
@@ -69,7 +83,7 @@ esac
 ../../src/ffmpeg/configure --prefix="$prefix" --disable-shared --enable-static \
   --disable-autodetect --disable-doc --disable-debug --disable-ffplay --enable-gpl \
   --enable-libx264 --enable-libfreetype --enable-libharfbuzz --enable-network \
-  --pkg-config-flags=--static --extra-cflags="-I$prefix/include" "${extra[@]}"
+  --pkg-config="${PKG_CONFIG:-pkg-config}" --pkg-config-flags=--static --extra-cflags="-I$prefix/include" "${extra[@]}"
 make -j "$jobs"
 make install
 cd "$root"
