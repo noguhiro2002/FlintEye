@@ -66,8 +66,10 @@ def main() -> None:
         subprocess.check_output([str(path), '-e', 'print $^O'], env=env, text=True).strip() == 'MSWin32'), None)
     if perl is None:
         raise RuntimeError('Install native Strawberry Perl; MSYS Perl cannot build MSVC OpenSSL.')
-    for tool in ('cl.exe', 'nmake.exe', 'rustc.exe', 'cargo.exe'):
-        if not shutil.which(tool, path=env.get('PATH')):
+    tools = {tool: shutil.which(tool, path=env.get('PATH'))
+             for tool in ('cl.exe', 'nmake.exe', 'rustc.exe', 'cargo.exe')}
+    for tool, executable in tools.items():
+        if not executable:
             raise RuntimeError(f'Missing native build tool: {tool}')
     tree = source('openssl')
     build = VENDOR / 'build/openssl-arm64'
@@ -80,7 +82,9 @@ def main() -> None:
         '--prefix=' + str(prefix), '--openssldir=' + str(prefix / 'ssl')]
     subprocess.run(configure, cwd=build, env=env, check=True)
     for target in ('build_libs', 'install_dev'):
-        subprocess.run(['nmake.exe', '/nologo', target], cwd=build, env=env, check=True)
+        # Windows CreateProcess resolves argv[0] using the parent's PATH, not
+        # the replacement env passed to Popen. Use the selected compiler path.
+        subprocess.run([tools['nmake.exe'], '/nologo', target], cwd=build, env=env, check=True)
     libraries = [path.parent for path in prefix.rglob('libcrypto.lib') if (path.parent/'libssl.lib').is_file()]
     if len(libraries) != 1:
         raise RuntimeError('Expected one installed native OpenSSL static library pair')
@@ -116,7 +120,7 @@ def main() -> None:
     (notices/'FlintEye-build.json').write_text(json.dumps({
         'openssl': LOCK['sources']['openssl'], 'configure': configure[2:],
         'cryptography': package[0], 'wheel': wheel.name, 'sha256': digest(wheel),
-        'rust': subprocess.check_output(['rustc.exe', '--version'], env=env, text=True).strip(),
+        'rust': subprocess.check_output([tools['rustc.exe'], '--version'], env=env, text=True).strip(),
         'linkage': 'static', 'architecture': 'arm64',
         'msvc_host': env.get('VSCMD_ARG_HOST_ARCH')}, indent=2)+'\n')
     print('Verified native ARM64 cryptography installed; OpenSSL sources/notices retained.')
