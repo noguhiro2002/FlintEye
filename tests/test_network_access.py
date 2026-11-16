@@ -33,22 +33,31 @@ class NetworkTests(unittest.TestCase):
         @app.get('/health')
         def health(): return {'ok': True}
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            with socket.socket() as sock: sock.bind(('127.0.0.1', 0)); port = sock.getsockname()[1]
-            # Isolated loopback alias replaces a real LAN interface in this test only.
-            network = NetworkAccessConfig.model_construct(enabled=True, address='127.0.0.2', allowed_subnets=['127.0.0.0/8'])
+            root = Path(directory).resolve()
+            with socket.socket() as local, socket.socket() as tls:
+                local.bind(('127.0.0.1', 0)); port = local.getsockname()[1]
+                tls.bind(('127.0.0.1', 0)); tls_port = tls.getsockname()[1]
+            # macOS does not bind unconfigured loopback aliases. Two loopback
+            # ports test the shared lifespan/TLS invariant without changing NICs.
+            # Same-port private-IP integration is covered by the container smoke.
+            network = NetworkAccessConfig.model_construct(enabled=True, address='127.0.0.1', allowed_subnets=['127.0.0.0/8'])
             with patch('flinteye_app.orchestrator_store.RuntimeStore.get_effective', return_value=SimpleNamespace(auth=SimpleNamespace(provider='local', viewer_auth_required=True))):
                 group = ListenerGroup(app, root=root, host='127.0.0.1', port=port, network=network)
+            self.assertEqual(len(group.servers), 2, group.lan_error)
+            group.servers[1].config.port = tls_port
             thread = threading.Thread(target=group.run); thread.start()
             try:
                 for _ in range(100):
                     if group.started and len(group.servers) == 2 and group.servers[1].started: break
                     time.sleep(.05)
                 self.assertEqual(events, ['start'])
+                self.assertTrue(group.servers[1].started, group.lan_error)
                 self.assertEqual(urllib.request.urlopen(f'http://127.0.0.1:{port}/health', timeout=3).status, 200)
                 trust = ssl.create_default_context(cafile=str(root/'tls/ca.crt'))
-                self.assertEqual(urllib.request.urlopen(f'https://127.0.0.2:{port}/health', context=trust, timeout=3).status, 200)
-                with self.assertRaises(Exception): urllib.request.urlopen(f'https://127.0.0.2:{port}/health', timeout=3)
+                self.assertEqual(urllib.request.urlopen(f'https://127.0.0.1:{tls_port}/health', context=trust, timeout=3).status, 200)
+                with self.assertRaises(urllib.error.URLError) as error:
+                    urllib.request.urlopen(f'https://127.0.0.1:{tls_port}/health', timeout=3)
+                self.assertIsInstance(error.exception.reason, ssl.SSLCertVerificationError)
             finally:
                 group.should_exit = True; thread.join(timeout=12)
             self.assertFalse(thread.is_alive())
@@ -59,7 +68,7 @@ class NetworkTests(unittest.TestCase):
         from fastapi.testclient import TestClient
         from flinteye_app.orchestrator_api import AppContext, require_admin
         from flinteye_app.flinteye_routes import install_routes
-        with tempfile.TemporaryDirectory() as directory:
+        with tempfile.TemporaryDirectory() as directory, patch('flinteye_app.orchestrator_logging.LogManager.configure'):
             root = Path(directory); runtime = initialize(root)
             store = RuntimeStore(env_file='', runtime_file=str(runtime), use_env=False)
             store.patch_runtime({'network': {'enabled': True, 'address': '192.168.1.10', 'allowed_subnets': ['192.168.1.0/24']}})
@@ -154,7 +163,7 @@ class NetworkTests(unittest.TestCase):
     def test_completion_does_not_wait_for_mtime_age_and_changed_files_are_rejected(self):
         from flinteye_app.recording_events import record_event, file_evidence
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory); initialize(root)
+            root = Path(directory).resolve(); initialize(root)
             segment = root/'recordings/test/2026-11-16/10-20-30-000000.mp4'
             segment.parent.mkdir(parents=True); segment.write_bytes(b'synthetic')
             record_event(root, segment, complete=False, session='test')
@@ -170,7 +179,7 @@ class NetworkTests(unittest.TestCase):
     def test_diagnostics_exclude_custom_secrets_paths_and_raw_errors(self):
         from flinteye_app.orchestrator_api import AppContext
         from flinteye_app.diagnostics import diagnostic_archive
-        with tempfile.TemporaryDirectory() as directory:
+        with tempfile.TemporaryDirectory() as directory, patch('flinteye_app.orchestrator_logging.LogManager.configure'):
             root = Path(directory); runtime = initialize(root)
             context = AppContext(env_file='', runtime_file=str(runtime), no_env=True)
             try:
