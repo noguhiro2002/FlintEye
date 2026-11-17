@@ -48,11 +48,15 @@ printf '%s' '{"recording":{"record_all_cameras":false,"record_paths":["bundle-sm
   curl --silent --show-error --fail --cookie "$profile/cookies" -H "Origin: $base" -H 'Content-Type: application/json' -X PATCH --data-binary @- "$base/api/v1/config/runtime" > /dev/null
 media_ready=0
 for attempt in $(seq 1 60); do
-  if curl --silent --show-error --fail --cookie "$profile/cookies" "$base/api/v1/status/mediamtx" | grep -Eq '"running"[[:space:]]*:[[:space:]]*true'; then media_ready=1; break; fi
+  if curl --silent --show-error --fail --cookie "$profile/cookies" "$base/api/v1/status/mediamtx" | grep -Eq '"running"[[:space:]]*:[[:space:]]*true' &&
+      timeout 1 bash -c 'exec 3<>/dev/tcp/127.0.0.1/8554' 2>/dev/null; then
+    media_ready=1
+    break
+  fi
   sleep 1
 done
 [ "$media_ready" = 1 ] || { printf 'MediaMTX did not start\n' >&2; exit 1; }
-LD_LIBRARY_PATH="$libraries" "$libraries/bin/ffmpeg" -nostdin -hide_banner -loglevel error -re -f lavfi -i testsrc2=s=160x120:r=5 -t 4 -c:v libx264 -pix_fmt yuv420p -g 5 -f rtsp rtsp://127.0.0.1:8554/bundle-smoke
+LD_LIBRARY_PATH="$libraries" "$libraries/bin/ffmpeg" -nostdin -hide_banner -loglevel error -re -f lavfi -i testsrc2=s=160x120:r=5 -t 4 -c:v libx264 -pix_fmt yuv420p -g 5 -rtsp_transport tcp -f rtsp rtsp://127.0.0.1:8554/bundle-smoke
 
 curl --silent --show-error --fail --max-time 45 --cookie "$profile/cookies" -H "Origin: $base" -X POST "$base/api/v1/control/stop" > /dev/null
 curl --silent --show-error --fail "$base/api/v1/health" > /dev/null
