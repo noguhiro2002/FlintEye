@@ -2,6 +2,8 @@
 
 **FlintEyeは現在開発中です。これは安定版ではなく開発プレビューです。テストには開発プレビューをご利用ください。**
 
+現在の開発版は **1.2.0-preview.2** です。ビルドが完了すると、検証用インストーラーを [GitHub Actions](https://github.com/noguhiro2002/FlintEye/actions/workflows/build-release.yml) から取得できます。下のクイックインストールは公開済みのプレビュー版を使います。
+
 [既知の問題](docs/KNOWN_ISSUES.ja.md) · [バグを報告する](https://github.com/noguhiro2002/FlintEye/issues) · [質問とアイデア](https://github.com/noguhiro2002/FlintEye/discussions)
 
 <p align="center">
@@ -62,16 +64,24 @@ pipアプリケーションパッケージは最初のリリースには含ま�
 
 </details>
 
+### インストールしたら
+
+| 方法 | 次の操作 |
+| --- | --- |
+| ワンコマンド | インストーラーの案内に従います。FlintEyeが開かなければ、下記の方法で起動します。 |
+| バイナリ | Windowsはスタートメニュー、Linuxはアプリ一覧からFlintEyeを開きます。macOSはDMGからApplicationsにコピーして開きます。 |
+| Docker Compose | コンテナを起動して接続先を確認します。[Dockerの初回設定](docs/DOCKER.ja.md#install-without-cloning) |
+| Linuxサーバー | systemdサービスを起動し、起動時に表示される接続先を確認します。[サーバーの初回設定](docs/DISTRIBUTION.ja.md#systemd) |
+
+起動したら[クイック使用方法](#quick-usage)に進みます。
+
 <a id="quick-usage"></a>
 ## クイック使用方法
 
-| Windows | macOS | Linuxデスクトップ |
-| --- | --- | --- |
-| スタートメニュー → **FlintEye** | アプリケーション → **FlintEye** | アプリケーション → **FlintEye** |
-
-1. **管理者パスワードを作成します。** セットアップが自動的に開きます。ブラウザが開いたら `admin` としてサインインします。
-2. **Settings でカメラを追加します。** 英語の入門ツアーに従ってUSBカメラまたはIPカメラを登録します。
-3. **Live View を開きます。** Settings でカメラの録画を有効にし、**Recordings** を開いて保存された映像を再生します。
+1. **FlintEyeが表示した接続先を開きます。** インストールした端末ではローカルのアドレスを使えます。このブランチをビルドした次期版では、信頼するネットワークを選ぶと、準備ができた時点でHTTPSのアドレスが表示されます。別端末では[証明書を信頼](docs/LAN_ACCESS.ja.md)してから開きます。公開版v1.1.3の初回設定はローカルから行います。
+2. **管理者を作成します。** セットアップ画面かサーバーの専用ファイルから使い捨てコードを取得し、ブラウザでコードと新しいパスワードを入力します。作成後は `admin` でログインします。
+3. **Settingsでカメラを追加します。** 入門ガイドに沿って、USBカメラやIPカメラを登録します。
+4. **Live Viewを開きます。** 必要に応じて録画を有効にし、**Recordings**で録画した映像を再生します。
 
 <details>
 <summary>5ステップの初回実行ガイド</summary>

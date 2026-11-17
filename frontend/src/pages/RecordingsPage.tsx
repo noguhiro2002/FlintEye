@@ -193,6 +193,7 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
   const [selectedVideoUrl, setSelectedVideoUrl] = useState("");
   const [preparingFileId, setPreparingFileId] = useState("");
   const [playbackOpen, setPlaybackOpen] = useState(false);
+  const [playbackAudio, setPlaybackAudio] = useState<boolean | null>(null);
   const [playbackError, setPlaybackError] = useState("");
   const playbackRequestRef = useRef(0);
   const loadRequestRef = useRef(0);
@@ -356,13 +357,15 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
     setSelectedItem(item);
     setSelectedVideoUrl("");
     setPlaybackError("");
+    setPlaybackAudio(null);
     setPreparingFileId(item.file_id);
     setPlaybackOpen(true);
     try {
-      await api.prepareRecordingPlayback(item.file_id);
+      const prepared = await api.prepareRecordingPlayback(item.file_id);
       if (playbackRequestRef.current !== requestId) {
         return;
       }
+      setPlaybackAudio(prepared.has_audio ?? null);
       setSelectedVideoUrl(api.getRecordingPlayableUrl(item.file_id));
     } catch (e) {
       if (playbackRequestRef.current === requestId) {
@@ -706,6 +709,7 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
             </div>
 
             <footer className="recording-modal-footer">
+              {playbackAudio !== null && <span>{playbackAudio ? "Audio included" : "Video only"}</span>}
               <div className="recording-modal-path" title={selectedItem.relative_path}>
                 <span>Path</span>
                 {selectedItem.relative_path}

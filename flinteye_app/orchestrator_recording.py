@@ -57,7 +57,9 @@ def _resolve_record_paths(config: RuntimeConfig) -> list[str]:
         prefix = config.multiview.output_prefix or "multiview"
         for i in range(1, config.recording.multiview_max_count + 1):
             paths.append(f"{prefix}_{i}")
-    return _normalize_paths(paths)
+    from flinteye_app.camera_audio import LIVE_PREFIX
+
+    return [path for path in _normalize_paths(paths) if not path.startswith(LIVE_PREFIX + "/")]
 
 
 def _resolve_config_path(config: RuntimeConfig, workspace_dir: str) -> Path | None:
@@ -284,11 +286,13 @@ def apply_recording_config(config: RuntimeConfig, *, workspace_dir: str, before_
     existing_record_paths = _find_existing_orchestrator_recording_paths(lines)
     changed = False
     actions: list[str] = []
+    pcm_paths = {camera.path for camera in config.cameras if camera.audio.enabled and camera.audio.codec == "pcm"}
     for path_name in record_paths:
+        path_settings = {**desired, "recordFormat": "fmp4"} if config.recording.enabled and path_name in pcm_paths else desired
         lines, path_changed, action = _upsert_recording_for_path(
             lines,
             path_name=path_name,
-            desired=desired,
+            desired=path_settings,
         )
         changed = changed or path_changed
         actions.append(f"{action}:paths.{path_name}")

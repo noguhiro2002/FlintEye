@@ -2,6 +2,8 @@
 
 **FlintEye is under active development. This is a development preview, not a stable release. Use development previews for testing.**
 
+The current development build is **1.2.0-preview.2**. Get test installers from [GitHub Actions](https://github.com/noguhiro2002/FlintEye/actions/workflows/build-release.yml) after the build succeeds. The Quick Install commands below use the published preview.
+
 [Known issues](docs/KNOWN_ISSUES.md) · [Report a bug](https://github.com/noguhiro2002/FlintEye/issues) · [Questions and ideas](https://github.com/noguhiro2002/FlintEye/discussions)
 
 <p align="center">
@@ -61,15 +63,23 @@ A pip application package is not part of the first release.
 
 </details>
 
+### After installing
+
+| Method | Where to start |
+| --- | --- |
+| One-command install | Follow the installer's prompt. If FlintEye did not open, launch it as shown below. |
+| Binary installer | Windows: Start → FlintEye. macOS: drag FlintEye into Applications, then open it. Linux desktop: Applications → FlintEye. |
+| Docker Compose | Start the container and retrieve its browser address and setup instructions. [Docker setup →](docs/DOCKER.md#install-without-cloning) |
+| Linux server | Start the systemd service and retrieve the address printed at startup. [Server setup →](docs/DISTRIBUTION.md#systemd) |
+
+Then continue with [Quick Usage](#quick-usage).
+
 ## Quick Usage
 
-| Windows | macOS | Linux desktop |
-| --- | --- | --- |
-| Start menu → **FlintEye** | Applications → **FlintEye** | Applications → **FlintEye** |
-
-1. **Create your administrator password.** Setup opens automatically. Sign in as `admin` when the browser opens.
-2. **Add a camera in Settings.** Follow the English getting-started tour to register a USB or IP camera.
-3. **Open Live View.** Enable recording for the camera in Settings, then open **Recordings** to play saved footage.
+1. **Open the address shown by FlintEye.** On the computer running FlintEye, open the local browser address. A new build from this branch also offers a choice of trusted network and shows the HTTPS address when it is ready. On another device, [trust the installation's certificate](docs/LAN_ACCESS.md) before opening that address. Public v1.1.3 uses the local setup flow.
+2. **Create your administrator account.** Enter the one-use code from the setup window or the server's private token file, and set the password in your browser. Sign in as `admin`.
+3. **Add a camera in Settings.** Follow the getting-started tour for USB and IP cameras.
+4. **Open Live View.** Enable recording if needed, then open **Recordings** to play saved footage.
 
 <details>
 <summary>Five-step first-run guide</summary>

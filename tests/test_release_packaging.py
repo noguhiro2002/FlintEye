@@ -92,9 +92,11 @@ class ReleaseTests(unittest.TestCase):
                'head_repository': {'full_name': REPOSITORY}}
         kwargs = dict(commit=self.commit, enabled=True, tested=True, licenses_reviewed=True, ref='refs/heads/main')
         release.validate_publish_context(repo, run, **kwargs)
+        release.validate_publish_context(repo, {**run, 'event': 'push'}, **kwargs)
         cases = [('private repository', {**repo, 'private': True}, run, kwargs),
                  ('wrong commit', repo, {**run, 'head_sha': 'b' * 40}, kwargs),
                  ('pull request', repo, {**run, 'event': 'pull_request'}, kwargs),
+                 ('other branch push', repo, {**run, 'event': 'push', 'head_branch': 'feature'}, kwargs),
                  ('fork', repo, {**run, 'head_repository': {'full_name': 'other/FlintEye'}}, kwargs),
                  ('no device checks', repo, run, {**kwargs, 'tested': False}),
                  ('no license review', repo, run, {**kwargs, 'licenses_reviewed': False}),

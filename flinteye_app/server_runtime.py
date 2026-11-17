@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 class ListenerGroup:
     def __init__(self, app, *, root, host, port, network):
         self.root, self.network = root, network
+        self.on_ready = None
+        self.lan_started = False
         group = self
         class OwnerServer(uvicorn.Server):
             async def shutdown(self, sockets=None):
@@ -92,6 +94,11 @@ class ListenerGroup:
                 await asyncio.sleep(.05)
             if self.started and len(sockets) > 1:
                 self.lan_task = asyncio.create_task(self.servers[1]._serve(sockets=[sockets[1][1]]))
+                while not self.servers[1].started and not self.lan_task.done():
+                    await asyncio.sleep(.05)
+                self.lan_started = self.servers[1].started
+            if self.started and self.on_ready is not None:
+                self.on_ready()
             tasks = [owner_task] + ([self.lan_task] if self.lan_task else [])
             # Stop both listeners if either exits, without another application lifespan.
             async def supervise():

@@ -7,6 +7,7 @@ from flinteye_app.subprocess_utils import background_process_options
 import sys
 from typing import Any
 
+from flinteye_app.camera_audio import add_capture_options, output_args
 from flinteye_app.orchestrator_ip_camera_probe import IpCameraProbeError, probe_rtsp_timing
 from flinteye_app.flinteye_runtime import load_worker_secrets, private_media_input_command
 
@@ -58,14 +59,17 @@ def build_ffmpeg_command(args: argparse.Namespace, *, timestamp_mode: str, cfr_f
         cmd += ["-use_wallclock_as_timestamps", "1", "-fflags", "+genpts"]
     else:
         cmd += ["-fflags", "+genpts+nobuffer"]
-    cmd += ["-i", args.source_url, "-an"]
+    cmd += ["-i", args.source_url, "-map", "0:v:0"]
+    if getattr(args, "audio_codec", None):
+        cmd += ["-map", "0:a:0?"]
+    cmd += output_args(args)
 
     must_encode = args.relay_mode == "libx264" or timestamp_mode == "cfr"
     if timestamp_mode == "cfr":
         fps = _fps_text(cfr_fps)
         cmd += [
             "-vf",
-            f"fps={fps},settb=AVTB,setpts=N/({fps}*TB)",
+            f"fps={fps}" if getattr(args, "audio_codec", None) else f"fps={fps},settb=AVTB,setpts=N/({fps}*TB)",
             "-fps_mode",
             "cfr",
         ]
@@ -126,6 +130,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--bufsize", default="4M")
     parser.add_argument("--gop", type=int, default=40)
     parser.add_argument("--x264-preset", default="veryfast")
+    add_capture_options(parser)
     return parser
 
 
@@ -137,19 +142,24 @@ def main() -> int:
     if args.probe_duration_sec <= 0 or args.probe_duration_sec > 30:
         parser.error("--probe-duration-sec must be in range 0..30")
     timestamp_mode, cfr_fps, _ = resolve_timestamp_mode(args)
-    command = build_ffmpeg_command(args, timestamp_mode=timestamp_mode, cfr_fps=cfr_fps)
     print(
         f"[info] IP relay: timestamp_mode={timestamp_mode}, relay_mode={args.relay_mode}, cfr_fps={cfr_fps:g}",
         file=sys.stderr,
     )
     try:
-        with private_media_input_command(command, args.source_url, force=True) as safe_command:
-            with popen_background(safe_command, **background_process_options(), stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
-                                  text=True, encoding="utf-8", errors="replace") as process:
-                if process.stderr is not None:
-                    for line in process.stderr:
-                        print(line.rstrip().replace(args.source_url, "<camera-source>"), file=sys.stderr, flush=True)
-                return process.wait()
+        while True:
+            command = build_ffmpeg_command(args, timestamp_mode=timestamp_mode, cfr_fps=cfr_fps)
+            with private_media_input_command(command, args.source_url, force=True) as safe_command:
+                with popen_background(safe_command, **background_process_options(), stdout=subprocess.DEVNULL,
+                                      stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace") as process:
+                    if process.stderr is not None:
+                        for line in process.stderr:
+                            print(line.rstrip().replace(args.source_url, "<camera-source>"), file=sys.stderr, flush=True)
+                    code = process.wait()
+            if code == 0 or not args.audio_codec:
+                return code
+            print("[warn] Relay with audio failed; retrying this camera with video only.", file=sys.stderr)
+            args.audio_codec = None
     except FileNotFoundError:
         print(f"[error] ffmpeg was not found: {args.ffmpeg_bin}", file=sys.stderr)
         return 127

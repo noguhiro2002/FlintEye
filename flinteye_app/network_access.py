@@ -9,12 +9,74 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import re
 import secrets
+import socket
+import subprocess
+import sys
 import threading
 import time
 import uuid
 
 CERTIFICATE_LOCK = threading.RLock()
+
+
+def lan_candidates() -> list[tuple[str, str, str]]:
+    """Return adapter name, assigned IPv4 and its connected private CIDR."""
+    from flinteye_app.orchestrator_models import LAN_NETWORKS
+    from flinteye_app.subprocess_utils import background_process_options
+
+    rows = []
+    if sys.platform == 'win32':
+        script = """
+        Get-NetConnectionProfile | Where-Object NetworkCategory -eq 'Private' |
+          ForEach-Object { Get-NetIPAddress -InterfaceIndex $_.InterfaceIndex -AddressFamily IPv4 } |
+          Select-Object InterfaceAlias,IPAddress,PrefixLength | ConvertTo-Json -AsArray -Compress
+        """
+        # Windows PowerShell 5 lacks ConvertTo-Json -AsArray.
+        script = script.replace(' -AsArray', '')
+        output = subprocess.check_output(
+            ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', script],
+            timeout=8, text=True, **background_process_options(),
+        )
+        entries = json.loads(output.strip() or '[]')
+        rows = [(item['InterfaceAlias'], item['IPAddress'], item['PrefixLength'])
+                for item in (entries if isinstance(entries, list) else [entries])]
+    elif sys.platform == 'darwin':
+        name = ''
+        output = subprocess.check_output(['/sbin/ifconfig', '-a'], timeout=4, text=True)
+        for line in output.splitlines():
+            if line and not line[0].isspace():
+                name = line.split(':', 1)[0] if 'UP,' in line else ''
+            match = re.search(r'\binet (\S+) netmask (0x[\da-fA-F]+)', line)
+            if name and match:
+                rows.append((name, match[1], str(ipaddress.IPv4Address(int(match[2], 16)))))
+    elif sys.platform.startswith('linux'):
+        import fcntl
+        import struct
+
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            for _, name in socket.if_nameindex():
+                request = struct.pack('256s', os.fsencode(name)[:15])
+                try:
+                    flags = struct.unpack_from('H', fcntl.ioctl(sock, 0x8913, request), 16)[0]
+                    if not flags & 1 or flags & 8:
+                        continue
+                    address = socket.inet_ntoa(fcntl.ioctl(sock, 0x8915, request)[20:24])
+                    mask = socket.inet_ntoa(fcntl.ioctl(sock, 0x891b, request)[20:24])
+                    rows.append((name, address, mask))
+                except OSError:
+                    continue
+    candidates = []
+    for name, address, mask in rows:
+        try:
+            interface = ipaddress.IPv4Interface(f'{address}/{mask}')
+        except ValueError:
+            continue
+        # A point-to-point /32 (including VPNs) needs an explicit source list.
+        if interface.network.prefixlen < 32 and any(interface.network.subnet_of(block) for block in LAN_NETWORKS[:3]):
+            candidates.append((name, address, str(interface.network)))
+    return sorted(set(candidates))
 
 
 def lan_media_patch(config) -> dict:

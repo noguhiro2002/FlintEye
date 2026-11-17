@@ -14,7 +14,7 @@ from urllib.parse import urlsplit
 
 import httpx
 from fastapi import Depends, HTTPException, Request, Response
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from flinteye_app.orchestrator_auth import generate_session_secret, hash_password, local_auth_is_configured
 from flinteye_app.flinteye_runtime import application_dir, launch_command
@@ -107,7 +107,22 @@ def install_routes(app, context, *, setup_token: str, desktop: bool):
         return {'saved': config.network.model_dump(), 'active': active_network.model_dump(), 'guide_url': lan_guide_url(),
                 'restart_required': config.network != active_network,
                 'local_url': listeners.get('url'), 'lan_url': listeners.get('lan_url'),
-                'error': group.lan_error if group else '', **metadata}
+                'error': group.lan_error if group else '',
+                'rtsp_status': context.supervisor.rtsps_status(), **metadata}
+
+    @app.post('/api/v1/network/rtsps-credential', dependencies=[Depends(require_admin)])
+    def rtsps_credential(request: Request):
+        owner_local(request)
+        from flinteye_app.rtsps_relay import USERNAME, rotate_password
+
+        with context.lock:
+            config = context.store.get_effective()
+            if not config.network.enabled or not config.network.rtsp_enabled:
+                raise HTTPException(409, 'Save network and RTSPS settings first')
+            password = rotate_password(data)
+            context.supervisor.reconcile_rtsps(config)
+        return JSONResponse({'username': USERNAME, 'password': password},
+                            headers={'Cache-Control': 'no-store'})
 
     @app.put('/api/v1/network', dependencies=[Depends(require_admin)])
     def change_network(request: Request, payload: dict):
@@ -282,11 +297,24 @@ def install_routes(app, context, *, setup_token: str, desktop: bool):
         # Fixed loopback upstream: callers cannot select another host or forward credentials.
         if '..' in path.split('/') or '\\' in path or path.startswith('/'):
             raise HTTPException(400, 'Invalid media path')
+        from flinteye_app.camera_audio import LIVE_PREFIX, live_path
+        # The relay remains an implementation detail of the existing browser URL.
+        if path.startswith(LIVE_PREFIX + '/'):
+            raise HTTPException(404, 'Unknown media path')
+        upstream_path = path
+        original = None
+        config = context.store.get_effective()
+        for camera in sorted(config.cameras, key=lambda item: -len(item.path)):
+            if path == camera.path or path.startswith(camera.path + '/'):
+                if camera.audio.enabled and config.mediamtx.control_mode == 'direct' and config.mediamtx.managed.enabled:
+                    original = camera.path
+                    upstream_path = live_path(original) + path[len(original):]
+                break
         headers = {key: value for key, value in request.headers.items()
                    if key.lower() in {'content-type', 'accept', 'if-match'}}
         try:
             async with httpx.AsyncClient(timeout=30, trust_env=False) as client:
-                upstream = await client.request(request.method, 'http://127.0.0.1:8889/' + path,
+                upstream = await client.request(request.method, 'http://127.0.0.1:8889/' + upstream_path,
                                                 params=request.query_params, headers=headers,
                                                 content=await request.body())
         except httpx.HTTPError as exc: raise HTTPException(502, 'Media server is unavailable') from exc
@@ -296,7 +324,10 @@ def install_routes(app, context, *, setup_token: str, desktop: bool):
         if location:
             from urllib.parse import urljoin
             absolute = urlsplit(urljoin(str(upstream.url), location))
-            out['location'] = '/media' + absolute.path + (('?' + absolute.query) if absolute.query else '')
+            location_path = absolute.path
+            if original and location_path.startswith('/' + live_path(original)):
+                location_path = '/' + original + location_path[len(live_path(original)) + 1:]
+            out['location'] = '/media' + location_path + (('?' + absolute.query) if absolute.query else '')
         return Response(upstream.content, status_code=upstream.status_code, headers=out)
 
     dist = application_dir() / 'frontend/dist'

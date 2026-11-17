@@ -46,47 +46,17 @@ def _slug(value: str) -> str:
     return out or "camera"
 
 
-def _normalize_capture_fps(value: float | int | None, fallback: int = 30) -> int:
-    if value is None:
-        return fallback
-    try:
-        numeric = float(value)
-    except (TypeError, ValueError):
-        return fallback
-    if numeric <= 0:
-        return fallback
-    return max(1, int(round(numeric)))
-
-
 def _pick_recommended_mode(
     modes: list[dict[str, Any]],
     *,
     fallback: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     default = fallback or {"width": 1280, "height": 720, "fps": 30}
-    if not modes:
+    known = [mode for mode in modes if mode.get("fps")]
+    if not known:
         return default
-
-    normalized: list[dict[str, int]] = []
-    for item in modes:
-        width = int(item.get("width") or 0)
-        height = int(item.get("height") or 0)
-        fps = _normalize_capture_fps(item.get("fps"), fallback=int(default.get("fps") or 30))
-        if width <= 0 or height <= 0:
-            continue
-        normalized.append({"width": width, "height": height, "fps": fps})
-
-    if not normalized:
-        return default
-
-    pool = [item for item in normalized if item["fps"] >= 20]
-    if not pool:
-        pool = [item for item in normalized if item["fps"] >= 15]
-    if not pool:
-        pool = normalized
-
-    best = max(pool, key=lambda item: (item["width"] * item["height"], item["fps"], item["width"]))
-    return {"width": best["width"], "height": best["height"], "fps": best["fps"]}
+    pool = [mode for mode in known if mode["fps"] >= 20] or known
+    return max(pool, key=lambda mode: (mode["width"] * mode["height"], mode["fps"]))
 
 
 def _parse_avfoundation_devices(text: str) -> list[dict[str, Any]]:
@@ -124,25 +94,33 @@ def _parse_avfoundation_devices(text: str) -> list[dict[str, Any]]:
 
 
 def _parse_avfoundation_modes(text: str) -> list[dict[str, Any]]:
-    modes: list[dict[str, Any]] = []
-    seen: set[tuple[int, int, int]] = set()
-    for raw in text.splitlines():
-        m = re.search(
-            r"(\d{2,5})x(\d{2,5})@\[\s*(\d+(?:\.\d+)?)",
-            raw,
-            flags=re.IGNORECASE,
-        )
-        if not m:
+    modes = {}
+    for match in re.finditer(r"(\d+)x(\d+)@\[\s*([\d.]+)(?:\s+([\d.]+))?", text):
+        width, height = int(match[1]), int(match[2])
+        for rate in filter(None, (match[3], match[4])):
+            fps = float(rate)
+            if fps > 0:
+                modes[width, height, fps] = {"width": width, "height": height, "fps": fps}
+    return list(modes.values())
+
+
+def _parse_dshow_modes(text: str) -> list[dict[str, Any]]:
+    modes = {}
+    for line in text.splitlines():
+        if not re.search(r"\b(?:pixel_format|vcodec)=", line):
             continue
-        width = int(m.group(1))
-        height = int(m.group(2))
-        fps = _normalize_capture_fps(float(m.group(3)))
-        key = (width, height, fps)
-        if key in seen:
+        capture_format = re.search(r"\b(pixel_format|vcodec)=([a-zA-Z0-9_]+)", line)
+        if not capture_format:
             continue
-        seen.add(key)
-        modes.append({"width": width, "height": height, "fps": fps})
-    return modes
+        option = capture_format[2]
+        if capture_format[1] == "vcodec":
+            option = "codec:" + option
+        for width, height, rate in re.findall(r"s=(\d+)x(\d+)\s+fps=([\d.]+)", line):
+            fps = float(rate)
+            if fps > 0:
+                key = int(width), int(height), fps, option
+                modes[key] = dict(zip(("width", "height", "fps", "input_format"), key))
+    return list(modes.values())
 
 
 def _parse_dshow_devices(text: str) -> list[dict[str, Any]]:
@@ -223,62 +201,55 @@ def _empty_probe_warning(driver: str, stderr: str) -> str:
 
 
 def _parse_v4l2_modes(text: str) -> list[dict[str, Any]]:
-    modes: list[dict[str, Any]] = []
-    seen: set[tuple[int, int, float | None]] = set()
-    for raw in text.splitlines():
-        m = re.search(r"(\d{2,5})x(\d{2,5})(?:[^0-9]+(\d+(?:\.\d+)?))?", raw)
-        if not m:
+    """FFmpeg fallback: it lists sizes, but does not report frame intervals."""
+    modes = {}
+    for line in text.splitlines():
+        capture_format = re.search(r"(?:Raw|Compressed)\s*:\s*([a-zA-Z0-9_]+)\s*:", line)
+        if not capture_format:
             continue
-        width = int(m.group(1))
-        height = int(m.group(2))
-        fps = float(m.group(3)) if m.group(3) else None
-        key = (width, height, fps)
-        if key in seen:
-            continue
-        seen.add(key)
-        item: dict[str, Any] = {"width": width, "height": height}
-        if fps is not None:
-            item["fps"] = fps
-        modes.append(item)
-    return modes
+        for width, height in re.findall(r"(\d+)x(\d+)", line[capture_format.end():]):
+            key = int(width), int(height), capture_format[1]
+            modes[key] = dict(zip(("width", "height", "input_format"), key))
+    return list(modes.values())
 
 
 def _probe_v4l2_devices(ffmpeg_bin: str, timeout_sec: float) -> list[dict[str, Any]]:
-    devices: list[dict[str, Any]] = []
-    for path in sorted(Path("/dev").glob("video*")):
-        try:
-            result = _run_capture(
-                [
-                    ffmpeg_bin,
-                    "-hide_banner",
-                    "-f",
-                    "v4l2",
-                    "-list_formats",
-                    "all",
-                    "-i",
-                    str(path),
-                ],
-                timeout_sec=timeout_sec,
-            )
-            text = (result.stdout or "") + "\n" + (result.stderr or "")
-            modes = _parse_v4l2_modes(text)
-        except (subprocess.TimeoutExpired, OSError):
-            modes = []
+    from flinteye_app.v4l2_modes import enumerate_modes
 
+    devices: list[dict[str, Any]] = []
+    for path in sorted(Path("/dev").glob("video[0-9]*")):
+        message = ""
+        try:
+            modes = enumerate_modes(path)
+            if modes is None:
+                continue
+        except PermissionError:
+            modes, message = [], "Camera access denied. Check video-device permissions."
+        except OSError:
+            modes = []
+        if not modes and not message:
+            try:
+                result = _run_capture(
+                    [ffmpeg_bin, "-hide_banner", "-f", "v4l2", "-list_formats", "all", "-i", str(path)],
+                    timeout_sec=timeout_sec,
+                )
+                modes = _parse_v4l2_modes((result.stdout or "") + "\n" + (result.stderr or ""))
+            except (subprocess.TimeoutExpired, OSError):
+                modes = []
+            message = ("The driver did not report frame rates. Confirm a mode manually." if modes else
+                       "Capture modes could not be read. Check the device and try again.")
         name = path.name
-        recommended = _pick_recommended_mode(modes)
-        devices.append(
-            {
-                "device_id": f"v4l2-{_slug(name)}",
-                "driver": "v4l2",
-                "display_name": name,
-                "index": None,
-                "ffmpeg_device": str(path),
-                "ffmpeg_device_index": str(path),
-                "modes": modes,
-                "recommended": recommended,
-            }
-        )
+        devices.append({
+            "device_id": f"v4l2-{_slug(name)}",
+            "driver": "v4l2",
+            "display_name": name,
+            "index": None,
+            "ffmpeg_device": str(path),
+            "ffmpeg_device_index": str(path),
+            "modes": modes,
+            "mode_warning": message,
+            "recommended": _pick_recommended_mode(modes),
+        })
     return devices
 
 
@@ -332,18 +303,29 @@ def probe_uvc_devices(
                 modes = _probe_avfoundation_modes(ffmpeg_bin, index, mode_timeout_sec)
             except (subprocess.TimeoutExpired, OSError):
                 modes = []
-            if modes:
-                device["modes"] = modes
-                device["recommended"] = _pick_recommended_mode(
-                    modes,
-                    fallback=device.get("recommended"),
-                )
+            device["modes"] = modes
+            device["recommended"] = _pick_recommended_mode(modes)
+            if not modes:
+                device["mode_warning"] = "Capture modes unavailable. Check camera access and retry."
         warning = ""
     elif driver == "dshow":
         cmd = [ffmpeg_bin, "-hide_banner", "-f", "dshow", "-list_devices", "true", "-i", "dummy"]
         result = _run_capture(cmd, timeout_sec=timeout_sec)
         text = (result.stdout or "") + "\n" + (result.stderr or "")
         devices = _parse_dshow_devices(text)
+        for device in devices:
+            try:
+                options = _run_capture(
+                    [ffmpeg_bin, "-hide_banner", "-list_options", "true", "-f", "dshow",
+                     "-i", device["ffmpeg_device"]], timeout_sec=min(3.0, timeout_sec),
+                )
+                modes = _parse_dshow_modes((options.stdout or "") + "\n" + (options.stderr or ""))
+            except (subprocess.TimeoutExpired, OSError):
+                modes = []
+            device["modes"] = modes
+            device["recommended"] = _pick_recommended_mode(modes)
+            if not modes:
+                device["mode_warning"] = "Capture modes unavailable. Check camera access and retry."
         warning = ""
     else:
         cmd = [ffmpeg_bin, "-hide_banner", "-f", "v4l2", "-list_formats", "all", "-i", "/dev/video0"]
@@ -382,7 +364,8 @@ def build_uvc_suggestion(
     enabled: bool = True,
     width: int = 1280,
     height: int = 720,
-    fps: int = 30,
+    fps: float = 30,
+    input_format: str | None = None,
     bitrate: str | None = None,
     camera_name: str | None = None,
 ) -> dict[str, Any]:
@@ -394,6 +377,7 @@ def build_uvc_suggestion(
         raise ValueError("path must not be empty")
     camera_name_value = (camera_name or display_name or profile_clean).strip()
     bitrate_value = (bitrate or "").strip()
+    fps_text = format(fps, ".12g")
 
     token = re.sub(r"[^A-Za-z0-9]+", "_", profile_clean).strip("_").upper()
     rtsp_url = rtsp_base_url.rstrip("/") + "/" + path_clean
@@ -406,7 +390,7 @@ def build_uvc_suggestion(
         f"UVC_{token}_INPUT_DRIVER={driver}",
         f"UVC_{token}_WIDTH={width}",
         f"UVC_{token}_HEIGHT={height}",
-        f"UVC_{token}_FPS={fps}",
+        f"UVC_{token}_FPS={fps_text}",
     ]
     if bitrate_value:
         env_lines.append(f"UVC_{token}_BITRATE={bitrate_value}")
@@ -425,11 +409,14 @@ def build_uvc_suggestion(
                 "RTSP_URL": rtsp_url,
                 "WIDTH": str(width),
                 "HEIGHT": str(height),
-                "FPS": str(fps),
+                "FPS": fps_text,
             },
             "extra_args": [],
         },
     }
+    if input_format:
+        env_lines.append(f"UVC_{token}_INPUT_FORMAT={input_format}")
+        runtime_camera["uvc"]["env"]["INPUT_FORMAT"] = input_format
     if bitrate_value:
         runtime_camera["uvc"]["env"]["BITRATE"] = bitrate_value
 

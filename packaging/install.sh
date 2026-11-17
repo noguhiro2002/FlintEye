@@ -104,13 +104,18 @@ if [ "$os" = Darwin ]; then
   fi
   rmdir "$stage"
   printf 'Installed FlintEye %s. macOS may ask you to allow this unsigned app in Privacy & Security.\n' "$version"
-  if [ "$start_app" = 1 ]; then open "$destination/FlintEye.app"; fi
+  if [ "$start_app" = 1 ]; then
+    open "$destination/FlintEye.app"
+  fi
+  printf 'On first launch, choose a trusted network and follow the setup address shown by FlintEye.\n'
 else
   if [ "$kind" = deb ]; then sudo apt-get install -y "$work/$asset"; else sudo dnf install -y "$work/$asset"; fi
   printf 'Installed FlintEye %s. Open FlintEye from your application menu.\n' "$version"
   if [ "$start_app" = 1 ] && [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
-    /opt/flinteye/FlintEye >/dev/null 2>&1 </dev/null &
+    /opt/flinteye/FlintEye </dev/null &
+    /opt/flinteye/FlintEye --headless --connection-info ||
+      printf 'After choosing a network in FlintEye, use the address shown in its setup window.\n'
   else
-    printf 'For a headless server, follow docs/DISTRIBUTION.md (systemd).\n'
+    printf 'Open FlintEye and follow its connection instructions. On a server, see docs/DISTRIBUTION.md (systemd).\n'
   fi
 fi

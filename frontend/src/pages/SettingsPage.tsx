@@ -1,3 +1,4 @@
+import { CameraAudioSettings } from "../components/CameraAudioSettings";
 import { StartupSettings } from "../components/StartupSettings";
 import { NetworkAccess } from '../components/NetworkAccess';
 import { useConfirmChanges } from "../components/ConfirmChanges";
@@ -149,7 +150,8 @@ interface UvcModeOption {
   key: string;
   width: number;
   height: number;
-  fps: number;
+  fps: number | undefined;
+  inputFormat: string;
   label: string;
 }
 
@@ -384,65 +386,23 @@ function formatFps(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.?0+$/, "");
 }
 
-function buildModeKey(width: number, height: number, fps: number): string {
-  return `${width}x${height}@${fps}`;
+function buildModeKey(width: number, height: number, fps: number | undefined, format: string): string {
+  return `${width}x${height}@${fps ?? "unknown"}:${format}`;
 }
 
 function toModeOptions(device: UvcDeviceItem | null): UvcModeOption[] {
-  if (!device || device.modes.length === 0) {
-    return [];
-  }
-
-  const out: UvcModeOption[] = [];
-  const seen = new Set<string>();
-  device.modes.forEach((mode) => {
-    const fps = Math.max(1, Math.round(mode.fps ?? device.recommended.fps));
-    const key = buildModeKey(mode.width, mode.height, fps);
-    if (seen.has(key)) {
-      return;
-    }
-    seen.add(key);
-    out.push({
-      key,
+  return (device?.modes ?? []).map((mode) => {
+    const inputFormat = mode.input_format ?? "";
+    const rate = mode.fps === undefined ? "FPS unknown" : `${formatFps(mode.fps)} fps`;
+    return {
+      key: buildModeKey(mode.width, mode.height, mode.fps, inputFormat),
       width: mode.width,
       height: mode.height,
-      fps,
-      label: `${mode.width}x${mode.height} @ ${formatFps(fps)} fps`,
-    });
-  });
-
-  return out.sort((left, right) => {
-    const areaDiff = right.width * right.height - left.width * left.height;
-    if (areaDiff !== 0) {
-      return areaDiff;
-    }
-    return right.fps - left.fps;
-  });
-}
-
-function findExactModeOption(
-  options: UvcModeOption[],
-  width: number,
-  height: number,
-  fps: number,
-): UvcModeOption | null {
-  const key = buildModeKey(width, height, fps);
-  return options.find((item) => item.key === key) ?? null;
-}
-
-function pickInitialModeOption(
-  options: UvcModeOption[],
-  width: number,
-  height: number,
-  fps: number,
-  recommended: { width: number; height: number; fps: number },
-): UvcModeOption | null {
-  return (
-    findExactModeOption(options, width, height, fps) ??
-    findExactModeOption(options, recommended.width, recommended.height, recommended.fps) ??
-    options[0] ??
-    null
-  );
+      fps: mode.fps,
+      inputFormat,
+      label: `${mode.width}x${mode.height} @ ${rate}${inputFormat ? ` · ${inputFormat.replace("codec:", "")}` : ""}`,
+    };
+  }).sort((a, b) => b.width * b.height - a.width * a.height || (b.fps ?? 0) - (a.fps ?? 0));
 }
 
 function getCameraLabel(camera: ConfiguredCamera): string {
@@ -514,6 +474,7 @@ function serializeCamera(camera: ConfiguredCamera): Record<string, unknown> {
     display_name: camera.display_name,
     uvc: camera.uvc,
     ip: camera.ip,
+    audio: camera.audio,
   };
 }
 
@@ -887,15 +848,18 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
     const env = matchedCamera?.uvc?.env ?? {};
     const configuredWidth = parsePositiveInt(env.WIDTH, device.recommended.width);
     const configuredHeight = parsePositiveInt(env.HEIGHT, device.recommended.height);
-    const configuredFps = parsePositiveInt(env.FPS, device.recommended.fps);
+    const configuredFps = Number(env.FPS) || device.recommended.fps;
     const modeOptions = toModeOptions(device);
-    const selectedMode = pickInitialModeOption(
-      modeOptions,
-      configuredWidth,
-      configuredHeight,
-      configuredFps,
-      device.recommended,
-    );
+    const preferred = matchedCamera ? {
+      width: configuredWidth,
+      height: configuredHeight,
+      fps: configuredFps,
+      input_format: env.INPUT_FORMAT,
+    } : device.recommended;
+    const selectedMode = modeOptions.find((mode) => mode.width === preferred.width
+      && mode.height === preferred.height && mode.fps !== undefined
+      && Math.abs(mode.fps - preferred.fps) < .001
+      && mode.inputFormat === (preferred.input_format ?? ""));
     const width = selectedMode?.width ?? configuredWidth;
     const height = selectedMode?.height ?? configuredHeight;
     const fps = selectedMode?.fps ?? configuredFps;
@@ -1182,6 +1146,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
         width: suggestWidth,
         height: suggestHeight,
         fps: suggestFps,
+        input_format: selectedModeOptions.find((mode) => mode.key === selectedModeKey)?.inputFormat,
         bitrate: suggestBitrate,
       });
       setSuggestion(response.suggestion as UvcSuggestion);
@@ -1206,6 +1171,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
         width: suggestWidth,
         height: suggestHeight,
         fps: suggestFps,
+        input_format: selectedModeOptions.find((mode) => mode.key === selectedModeKey)?.inputFormat,
         bitrate: suggestBitrate,
       });
       setNotice("UVC device applied.");
@@ -1410,6 +1376,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
             enabled: draft.enabled,
             path: draft.path.trim(),
             display_name: draft.display_name.trim() || null,
+            audio: cameras.find((camera) => camera.id === draft.id)?.audio,
             ip: {
               source_url: draft.ip.source_url.trim(),
               relay_mode: draft.ip.relay_mode,
@@ -1490,28 +1457,6 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    if (selectedModeOptions.length === 0) {
-      if (selectedModeKey !== "") {
-        setSelectedModeKey("");
-      }
-      return;
-    }
-    const nextModeOption = findExactModeOption(selectedModeOptions, suggestWidth, suggestHeight, suggestFps) ?? selectedModeOptions[0];
-    if (selectedModeKey !== nextModeOption.key) {
-      setSelectedModeKey(nextModeOption.key);
-    }
-    if (suggestWidth !== nextModeOption.width) {
-      setSuggestWidth(nextModeOption.width);
-    }
-    if (suggestHeight !== nextModeOption.height) {
-      setSuggestHeight(nextModeOption.height);
-    }
-    if (suggestFps !== nextModeOption.fps) {
-      setSuggestFps(nextModeOption.fps);
-    }
-  }, [selectedModeKey, selectedModeOptions, suggestFps, suggestHeight, suggestWidth]);
 
   const onReplaceRuntime = async (restart = false): Promise<void> => {
     if (loading || !configReady) return;
@@ -3395,7 +3340,9 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
                           <span className="status-tag ok">{device.driver}</span>
                         </div>
                         <small>
-                          {device.recommended.width}x{device.recommended.height} @ {formatFps(device.recommended.fps)} fps
+                          {device.modes.some((mode) => mode.fps !== undefined)
+                            ? `${device.recommended.width}x${device.recommended.height} @ ${formatFps(device.recommended.fps)} fps`
+                            : "Frame rates not reported"}
                         </small>
                       </button>
                     ))
@@ -3439,10 +3386,10 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
                     </div>
                     <div className="uvc-device-meta">
                       <span>FFmpeg device: {selectedDevice.ffmpeg_device}</span>
-                      <span>
+                      {selectedDevice.modes.some((mode) => mode.fps !== undefined) && <span>
                         Recommended: {selectedDevice.recommended.width}x{selectedDevice.recommended.height} @{" "}
                         {formatFps(selectedDevice.recommended.fps)} fps
-                      </span>
+                      </span>}
                       {selectedMatchedCamera && (
                         <span>
                           Current managed camera: {getCameraLabel(selectedMatchedCamera)} (/{selectedMatchedCamera.path})
@@ -3479,18 +3426,19 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
                       }
                       setSuggestWidth(modeOption.width);
                       setSuggestHeight(modeOption.height);
-                      setSuggestFps(modeOption.fps);
+                      if (modeOption.fps !== undefined) setSuggestFps(modeOption.fps);
                     }}
                   >
+                    <option value="">Saved / manual values</option>
                     {selectedModeOptions.map((modeOption) => (
                       <option key={modeOption.key} value={modeOption.key}>
                         {modeOption.label}
                       </option>
                     ))}
                   </select>
-                  <small className="field-help">Use one of the capture modes reported by ffmpeg for this device.</small>
+                  <small className="field-help">{selectedDevice?.mode_warning || "Select a mode reported by the camera, or keep the saved values."}</small>
                 </label>
-                {selectedModeOptions.length > 0 ? (
+                {selectedModeOptions.some((mode) => mode.key === selectedModeKey && mode.fps !== undefined) ? (
                   <>
                     <label>
                       Width
@@ -3502,7 +3450,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
                     </label>
                     <label>
                       FPS
-                      <input type="number" min={1} max={240} value={suggestFps} readOnly />
+                      <input type="number" min={0.001} max={1000} step="any" value={suggestFps} readOnly />
                       <small className="field-help">Width, height, and FPS follow the selected capture mode.</small>
                     </label>
                   </>
@@ -3530,12 +3478,13 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
                       FPS
                       <input
                         type="number"
-                        min={1}
-                        max={240}
+                        min={0.001}
+                        max={1000}
+                        step="any"
                         value={suggestFps}
                         onChange={(e) => setSuggestFps(Number(e.target.value))}
                       />
-                      <small className="field-help">The runtime stores integer FPS values.</small>
+                      <small className="field-help">Enter the frame rate supported by the device.</small>
                     </label>
                   </>
                 )}
@@ -3582,7 +3531,14 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
           </div>
 
           <div className="section settings-section settings-section-cameras">
-            <div className="section-head">
+            {cameras.filter((camera) => camera.type === "uvc").map((camera) => (
+              <details className="runtime-advanced" key={camera.id}>
+                <summary>{getCameraLabel(camera)} · Camera audio</summary>
+                <CameraAudioSettings api={api} cameraId={camera.id} current={camera.audio}
+                  blocked={loading || formDirty || jsonDirty} saved={loadAll} />
+              </details>
+            ))}
+          <div className="section-head">
               <div>
                 <h3>IP Cameras</h3>
                 <p className="form-help">Inspect ONVIF capabilities and measured RTSP timing before publishing each camera.</p>
@@ -3629,7 +3585,10 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
                         Remove
                       </button>
                     </header>
-
+                    {cameras.some((camera) => camera.id === draft.id && camera.type === "ip") &&
+                      <CameraAudioSettings key={draft.id} api={api} cameraId={draft.id}
+                        current={cameras.find((camera) => camera.id === draft.id)?.audio}
+                        blocked={loading || formDirty || jsonDirty} saved={loadAll} />}
                     <div className="ip-camera-identity-grid">
                       <label>
                         Display Name

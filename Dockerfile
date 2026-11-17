@@ -27,7 +27,7 @@ FROM scratch AS media-sources
 COPY --from=media /media-source.tar.gz /
 
 FROM python:3.13-slim-trixie@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core alsa-utils && rm -rf /var/lib/apt/lists/*
 WORKDIR /opt/flinteye
 COPY requirements.txt ./
 COPY packaging/constraints.txt ./packaging/
@@ -58,6 +58,6 @@ RUN useradd --uid 10001 --create-home flinteye && mkdir /data && chown flinteye:
 USER 10001:10001
 ENV FLINTEYE_DATA_DIR=/data
 VOLUME ["/data"]
-EXPOSE 18080/tcp 8189/udp
+EXPOSE 18080/tcp 8189/udp 8322/tcp
 HEALTHCHECK --interval=30s --start-period=30s CMD python /opt/flinteye/packaging/container_health.py
 ENTRYPOINT ["python", "/opt/flinteye/flinteye.py", "--headless"]

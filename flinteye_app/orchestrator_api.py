@@ -376,6 +376,20 @@ def _stream_addresses(config: RuntimeConfig, stream_path: str) -> dict[str, str]
     }
 
 
+def _external_rtsp_fields(context, config, path, status=None):
+    from flinteye_app.rtsps_relay import PORT, relay_paths
+    from urllib.parse import quote
+
+    status = status or context.supervisor.rtsps_status()
+    url = None
+    if status == 'ready':
+        if path in relay_paths(config):
+            url = f'rtsps://{context.supervisor.rtsps_network.address}:{PORT}/' + quote(path, safe='/')
+        else:
+            status = 'not_shared'
+    return {'client_rtsp_url': url, 'rtsp_status': status}
+
+
 def _build_ui_allowed_origins(*, env_file: str, api_host: str) -> list[str]:
     env = load_env_file(env_file)
     ui_host = (env.get("WEBUI_HOST") or api_host or "127.0.0.1").strip()
@@ -898,7 +912,7 @@ def _build_recording_playback_cache_path(
     cache_dir: Path, root: Path, relative_path: str, stat_result: os.stat_result
 ) -> Path:
     token = hashlib.sha1(
-        f"{root.resolve()}|{relative_path}|{int(stat_result.st_size)}|{int(stat_result.st_mtime_ns)}".encode("utf-8")
+        f"audio-v1|{root.resolve()}|{relative_path}|{int(stat_result.st_size)}|{int(stat_result.st_mtime_ns)}".encode("utf-8")
     ).hexdigest()[:24]
     return cache_dir / f"{token}.mp4"
 
@@ -1032,6 +1046,11 @@ def _prepare_recording_playback_file(
         if stat_result.st_size + 1_000_000 >= output_limit:
             raise HTTPException(status_code=507, detail="Not enough free disk space for playback")
 
+        from flinteye_app.camera_audio import probe_audio
+        status, codec = probe_audio("ffprobe", file_path)
+        audio_options = (["-c:a", "copy"] if codec == "aac" or status == "no_input"
+                         else ["-c:a", "aac", "-b:a", "128k"])
+
         cmd = [
             ffmpeg_bin,
             "-y",
@@ -1046,8 +1065,9 @@ def _prepare_recording_playback_file(
             "0:a:0?",
             "-dn",
             "-sn",
-            "-c",
+            "-c:v",
             "copy",
+            *audio_options,
             "-movflags",
             "+faststart",
             "-fs",
@@ -1258,7 +1278,8 @@ def _suggest_for_device(
     enabled: bool | None = None,
     width: int | None = None,
     height: int | None = None,
-    fps: int | None = None,
+    fps: float | None = None,
+    input_format: str | None = None,
     bitrate: str | None = None,
     use_device_index: bool = False,
     fallback_index: int | None = None,
@@ -1287,6 +1308,32 @@ def _suggest_for_device(
         default_bitrate = None
 
     recommended = device.get("recommended", {})
+    saved = matched.uvc.env if matched and matched.uvc else {}
+    explicit_mode = width is not None and height is not None and fps is not None
+    try:
+        width = int(width if width is not None else saved.get("WIDTH") or recommended.get("width") or 1280)
+        height = int(height if height is not None else saved.get("HEIGHT") or recommended.get("height") or 720)
+        fps = float(fps if fps is not None else saved.get("FPS") or recommended.get("fps") or 30)
+    except (ValueError, TypeError, OverflowError) as error:
+        raise HTTPException(422, "Invalid capture mode") from error
+    if width < 1 or height < 1 or not 0 < fps <= 1000:
+        raise HTTPException(422, "Invalid capture mode")
+    if input_format is not None:
+        reported = isinstance(input_format, str) and any(
+            mode.get("input_format", "") == input_format and mode["width"] == width
+            and mode["height"] == height and abs((mode.get("fps") or fps) - fps) < .001
+            for mode in device.get("modes", [])
+        )
+        if not reported and input_format != saved.get("INPUT_FORMAT", ""):
+            raise HTTPException(422, "Select a capture format reported by the camera")
+    else:
+        compatible = next((mode for mode in device.get("modes", []) if mode["width"] == width
+                           and mode["height"] == height and mode.get("fps") == fps), {})
+        saved_size = str(width) == str(saved.get("WIDTH")) and str(height) == str(saved.get("HEIGHT"))
+        if matched and (not explicit_mode or saved_size):
+            input_format = saved.get("INPUT_FORMAT")
+        else:
+            input_format = compatible.get("input_format") or recommended.get("input_format")
     bitrate_value = default_bitrate if bitrate is None else str(bitrate).strip()
     suggestion = build_uvc_suggestion(
         driver=device["driver"],
@@ -1300,12 +1347,23 @@ def _suggest_for_device(
         path=(path or default_path),
         rtsp_base_url=_publisher_rtsp_base_url(config),
         enabled=bool(default_enabled if enabled is None else enabled),
-        width=int(width or recommended.get("width") or 1280),
-        height=int(height or recommended.get("height") or 720),
-        fps=int(fps or recommended.get("fps") or 30),
+        width=width,
+        height=height,
+        fps=fps,
+        input_format=input_format,
         bitrate=bitrate_value or None,
         camera_name=(camera_name or default_name),
     )
+    if matched and matched.uvc:
+        camera_body = suggestion["runtime_camera"]
+        camera_body["uvc"]["env"] = {**saved, **camera_body["uvc"]["env"]}
+        if not input_format:
+            camera_body["uvc"]["env"].pop("INPUT_FORMAT", None)
+        if bitrate is not None and not bitrate_value:
+            camera_body["uvc"]["env"].pop("BITRATE", None)
+        camera_body["uvc"]["extra_args"] = matched.uvc.extra_args
+        camera_body["display_name"] = matched.display_name
+        camera_body["audio"] = matched.audio.model_dump()
     suggestion["matched_camera_id"] = matched.id if matched else None
     return suggestion
 
@@ -1704,6 +1762,7 @@ def post_uvc_device_suggest(
         width=body.get("width"),
         height=body.get("height"),
         fps=body.get("fps"),
+        input_format=body.get("input_format"),
         bitrate=body.get("bitrate"),
         use_device_index=bool(body.get("use_device_index", False)),
     )
@@ -1737,6 +1796,7 @@ def post_uvc_device_apply(
         width=body.get("width"),
         height=body.get("height"),
         fps=body.get("fps"),
+        input_format=body.get("input_format"),
         bitrate=body.get("bitrate"),
         use_device_index=bool(body.get("use_device_index", False)),
     )
@@ -1898,6 +1958,13 @@ def get_viewer_cameras(request: Request) -> dict[str, Any]:
     config = context.store.get_effective()
     processes = _observed_process_status(context)
     items = [_viewer_camera_item(config, processes, camera) for camera in config.cameras]
+    status = context.supervisor.rtsps_status()
+    monitoring_audio = {row["id"]: row.get("audio_receiving", False)
+                        for row in context.monitoring.status().get("cameras", [])}
+    for item, camera in zip(items, config.cameras):
+        item["audio_enabled"] = camera.audio.enabled
+        item["audio_receiving"] = monitoring_audio.get(camera.id, False)
+        item["addresses"].update(_external_rtsp_fields(context, config, item["path"], status))
     return {"items": items}
 
 
@@ -1908,9 +1975,11 @@ def get_viewer_info(request: Request) -> dict[str, Any]:
     processes = _observed_process_status(context)
     api_base_url = str(request.base_url).rstrip("/")
     cameras = []
+    status = context.supervisor.rtsps_status()
     for camera in config.cameras:
         item = _viewer_camera_item(config, processes, camera)
         item["settings"] = _viewer_camera_settings(camera)
+        item["addresses"].update(_external_rtsp_fields(context, config, camera.path, status))
         cameras.append(item)
 
     mv = config.multiview
@@ -2208,12 +2277,55 @@ def post_camera_restore(request: Request, camera_id: str) -> dict[str, Any]:
     return {"ok": ok, "camera_id": target.id, "excluded": False}
 
 
+def _camera_audio_availability(camera: CameraConfig) -> str:
+    from flinteye_app.camera_audio import microphone, probe_audio
+    from flinteye_app.orchestrator_uvc_probe import _infer_driver
+
+    if camera.ip:
+        return probe_audio("ffprobe", camera.ip.source_url, rtsp=True)[0]
+    env = camera.uvc.env if camera.uvc else {}
+    driver = env.get("INPUT_DRIVER") or "auto"
+    driver = _infer_driver() if driver == "auto" else driver
+    return microphone(driver, env.get("DEVICE", ""), env.get("FFMPEG_BIN") or "ffmpeg")[0]
+
+
+@app.get("/api/v1/cameras/{camera_id}/audio", dependencies=[Depends(require_admin)])
+def get_camera_audio(request: Request, camera_id: str) -> dict:
+    context = get_context(request)
+    camera = _find_camera(context.store.get_effective(), camera_id)
+    return {"settings": camera.audio.model_dump(), "availability": _camera_audio_availability(camera)}
+
+
+@app.put("/api/v1/cameras/{camera_id}/audio", dependencies=[Depends(require_admin)])
+def put_camera_audio(request: Request, camera_id: str, payload: dict) -> dict:
+    context = get_context(request)
+    from flinteye_app.orchestrator_models import CameraAudioConfig
+
+    try:
+        audio = CameraAudioConfig.model_validate(payload)
+    except ValidationError as error:
+        raise HTTPException(422, "Invalid camera audio settings") from error
+    candidate = _find_camera(context.store.get_effective(), camera_id)
+    if audio.enabled and _camera_audio_availability(candidate) != "available":
+        raise HTTPException(409, "No confirmed audio input for this camera")
+    with context.lock:
+        old_cfg = context.store.get_effective()
+        target = _find_camera(old_cfg, camera_id)
+        if target.uvc != candidate.uvc or target.ip != candidate.ip:
+            raise HTTPException(409, "Camera source changed. Recheck audio before saving.")
+        cameras = [camera.model_copy(update={"audio": audio}).model_dump() if camera.id == target.id
+                   else camera.model_dump() for camera in old_cfg.cameras]
+        new_cfg = _replace_camera_list(context, cameras)
+    _restart_affected(context, old_cfg, new_cfg)
+    return {"settings": audio.model_dump(), "availability": "available" if audio.enabled else "unknown"}
+
+
 @app.get("/api/v1/cameras/{camera_id}/addresses", dependencies=[Depends(require_viewer)])
 def get_camera_addresses(request: Request, camera_id: str) -> dict[str, Any]:
     context = get_context(request)
     config = context.store.get_effective()
     camera = _find_camera(config, camera_id)
-    return {"id": camera.id, **_stream_addresses(config, camera.path)}
+    return {"id": camera.id, **_stream_addresses(config, camera.path), **_external_rtsp_fields(context, config, camera.path)}
 
 
 @app.get("/api/v1/cameras/{camera_id}/snapshot", dependencies=[Depends(require_viewer)])
@@ -2487,7 +2599,7 @@ def get_stream_addresses(request: Request, stream_id: str) -> dict[str, Any]:
     clean = stream_id.strip().strip("/")
     if not clean:
         raise HTTPException(status_code=400, detail="stream_id must not be empty")
-    return {"id": clean, **_stream_addresses(config, clean)}
+    return {"id": clean, **_stream_addresses(config, clean), **_external_rtsp_fields(context, config, clean)}
 
 
 @app.get("/api/v1/recordings/streams", dependencies=[Depends(require_viewer)])
@@ -2592,9 +2704,12 @@ def post_prepare_recording_file(request: Request, file_id: str) -> dict[str, Any
         relative_path=relative_path,
         file_path=file_path,
     )
+    from flinteye_app.camera_audio import probe_audio
+    audio_status, _ = probe_audio("ffprobe", playable_path)
     return {
         "ok": True,
         "file_id": file_id,
+        "has_audio": True if audio_status == "available" else False if audio_status == "no_input" else None,
         "playable_path": f"/api/v1/recordings/files/{file_id}/playable",
         "cache_file": str(playable_path),
     }

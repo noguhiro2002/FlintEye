@@ -6,6 +6,28 @@ interface InformationPageProps {
   api: ApiClient;
 }
 
+function RtspAddress({ url, status }: { url?: string | null; status?: string }) {
+  const [copyStatus, setCopyStatus] = useState("");
+  if (!url) {
+    const label = status === "credentials_required" ? "Viewer credential required"
+      : status === "unavailable" ? "Relay unavailable"
+      : status === "not_shared" ? "Camera not shared" : "Network viewing disabled";
+    return <span className="field-help">{label}</span>;
+  }
+  return <>
+    <code>{url}</code>{" "}
+    <button type="button" onClick={async () => {
+      try {
+        await navigator.clipboard.writeText(url);
+        setCopyStatus("Copied");
+      } catch {
+        setCopyStatus("Select and copy the address above.");
+      }
+    }}>Copy</button>
+    {copyStatus && <small role="status"> {copyStatus}</small>}
+  </>;
+}
+
 export function InformationPage({ api }: InformationPageProps): JSX.Element {
   const [build, setBuild] = useState<Awaited<ReturnType<ApiClient['getBuildInfo']>> | null>(null);
   const [info, setInfo] = useState<ViewerInfoResponse | null>(null);
@@ -81,7 +103,7 @@ export function InformationPage({ api }: InformationPageProps): JSX.Element {
                 </a>
               </label>
               <label>
-                RTSP Base URL
+                Internal RTSP Base URL
                 <input value={info.rtsp_base_url} readOnly />
               </label>
               <label>
@@ -112,7 +134,7 @@ export function InformationPage({ api }: InformationPageProps): JSX.Element {
                 <tr>
                   <th>Camera</th>
                   <th>Type</th>
-                  <th>RTSP</th>
+                  <th>RTSPS</th>
                   <th>WebRTC</th>
                   <th>Resolution</th>
                   <th>FPS</th>
@@ -131,7 +153,7 @@ export function InformationPage({ api }: InformationPageProps): JSX.Element {
                     <tr key={camera.id}>
                       <td data-label="Camera">{camera.label || camera.id}</td>
                       <td data-label="Type">{camera.type}</td>
-                      <td data-label="RTSP"><code>{camera.addresses.rtsp_url}</code></td>
+                      <td data-label="RTSPS"><RtspAddress url={camera.addresses.client_rtsp_url} status={camera.addresses.rtsp_status} /></td>
                       <td data-label="WebRTC"><a href={camera.addresses.webrtc_url} target="_blank" rel="noreferrer">{camera.addresses.webrtc_url}</a></td>
                       <td data-label="Resolution">{width !== "-" && height !== "-" ? `${width}x${height}` : "-"}</td>
                       <td data-label="FPS">{fps}</td>

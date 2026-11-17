@@ -395,7 +395,12 @@ class MonitoringController:
                 reason = ('Receiving' if receiving else 'Stopped' if not self.desired else
                           'Media status unavailable' if not available else
                           'Waiting for camera' if not ready else 'Waiting for video data' if not last_reception else 'No new video data for 15 seconds')
-                cameras.append({'id': camera.id, 'receiving': receiving, 'last_received_at': last_reception, 'reason': reason})
+                audio = camera.audio.enabled and any(
+                    str(track).lower() in {'lpcm', 'mpeg-4 audio', 'mpeg4audio', 'aac', 'opus'}
+                    for track in path.get('tracks', [])
+                )
+                cameras.append({'id': camera.id, 'receiving': receiving, 'last_received_at': last_reception,
+                                'reason': reason, 'audio_receiving': bool(ready and audio)})
             receiving = sum(item['receiving'] for item in cameras)
             evidence = recording_events.summary(self.root, self.session)
             active = set(evidence.pop('active_streams'))
@@ -440,7 +445,7 @@ class MonitoringController:
                 # Stop takes effect immediately, even between health polls.
                 result['counts'].update(receiving=0, recording=0)
                 for camera in result['cameras']:
-                    camera.update(receiving=False, reason='Stopped')
+                    camera.update(receiving=False, audio_receiving=False, reason='Stopped')
                 if self.error:
                     result.update(state='warning', color='amber', label='Action needed', message=self.error)
                 else:

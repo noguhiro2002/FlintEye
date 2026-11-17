@@ -8,6 +8,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
 const root = process.cwd();
 let patchMode = 'ok', folderMode = 'cancel', probeMode = 'ok', calls = [];
+const audioDefaults = {enabled: false, preset: 'standard', codec: 'pcm', sample_rate: 16000, bit_depth: 16, channels: 1, bitrate_kbps: 64};
 const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined, headless: true, args: ['--no-sandbox'] });
 const config = { auth: { provider: 'local', viewer_auth_required: true, local: { admin: { username: 'admin' }, viewer: { username: 'viewer' } } }, ui: { app_title: 'FlintEye', sidebar_title: 'FlintEye', onboarding_done: true }, recording: { enabled: true, managed_storage: true, record_root: '/tmp/Sample recordings', max_bytes: 50e9, record_delete_after: '168h', show_previous: true }, cameras: [], multiview: { enabled: false } };
 const syntheticCameras = [{ id: 'usb1', type: 'uvc', enabled: true, path: 'usb1', display_name: 'Front USB Camera', uvc: { profile: 'usb1', env: { DEVICE: '/dev/video99' }, extra_args: [] }, ip: null, addresses: { rtsp_url: 'rtsp://example.test/usb1', webrtc_url: 'http://example.test/usb1' }, process: null }, { id: 'ipcam1', type: 'ip', enabled: true, path: 'ipcam1', display_name: 'Lobby IP Camera', uvc: null, ip: { source_url: 'rtsp://example.test/stream1' }, addresses: { rtsp_url: 'rtsp://example.test/ipcam1', webrtc_url: 'http://example.test/ipcam1' }, process: null }, { id: 'ipcam2', type: 'ip', enabled: true, path: 'ipcam2', display_name: 'Yard IP Camera', uvc: null, ip: { source_url: 'rtsp://example.test/stream2' }, addresses: { rtsp_url: 'rtsp://example.test/ipcam2', webrtc_url: 'http://example.test/ipcam2' }, process: null }];
@@ -48,6 +49,12 @@ async function context(scenario, width = 1440, height = 900, colorScheme = 'ligh
                 break;
             case '/api/v1/cameras':
                 v = { items: syntheticCameras };
+                break;
+            case '/api/v1/cameras/usb1/audio':
+                v = {settings: audioDefaults, availability: 'no_input'};
+                break;
+            case '/api/v1/cameras/ipcam1/audio':
+                v = {settings: req.method() === 'PUT' ? req.postDataJSON() : audioDefaults, availability: 'available'};
                 break;
             case '/api/v1/uvc/devices':
                 v = { items: [device], warning: '', driver: 'v4l2', ffmpeg_bin: 'ffmpeg' };
@@ -131,6 +138,31 @@ catch (e) {
     process.exitCode = 1;
 } }
 try {
+    await run('camera audio can be saved only for a detected input', async () => {
+        const { ctx, p } = await context('admin');
+        try {
+            await p.locator('.sidebar').getByRole('button', { name: 'Settings', exact: true }).click();
+            await p.getByRole('complementary', { name: 'Settings categories' }).getByRole('button', { name: 'Cameras', exact: true }).click();
+            await p.getByText('Front USB Camera · Camera audio', {exact: true}).click();
+            const usb = p.locator('details').filter({hasText: 'Front USB Camera · Camera audio'}).last();
+            await usb.getByRole('button', {name: 'Check audio input'}).click();
+            await usb.getByText('This camera has no detected audio input.').waitFor();
+            assert.equal(await usb.getByRole('checkbox', {name: 'Enable camera audio'}).isDisabled(), true);
+            const camera = p.locator('.ip-camera-card').first();
+            const input = camera.getByRole('checkbox', {name: 'Enable camera audio'});
+            assert.equal(await input.isChecked(), false);
+            await camera.getByRole('button', {name: 'Check audio input'}).click();
+            await camera.getByText('Audio input detected.').waitFor();
+            await input.check();
+            await camera.getByRole('combobox', {name: /^Audio preset/}).selectOption('high');
+            const request = p.waitForRequest(r => r.method() === 'PUT' && r.url().endsWith('/cameras/ipcam1/audio'));
+            await camera.getByRole('button', {name: 'Save camera audio'}).click();
+            assert.deepEqual((await request).postDataJSON(),
+                {...audioDefaults, enabled: true, preset: 'high', sample_rate: 48000, bit_depth: 24});
+        } finally {
+            await ctx.close();
+        }
+    });
     await run(21, async () => { const { ctx, p } = await context('admin'); await p.locator('.sidebar').getByRole('button', { name: 'Settings', exact: true }).click(); await p.getByRole('complementary', { name: 'Settings categories' }).getByRole('button', { name: 'Cameras', exact: true }).click(); let cards = p.locator('.ip-camera-card'); const original = await cards.nth(1).getByRole('spinbutton', { name: /^CFR FPS/ }).inputValue(); await cards.nth(0).getByRole('button', { name: 'Inspect camera' }).click(); await cards.nth(0).getByRole('button', { name: 'Remove', exact: true }).click(); await p.waitForTimeout(2200); assert.equal(await cards.nth(0).getByRole('spinbutton', { name: /^CFR FPS/ }).inputValue(), original); await p.screenshot({ path: 'dist/terra-webapp-fixes/21-camera.png', fullPage: true }); await ctx.close(); });
     await run(24, async () => { const { ctx, p } = await context('admin'); await p.locator('.sidebar').getByRole('button', { name: 'Settings', exact: true }).click(); await p.getByRole('complementary', { name: 'Settings categories' }).getByRole('button', { name: 'Cameras', exact: true }).click(); let card = p.locator('.ip-camera-card').first(), fps = card.getByRole('spinbutton', { name: /^CFR FPS/ }); const before = await fps.inputValue(); await card.getByRole('button', { name: 'Inspect camera' }).click(); await p.waitForTimeout(2200); assert.equal(await fps.inputValue(), before); await ctx.close(); });
     await run(22, async () => { const { ctx, p } = await context('admin'); await p.locator('.sidebar').getByRole('button', { name: 'Settings', exact: true }).click(); await p.getByRole('complementary', { name: 'Settings categories' }).getByRole('button', { name: 'Cameras', exact: true }).click(); let cards = p.locator('.ip-camera-card'); await cards.nth(0).getByRole('button', { name: 'Remove', exact: true }).click(); await p.getByRole('button', { name: 'Add IP Camera' }).click(); const paths = await cards.getByRole('textbox', { name: /MediaMTX Path/ }).evaluateAll(es => es.map(e => e.value)); assert.equal(new Set(paths).size, paths.length, JSON.stringify(paths)); await ctx.close(); });

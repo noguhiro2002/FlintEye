@@ -11,6 +11,9 @@ services:
     init: true
     restart: unless-stopped
     network_mode: host
+    environment:
+      FLINTEYE_LAN_ADDRESS: ${FLINTEYE_LAN_ADDRESS:-}
+      FLINTEYE_LAN_SOURCES: ${FLINTEYE_LAN_SOURCES:-}
     volumes:
       - flinteye-data:/data
 volumes:

@@ -41,6 +41,23 @@ Do not post the setup token in an issue or put a password into command arguments
 For other LAN users, configure the [HTTPS reverse proxy](DISTRIBUTION.md#user-installation).
 The HTTP/API/MediaMTX listeners stay on loopback; WebRTC also needs UDP 8189.
 
+### Next development build: finish setup over HTTPS
+
+Compose uses Linux host networking. In the directory with `compose.yaml`, set the following in `.env` before starting with a new data volume. Replace the example address and source range with your server's assigned address and trusted network.
+
+```dotenv
+FLINTEYE_LAN_ADDRESS=192.168.1.10
+FLINTEYE_LAN_SOURCES=192.168.1.0/24
+```
+
+```sh
+docker compose up -d --wait
+docker compose exec flinteye python /opt/flinteye/flinteye.py --headless --connection-info
+```
+
+Transfer only the public certificate and trust instructions from `/data/connection-guide` to the viewing device. Compare the fingerprint on the server before trusting the certificate. Open the printed HTTPS URL and complete setup with the one-use code from `/data/setup-token`, which the owner reads using `docker compose exec flinteye cat /data/setup-token`. Use the local HTTP route if LAN setup reports a problem. A volume with an existing installation keeps its connection settings. For camera audio, map `/dev/snd` and grant the container user the host audio group as well as its video-device permissions. See the optional entries in Compose.
+
+
 ## Storage and cameras
 
 The named volume `flinteye-data` persists settings, inventory and recordings across container replacement.

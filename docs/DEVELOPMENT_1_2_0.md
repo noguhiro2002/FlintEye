@@ -1,10 +1,10 @@
-# 1.2.0-preview.1 development and QA follow-up
+# 1.2.0-preview.2 development and QA follow-up
 
 [日本語](DEVELOPMENT_1_2_0.ja.md) · [Acceptance](ACCEPTANCE.md) · [Required device checklist](RELEASE_CHECKLIST_1_2_0.md) · [LAN access](LAN_ACCESS.md)
 
 **UNDER DEVELOPMENT. Public 1.1.3-preview.1 is unchanged. This source is not a claim that the reported Windows failures have recovered on the owner's machine.**
 
-Baseline: application build `25718ed3f06833a1f291992753b4f0538d7dc939`, published tag `v1.1.3-preview.1`; implementation starts from main `8e13378`. Input: the owner's QA rev11 dated 2026-11-15. Findings below preserve the distinction between observed defects, new product requests and unperformed tests. Application 1.2.0 and release v1.2.0-preview.1 are the next target, not the stable channel.
+Baseline: application build `25718ed3f06833a1f291992753b4f0538d7dc939`, published tag `v1.1.3-preview.1`; implementation starts from main `8e13378`. Input: the owner's QA rev11 dated 2026-11-15. Findings below preserve the distinction between observed defects, new product requests and unperformed tests. Application 1.2.0 and release v1.2.0-preview.2 are the next target, not the stable channel.
 
 | QA chapters | Implementation and evidence status |
 | --- | --- |
@@ -45,18 +45,18 @@ Download and extract the successful Build release run's `release-bundle` artifac
 Windows PowerShell, from the extracted bundle directory:
 
 ```powershell
-.\public\install.ps1 -Version 1.2.0-preview.1 -PackageDirectory .\public
+.\public\install.ps1 -Version 1.2.0-preview.2 -PackageDirectory .\public
 ```
 
 macOS or Linux, from the extracted bundle directory:
 
 ```sh
-bash public/install.sh --version 1.2.0-preview.1 --package-directory public
+bash public/install.sh --version 1.2.0-preview.2 --package-directory public
 ```
 
 Compare this installation with the standalone installer from the same folder and verify both SHA-256 values match. Keep the version and source commit fixed. Public download commands remain pinned to the currently published 1.1.3 release until 1.2.0 acceptance passes. To test the container before GHCR publication, load the matching `containers/container-amd64.tar.gz` or `container-arm64.tar.gz`, then set `FLINTEYE_IMAGE=flinteye:release-amd64` or `flinteye:release-arm64` before using Compose. Do not mistake a downloaded Compose file's future GHCR tag for an already published image.
 
-## Recorded automated verification
+## Archived automated verification before the preview.2 changes
 
 Application commit: `a0aa7592195a6b52cd732014603ea2fbc3ff4b22`. [Successful build and QA artifacts](https://github.com/noguhiro2002/FlintEye/actions/runs/43800923694). All six native OS/CPU targets passed: Windows x64/ARM64, macOS Intel/Apple Silicon and Linux amd64/arm64. This produced eight installers (EXE, DMG, DEB and RPM) and two container archives. Installed/frozen application checks covered setup, authentication, bundled media, generated-video recording/playback and normal Quit. Windows checks also used the registered uninstall command and confirmed retained data; Linux checked actual DEB/RPM installation.
 
@@ -64,4 +64,4 @@ The Python suite ran 190 cases without failures: 2 platform-dependent skips loca
 
 The downloaded Actions artifacts were checked against GitHub's stored sizes and SHA-256 values, safely extracted with ZIP CRC verification and assembled using this commit's release recipe. The manifest, complete file checksums, container architectures/source revisions and macOS ad-hoc integrity reports were verified. Intel Mac required a same-commit retry after macOS returned `Resource busy` while creating its first DMG; successful artifacts from the other targets were retained.
 
-Only the automated native-architecture acceptance case is marked passed. The eight physical/owner acceptance cases above remain pending, including the reported Windows WinError 2 and Error 32. No new Release, GHCR image or stable/latest promotion was made.
+This run applies to the earlier commit. Record validation for the current candidate using the [release checklist](RELEASE_CHECKLIST_1_2_0.md).

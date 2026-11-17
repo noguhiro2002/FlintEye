@@ -19,6 +19,7 @@ overrides:
       - libxft2
       - libxss1
       - fonts-dejavu-core
+      - alsa-utils
   rpm:
     depends:
       - glibc >= 2.34
@@ -31,6 +32,7 @@ overrides:
       - libXft
       - libXScrnSaver
       - dejavu-sans-fonts
+      - alsa-utils
 contents:
   - src: ./dist/FlintEye/
     dst: /opt/flinteye

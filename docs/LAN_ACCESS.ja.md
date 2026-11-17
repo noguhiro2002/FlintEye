@@ -63,3 +63,9 @@ Windowsの削除プロセスでは、このFlintEyeインストールによっ�
 ローカルのみの操作に戻すには、その同じプロファイルで `--disable-lan` を使用してください。これらのフラグはLinuxファイアウォールを管理しません。管理者管理の既存のリバースプロキシは、組み込みのLANモードを無効にした状態で引き続き使用できます。パブリックWeb URL、APIバインド、およびメディアアップストリームは個別の設定です。組み込みのLANパスは、転送されたアイデンティティヘッダーを信頼しません。
 
 Docker Desktopで提供されるブリッジComposeは、ホストブラウザー専用です。LAN Dockerサーバーの場合は、ホストネットワーク設定と上記の明示的なLAN設定を使用してLinux Engineを使用してください。[Docker ](DOCKER.ja.md)
+
+### ネットワークの選択と外部プレーヤー（次期開発版）
+
+デスクトップで初めて起動したときに、信頼するネットワークか **This computer only**（この端末のみ）を選びます。起動後の案内に表示されるHTTPSの接続先と証明書の手順を確認してください。新規のsystemdプロファイルでは、サービスの環境変数 `FLINTEYE_LAN_ADDRESS` と `FLINTEYE_LAN_SOURCES`（複数の場合はカンマ区切り）を設定してから起動します。接続先は `sudo -u flinteye /opt/flinteye/FlintEye --headless --data-dir /var/lib/flinteye --connection-info` で確認できます。VPNなどの割り当て済みアドレスは、サーバー上の **Settings → Runtime & access** でIPと許可する接続元を指定できます。
+
+外部プレーヤーを使うには、同じ設定にある **Allow external players (RTSPS)** を有効にして保存し、閲覧専用のパスワードを作ります。表示された資格情報を控えてから画面を閉じ、FlintEyeを再起動します。Windowsでは更新済みのファイアウォール規則を適用します。LinuxやmacOSのファイアウォールで受信を制限している場合は、許可した接続元からのTCP 8322のみ通します。**Information** に表示された `rtsps://…:8322/…` を、証明書を検証できるRTSPS対応プレーヤーで開き、閲覧用の資格情報を入力します。FFmpegでは `-tls_verify 1` を有効にし、`-ca_file` でFlintEyeの公開CAを指定します。RTSPSを無効にして再起動すると、この待受は終了します。

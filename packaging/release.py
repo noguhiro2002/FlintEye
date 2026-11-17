@@ -186,10 +186,10 @@ def validate_publish_context(repo: dict, run: dict, *, commit: str, enabled: boo
     if ref != 'refs/heads/' + branch:
         raise ValueError('Publish from the default branch only')
     if (run.get('path') != '.github/workflows/build-release.yml' or
-        run.get('event') != 'workflow_dispatch' or run.get('conclusion') != 'success' or
+        run.get('event') not in {'push', 'workflow_dispatch'} or run.get('conclusion') != 'success' or
         run.get('head_sha') != commit or run.get('head_branch') != branch or
         run.get('head_repository', {}).get('full_name') != REPOSITORY):
-        raise ValueError('Select a successful manual Build release run for this exact default-branch commit')
+        raise ValueError('Select a successful Build release run for this exact default-branch commit')
 
 
 def main() -> None:

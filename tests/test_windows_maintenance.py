@@ -22,7 +22,8 @@ class FirewallOwnershipTests(unittest.TestCase):
         self.bundle.mkdir(parents=True)
         self.profiles = [self.global_root, self.root/'custom profile']
         self.config = SimpleNamespace(network=SimpleNamespace(enabled=True,
-            address='192.168.1.10', allowed_subnets=['192.168.1.0/24']), api=SimpleNamespace(port=18080))
+            address='192.168.1.10', allowed_subnets=['192.168.1.0/24'], rtsp_enabled=False),
+            api=SimpleNamespace(port=18080))
         self.calls = []
         self.request_paths = []
         for name, value in (('_require_windows', None), ('application_dir', self.bundle),

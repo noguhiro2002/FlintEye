@@ -47,4 +47,3 @@ class StagingTests(unittest.TestCase):
                     self.assertNotEqual(result.returncode, 0)
                     self.assertIn('Checksum mismatch', result.stderr)
                     self.assertFalse(capture.exists())
-

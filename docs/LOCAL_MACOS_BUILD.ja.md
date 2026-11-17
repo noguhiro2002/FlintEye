@@ -9,7 +9,7 @@
 
 <a id="1-prepare-the-mac-once"></a>
 
-1.2.0-preview.1のテストに向けて、本ガイドでは開発ブランチ`codex/1.2.0-preview`を明示的に選択します。組み込まれたLAN HTTPSおよびQAの修正には新しいビルドが必要であり、既存のパブリック版1.1.3パッケージおよびmainブランチはこれらのコマンドによって変更されることはありません。ビルド時に表示されるソースコミットを記録し、隔離されたテストプロファイルを使用してください。実機での受け入れテストは現在保留中です。
+開発版 1.2.0-preview.2 は `main` からビルドします。ビルド時に表示されるコミットを記録し、テスト専用のプロファイルを使ってください。
 
 ## 1. Mac の事前準備を 1 回行う
 
@@ -37,7 +37,7 @@ Python 3.14.10以降の3.14パッチバージョン、Node.js 22.12以降の22.x
 ```sh
 mkdir -p ~/Developer
 cd ~/Developer
-git clone --branch codex/1.2.0-preview https://github.com/noguhiro2002/FlintEye.git FlintEye-build
+git clone --branch main https://github.com/noguhiro2002/FlintEye.git FlintEye-build
 cd FlintEye-build
 ```
 
@@ -45,7 +45,7 @@ cd FlintEye-build
 
 ```sh
 cd ~/Developer/FlintEye-build
-git switch codex/1.2.0-preview
+git switch main
 git pull --ff-only
 ```
 

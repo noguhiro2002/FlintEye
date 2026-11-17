@@ -8,9 +8,11 @@ import os
 import re
 import shlex
 import subprocess
-from flinteye_app.process_lifetime import run_background
+from flinteye_app.process_lifetime import popen_background, run_background
+from flinteye_app.camera_audio import add_capture_options, microphone, output_args
 from flinteye_app.subprocess_utils import background_process_options
 import sys
+import time
 
 
 WINDOWS_ENCODERS = [
@@ -194,7 +196,7 @@ def apply_latency_preset(args: argparse.Namespace) -> None:
     if args.thread_queue_size == DEFAULT_THREAD_QUEUE_SIZE:
         args.thread_queue_size = 32
     if args.gop == DEFAULT_GOP:
-        args.gop = max(10, min(args.fps, 30))
+        args.gop = max(10, min(round(args.fps), 30))
     if args.rtbufsize == DEFAULT_RTBUFSIZE:
         args.rtbufsize = "8M"
 
@@ -353,6 +355,8 @@ def build_input_args(args: argparse.Namespace, driver: str) -> list[str]:
     if args.input_format:
         if driver == "v4l2":
             input_args += ["-input_format", args.input_format]
+        elif driver == "dshow" and args.input_format.startswith("codec:"):
+            input_args += ["-vcodec", args.input_format.removeprefix("codec:")]
         else:
             input_args += ["-pixel_format", args.input_format]
     if driver == "dshow" and args.rtbufsize:
@@ -363,7 +367,15 @@ def build_input_args(args: argparse.Namespace, driver: str) -> list[str]:
         if not lowered.startswith("video=") and not lowered.startswith("audio="):
             device = f"video={device}"
 
+    audio = getattr(args, "audio_device", None)
+    if audio and driver == "dshow":
+        device += f":audio={audio}"
+    elif audio and driver == "avfoundation":
+        device = f"{device.rsplit(':', 1)[0]}:{audio}"
     input_args += ["-i", device]
+    if audio and driver == "v4l2":
+        input_args += ["-thread_queue_size", "256", "-f", "s16le" if args.audio_codec == "pcm_s16be" else "s32le",
+                       "-ar", str(args.audio_rate), "-ac", str(args.audio_channels), "-i", "pipe:0"]
     return input_args
 
 
@@ -381,7 +393,11 @@ def build_cmd(args: argparse.Namespace, encoder: str, input_driver: str) -> list
         cmd += ["-fflags", "+genpts+nobuffer", "-flags", "low_delay"]
 
     cmd += build_input_args(args, input_driver)
-    cmd += ["-an", "-vf", vf, "-pix_fmt", pix_fmt, "-c:v", encoder]
+    cmd += ["-map", "0:v:0"]
+    if getattr(args, "audio_device", None):
+        cmd += ["-map", "1:a:0" if input_driver == "v4l2" else "0:a:0?"]
+    cmd += output_args(args)
+    cmd += ["-vf", vf, "-pix_fmt", pix_fmt, "-c:v", encoder]
     cmd += ["-bf", str(args.bframes)]
 
     if encoder == "libx264":
@@ -477,7 +493,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     p.add_argument("--width", type=int, help="Capture width")
     p.add_argument("--height", type=int, help="Capture height")
-    p.add_argument("--fps", type=int, default=30, help="Capture framerate")
+    p.add_argument("--fps", type=float, default=30, help="Capture framerate")
+    add_capture_options(p)
     p.add_argument(
         "--input-format",
         help="Input pixel format (v4l2: input_format, avfoundation/dshow: pixel_format)",
@@ -550,7 +567,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     env_str("quality_preset", "QUALITY_PRESET")
     env_int("width", "WIDTH")
     env_int("height", "HEIGHT")
-    env_int("fps", "FPS")
+    env_str("fps", "FPS")
     env_str("input_format", "INPUT_FORMAT")
     env_str("rtbufsize", "RTBUFSIZE")
     env_str("bitrate", "BITRATE")
@@ -587,6 +604,32 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "(or set UVC_RTSP_URL / UVC_<PROFILE>_RTSP_URL in .env)"
         )
     return args
+
+
+def run_capture(args, command: list[str], driver: str) -> int:
+    if driver != "v4l2" or not args.audio_device:
+        return run_background(command, **background_process_options(), check=False).returncode
+
+    record = ["arecord", "-q", "-D", args.audio_device, "-t", "raw",
+              "-f", "S16_LE" if args.audio_codec == "pcm_s16be" else "S32_LE",
+              "-r", str(args.audio_rate), "-c", str(args.audio_channels)]
+    with popen_background(record, stdout=subprocess.PIPE) as microphone_process:
+        try:
+            with popen_background(command, stdin=microphone_process.stdout) as ffmpeg_process:
+                microphone_process.stdout.close()
+                while ffmpeg_process.poll() is None:
+                    if microphone_process.poll() is not None:
+                        ffmpeg_process.terminate()
+                        try:
+                            ffmpeg_process.wait(timeout=3)
+                        except subprocess.TimeoutExpired:
+                            ffmpeg_process.kill()
+                        return 1
+                    time.sleep(.2)
+                return ffmpeg_process.returncode
+        finally:
+            if microphone_process.poll() is None:
+                microphone_process.terminate()
 
 
 def main() -> int:
@@ -635,6 +678,13 @@ def main() -> int:
         print(str(e), file=sys.stderr)
         return 2
 
+    args.audio_device = None
+    if args.audio_codec:
+        status, args.audio_device = microphone(input_driver, args.device or default_device_for_driver(input_driver),
+                                               args.ffmpeg_bin)
+        if not args.audio_device:
+            print(f"[warn] Camera audio unavailable ({status}); continuing with video only.", file=sys.stderr)
+            args.audio_codec = None
     initial_encoder = encoder_candidates[0]
     initial_cmd = build_cmd(args, initial_encoder, input_driver)
 
@@ -668,19 +718,24 @@ def main() -> int:
                 print("[info] fallback ffmpeg command:", file=sys.stderr)
                 print(format_cmd_for_display(cmd), file=sys.stderr)
 
-            result = run_background(cmd, **background_process_options(), check=False)
-            if result.returncode == 0:
+            code = run_capture(args, cmd, input_driver)
+            if code == 0:
                 return 0
-
+            if args.audio_device:
+                print("[warn] Capture with audio failed; retrying this camera with video only.", file=sys.stderr)
+                args.audio_device = args.audio_codec = None
+                code = run_capture(args, build_cmd(args, encoder, input_driver), input_driver)
+                if code == 0:
+                    return 0
             if args.encoder != "auto":
-                return result.returncode
+                return code
 
             print(
-                f"[warn] encoder '{encoder}' failed (exit={result.returncode})",
+                f"[warn] encoder '{encoder}' failed (exit={code})",
                 file=sys.stderr,
             )
 
-        return result.returncode
+        return code
     except KeyboardInterrupt:
         return 130
 

@@ -9,12 +9,17 @@ services:
     stop_grace_period: 60s
     # Linux only: preserves LAN ONVIF discovery and WebRTC ICE addresses.
     network_mode: host
+    environment:
+      FLINTEYE_LAN_ADDRESS: ${FLINTEYE_LAN_ADDRESS:-}
+      FLINTEYE_LAN_SOURCES: ${FLINTEYE_LAN_SOURCES:-}
     volumes:
       - flinteye-data:/data
     # Optional USB camera; grant the host video group as well:
     # devices:
     #   - /dev/video0:/dev/video0
+    #   - /dev/snd:/dev/snd  # Optional camera microphone
     # group_add:
     #   - "44"  # Replace with the host's video GID.
+    #   - "29"  # Replace with the host's audio GID if using a microphone.
 volumes:
   flinteye-data:

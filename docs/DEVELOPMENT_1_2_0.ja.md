@@ -1,10 +1,10 @@
-# 1.2.0-preview.1 開発およびQAフォローアップ
+# 1.2.0-preview.2 開発およびQAフォローアップ
 
 [English](DEVELOPMENT_1_2_0.md) · [Acceptance](ACCEPTANCE.ja.md) · [LAN access](LAN_ACCESS.ja.md) · [公開前の必須実機チェック（1.2.0）](RELEASE_CHECKLIST_1_2_0.ja.md)
 
 **UNDER DEVELOPMENT。公開版 1.1.3-preview.1 に変更はありません。本ソースは、報告されているWindowsでの障害が所有者のマシンで回復したことを主張するものではありません。**
 
-ベースライン：アプリケーションビルド `25718ed3f06833a1f291992753b4f0538d7dc939`、公開タグ `v1.1.3-preview.1`。実装は main `8e13378` から開始。入力：2026年11月15日付の所有者によるQA rev11。以下の調査結果は、観察された不具合、新規製品リクエスト、未実施のテストを区別して保持しています。アプリケーション 1.2.0 およびリリース v1.2.0-preview.1 は、安定版チャネルではなく、次回のターゲットです。
+ベースライン：アプリケーションビルド `25718ed3f06833a1f291992753b4f0538d7dc939`、公開タグ `v1.1.3-preview.1`。実装は main `8e13378` から開始。入力：2026年11月15日付の所有者によるQA rev11。以下の調査結果は、観察された不具合、新規製品リクエスト、未実施のテストを区別して保持しています。アプリケーション 1.2.0 およびリリース v1.2.0-preview.2 は、安定版チャネルではなく、次回のターゲットです。
 
 | QA章 | 実装およびエビデンスの状態 |
 | --- | --- |
@@ -45,18 +45,18 @@ Pythonスイート、フロントエンドビルド/ブラウザスイート、�
 Windows PowerShell（展開したバンドルディレクトリから実行）:
 
 ```powershell
-.\public\install.ps1 -Version 1.2.0-preview.1 -PackageDirectory .\public
+.\public\install.ps1 -Version 1.2.0-preview.2 -PackageDirectory .\public
 ```
 
 macOS または Linux（展開したバンドルディレクトリから実行）:
 
 ```sh
-bash public/install.sh --version 1.2.0-preview.1 --package-directory public
+bash public/install.sh --version 1.2.0-preview.2 --package-directory public
 ```
 
 このインストールを同じフォルダ内のスタンドアロンインストーラーと比較し、両方の SHA-256 値が一致することを確認してください。バージョンとソースコミットは固定してください。パブリックダウンロードコマンドは、1.2.0 の承認が完了するまで、現在公開されている 1.1.3 リリースに固定されたままです。GHCR 公開前にコンテナをテストするには、対応する `containers/container-amd64.tar.gz` または `container-arm64.tar.gz` を読み込み、Compose を使用する前に `FLINTEYE_IMAGE=flinteye:release-amd64` または `flinteye:release-arm64` を設定してください。ダウンロードした Compose ファイルにある将来の GHCR タグを、すでに公開されているイメージと見間違えないように注意してください。
 
-## 全OSの自動検証は完了、実機確認は未完了
+## 旧ビルドの自動検証結果
 
 対象のアプリケーションコミットは `a0aa7592195a6b52cd732014603ea2fbc3ff4b22` です。[ビルド結果・検証用成果物](https://github.com/noguhiro2002/FlintEye/actions/runs/43800923694)を確認できます。Windows x64/ARM64、macOS Intel/Apple Silicon、Linux amd64/arm64の6構成すべてで、ビルドと自動動作確認が通りました。成果物はインストーラー8種（EXE、DMG、DEB、RPM）と、両CPU向けのコンテナアーカイブです。作成したアプリで、初回設定、認証、同梱メディア部品、テスト映像の録画・再生、通常の **Quit** 操作を確認しました。Windowsでは登録済みコマンドからのアンインストールとデータ保持、LinuxではDEB/RPMのインストールも確認しています。
 
@@ -66,4 +66,4 @@ Pythonテストは190件を実行し、失敗はありませんでした。環�
 
 Actionsから取得した成果物は、GitHubが記録したサイズ・SHA-256と照合し、展開時にZIPのCRCも検証しました。同じコミットのリリース作成手順でまとめ、マニフェスト、全ファイルのチェックサム、コンテナのCPU・ソース情報、macOSのad-hoc署名の整合性を確認しています。Intel Macでは最初のDMG作成時にmacOSが `Resource busy` を返したため、同じコミットで再実行しました。他の対象で成功した成果物はそのまま使用しています。
 
-[受け入れ記録](../packaging/acceptance-1.2.0.json)で確認済みにしたのは、全OS・両CPUの自動ビルド・動作確認の1項目だけです。WindowsのWinError 2とError 32の再確認を含め、ユーザー環境や実機での確認8項目は未完了です。新しいReleaseとGHCRイメージの公開、stable/latestへの昇格は行っていません。
+この実行結果は改修前のコミットに対応します。今回の開発版の結果は、[公開前チェックリスト](RELEASE_CHECKLIST_1_2_0.ja.md)に沿って記録してください。

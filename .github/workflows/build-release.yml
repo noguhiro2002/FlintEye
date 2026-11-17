@@ -1,5 +1,8 @@
 name: Build release
 on:
+  push:
+    branches: [main]
+    paths: [flinteye_app/_version.py]
   workflow_dispatch:
     inputs:
       desktop_only:

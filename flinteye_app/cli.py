@@ -104,6 +104,67 @@ def initialize(root: Path) -> Path:
     return runtime
 
 
+def select_setup_network():
+    """Ask the installer owner before making a new profile reachable."""
+    import tkinter as tk
+    from tkinter import ttk
+    from flinteye_app.network_access import lan_candidates
+
+    try:
+        candidates = lan_candidates()
+    except (OSError, ValueError, subprocess.SubprocessError):
+        candidates = []
+    window = tk.Tk()
+    window.title('FlintEye — Choose where to connect')
+    frame = ttk.Frame(window, padding=20)
+    frame.pack()
+    options = ['This computer only'] + [f'{name} — {address} ({source})' for name, address, source in candidates]
+    ttk.Label(frame, text='Choose a trusted network to open FlintEye from another device.',
+              wraplength=460).pack(anchor='w')
+    choice = ttk.Combobox(frame, values=options, state='readonly', width=49)
+    choice.pack(fill='x', pady=8)
+    choice.current(1 if len(candidates) == 1 else 0)
+    if not candidates:
+        ttk.Label(frame, text='No eligible private network was detected. Start locally and set a network later.',
+                  wraplength=460).pack(anchor='w')
+    selection = None
+
+    def accept():
+        nonlocal selection
+        index = choice.current()
+        if index > 0:
+            _, address, source = candidates[index - 1]
+            selection = address, source
+        window.destroy()
+
+    ttk.Button(frame, text='Start FlintEye', command=accept).pack(anchor='e', pady=8)
+    window.mainloop()
+    return selection
+
+
+def _connection_state(root: Path) -> dict:
+    try:
+        return json.loads((root/'instance-control.json').read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return {}
+
+
+def _print_connection(root: Path, connection: dict) -> None:
+    lan = connection.get('lan_url')
+    local = connection.get('url')
+    setup = (root/'setup-token').is_file()
+    action = 'Open this address to complete initial setup:' if setup else 'Open FlintEye:'
+    print(f'FlintEye is running. {action} {lan or local}', flush=True)
+    if lan:
+        print(f'On the server: {local}. Certificate and trust guide: {root / "connection-guide"}', flush=True)
+    elif connection.get('lan_error'):
+        print(connection['lan_error'], flush=True)
+    else:
+        print('Access is local to this computer. Choose a trusted network to connect from another device.', flush=True)
+    if setup:
+        print(f'One-use setup code: read {root / "setup-token"} on the server.', flush=True)
+
+
 def setup_dialog(runtime: Path) -> None:
     """Accessible password form lives in the browser; this window conveys ownership."""
     from flinteye_app.orchestrator_store import RuntimeStore
@@ -115,10 +176,12 @@ def setup_dialog(runtime: Path) -> None:
     from tkinter import ttk
     root = runtime.parent
     window = tk.Tk()
-    window.title('FlintEye — Complete setup in your browser')
+    window.title('FlintEye — Installation complete')
     window.resizable(False, False)
     frame = ttk.Frame(window, padding=20); frame.pack()
-    ttk.Label(frame, text='Create your administrator account in the browser', wraplength=460).pack(anchor='w')
+    connection = _connection_state(root)
+    ttk.Label(frame, text='FlintEye is running. Open the address below to finish setup.',
+              wraplength=460).pack(anchor='w')
     ttk.Label(frame, text='Copy this one-use setup token into the web form. It expires in 30 minutes.', wraplength=460).pack(anchor='w', pady=8)
     token = tk.StringVar(value=(root/'setup-token').read_text())
     entry = ttk.Entry(frame, textvariable=token, width=48, state='readonly'); entry.pack(fill='x')
@@ -130,7 +193,22 @@ def setup_dialog(runtime: Path) -> None:
     url = active_listener_url(root, browser_url(config.api.host, port))
     ttk.Label(frame, text=url).pack(anchor='w')
     ttk.Button(frame, text='Open setup in browser', command=lambda: webbrowser.open(url)).pack(anchor='w', pady=8)
-    ttk.Label(frame, text='If the browser did not open, enter the address above manually. LAN access can be configured in Settings after setup.', wraplength=460).pack(anchor='w')
+    if connection.get('lan_url'):
+        lan_url = connection['lan_url']
+        def copy_lan_url():
+            window.clipboard_clear()
+            window.clipboard_append(lan_url)
+            window.update()
+        ttk.Label(frame, text='From another device on the selected network: ' + lan_url,
+                  wraplength=460).pack(anchor='w')
+        ttk.Button(frame, text='Copy HTTPS address', command=copy_lan_url).pack(anchor='w', pady=5)
+        ttk.Label(frame, text=f'Certificate and trust instructions: {root / "connection-guide"}',
+                  wraplength=460).pack(anchor='w')
+    elif connection.get('lan_error'):
+        ttk.Label(frame, text=connection['lan_error'], wraplength=460).pack(anchor='w')
+    else:
+        ttk.Label(frame, text='This address works on this computer. To connect from another device, choose a network in Settings.',
+                  wraplength=460).pack(anchor='w')
     def check():
         if local_auth_is_configured(RuntimeStore(env_file='', runtime_file=str(runtime), use_env=False).get_effective().auth):
             window.destroy()
@@ -161,6 +239,12 @@ def connection_information(root: Path, url: str) -> None:
         window.clipboard_clear(); window.clipboard_append(value); window.update()
     ttk.Button(frame, text='Copy address', command=lambda: copy(url)).pack(anchor='w')
     ttk.Button(frame, text='Open FlintEye', command=lambda: webbrowser.open(url)).pack(anchor='w', pady=6)
+    connection = _connection_state(root)
+    if lan_url := connection.get('lan_url'):
+        ttk.Label(frame, text=lan_url).pack(anchor='w')
+        ttk.Button(frame, text='Copy HTTPS address', command=lambda: copy(lan_url)).pack(anchor='w')
+        ttk.Label(frame, text=f'Certificate and guide: {root / "connection-guide"}',
+                  wraplength=420).pack(anchor='w')
     token = tk.StringVar()
     ttk.Label(frame, text='Initial setup token (only shown before administrator setup):', wraplength=420).pack(anchor='w')
     ttk.Entry(frame, textvariable=token, width=50, state='readonly').pack(fill='x', pady=6)
@@ -371,6 +455,15 @@ def main() -> int:
         remove_installation_firewall()
         return 0
     if args.connection_info:
+        if args.headless:
+            for _ in range(50):
+                connection = _connection_state(root)
+                if connection.get('ready'):
+                    _print_connection(root, connection)
+                    return 0
+                time.sleep(.2)
+            print('FlintEye has not reported a ready listener. Check service startup logs.', file=sys.stderr)
+            return 1
         from flinteye_app.instance_control import active_listener_port, active_listener_url
         connection_information(root, active_listener_url(root, f'http://127.0.0.1:{active_listener_port(root, 18080)}'))
         return 0
@@ -404,6 +497,7 @@ def main() -> int:
             api = existing.get_effective().api
             webbrowser.open(active_listener_url(root, browser_url(api.host, active_listener_port(root, api.port))))
         return 0
+    first_install = not (root/'runtime.json').exists()
     runtime = initialize(root)
     from flinteye_app.orchestrator_store import RuntimeStore
     store = RuntimeStore(env_file='', runtime_file=str(runtime), use_env=False)
@@ -411,14 +505,42 @@ def main() -> int:
         from flinteye_app.windows_maintenance import manage_firewall
         manage_firewall(root, store.get_effective(), 'remove')
         return 0
+    lan_error = ''
+    selected_network = False
+    if first_install and not (args.lan_address or args.disable_lan):
+        args.lan_address = os.environ.get('FLINTEYE_LAN_ADDRESS', '')
+        args.lan_source = [value.strip() for value in os.environ.get('FLINTEYE_LAN_SOURCES', '').split(',')
+                           if value.strip()]
+        if not args.lan_address and not (args.headless or args.background or args.setup_only):
+            selection = select_setup_network()
+            if selection:
+                args.lan_address, source = selection
+                args.lan_source = [source]
+                selected_network = True
     if args.lan_address or args.disable_lan:
         from flinteye_app.orchestrator_models import NetworkAccessConfig
         from flinteye_app.network_access import ensure_certificates, lan_media_patch
-        network = NetworkAccessConfig(enabled=not args.disable_lan, address=args.lan_address or '', allowed_subnets=args.lan_source)
-        if network.enabled:
-            ensure_certificates(root, network.address)
-        store.patch_runtime({'network': network.model_dump(), 'api': {'host': '127.0.0.1'},
-                             **(lan_media_patch(store.get_effective()) if network.enabled else {})})
+        try:
+            network = NetworkAccessConfig(enabled=not args.disable_lan, address=args.lan_address or '',
+                                          allowed_subnets=args.lan_source,
+                                          rtsp_enabled=store.get_effective().network.rtsp_enabled)
+            if network.enabled:
+                if os.environ.get('FLINTEYE_CONTAINER_BRIDGE') == '1':
+                    raise ValueError('LAN HTTPS for Docker needs Linux host networking')
+                ensure_certificates(root, network.address)
+            patch = lan_media_patch(store.get_effective()) if network.enabled else {}
+            if selected_network and sys.platform == 'win32':
+                from flinteye_app.windows_maintenance import manage_firewall
+
+                config = store.get_effective().model_copy(update={'network': network})
+                if args.port:
+                    config.api = config.api.model_copy(update={'port': args.port})
+                manage_firewall(root, config, 'apply')
+            store.patch_runtime({'network': network.model_dump(), 'api': {'host': '127.0.0.1'}, **patch})
+        except (ValueError, OSError, subprocess.SubprocessError) as error:
+            if not first_install:
+                raise
+            lan_error = f'LAN HTTPS could not be prepared: {error}'
     if args.export_connection_guide:
         from flinteye_app.network_access import export_guide
         config = store.get_effective()
@@ -468,6 +590,8 @@ def main() -> int:
     from flinteye_app.instance_control import browser_url
     url = browser_url(host, port)
     network = context.store.get_effective().network
+    context.supervisor.rtsps_profile = root
+    context.supervisor.rtsps_network = network
     context.listener = {'host': host, 'port': port, 'scheme': 'http', 'url': url,
                         'lan_url': f'https://{network.address}:{port}' if network.enabled else None,
                         'source': 'command line' if args.port else 'saved configuration'}
@@ -488,6 +612,20 @@ def main() -> int:
         server.should_exit = True
         return True
     control = InstanceControl(root, requested_quit, port=port, renew_setup=renew_setup, url=url)
+    def ready():
+        lan_url = context.listener['lan_url'] if server.lan_started else None
+        context.listener['lan_url'] = lan_url
+        message = lan_error or server.lan_error
+        if lan_url:
+            from flinteye_app.network_access import export_guide
+            try:
+                export_guide(root, network.address, port)
+            except (OSError, ValueError):
+                message = 'Could not save the trust guide. Export it from the server Settings.'
+        control.write_connection(ready=True, lan_url=lan_url, lan_error=message)
+        _print_connection(root, control.metadata)
+
+    server.on_ready = ready
     thread = None
     try:
         if args.headless:
@@ -496,7 +634,7 @@ def main() -> int:
         thread = threading.Thread(target=server.run, name='flinteye-api')
         thread.start()
         for _ in range(100):
-            if server.started: break
+            if control.metadata.get('ready'): break
             if not thread.is_alive(): raise RuntimeError('Could not start FlintEye. Check logs or port conflicts.')
             time.sleep(.1)
         else: raise RuntimeError('FlintEye did not become ready.')

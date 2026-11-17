@@ -23,23 +23,31 @@ class NetworkAccessConfig(BaseModel):
     enabled: bool = False
     address: str = ""
     allowed_subnets: list[str] = Field(default_factory=list)
+    rtsp_enabled: bool = False
 
     @model_validator(mode="after")
     def validate_lan(self):
         if self.address:
             address = ipaddress.IPv4Address(self.address)
-            if not address.is_private or address.is_loopback or address.is_unspecified or address.is_multicast or address.is_link_local:
+            if not any(address in network for network in LAN_NETWORKS):
                 raise ValueError("Choose a private IPv4 address assigned to this server")
         self.allowed_subnets = [str(ipaddress.IPv4Network(item, strict=False)) for item in self.allowed_subnets]
         if len(self.allowed_subnets) > 16:
             raise ValueError("Use at most 16 LAN source ranges")
         for item in self.allowed_subnets:
             network = ipaddress.IPv4Network(item)
-            if not network.is_private or network.prefixlen < 8:
+            if not any(network.subnet_of(block) for block in LAN_NETWORKS):
                 raise ValueError("Source ranges must be private IPv4 networks")
         if self.enabled and (not self.address or not self.allowed_subnets):
             raise ValueError("LAN access requires a server address and permitted source ranges")
         return self
+
+
+# Shared-address VPNs are eligible when the owner selects the actual interface
+# address and explicitly lists the sources. Do not infer a VPN allowlist.
+LAN_NETWORKS = tuple(map(ipaddress.IPv4Network, (
+    "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10",
+)))
 
 
 class ApiConfig(BaseModel):
@@ -329,6 +337,29 @@ class IpCameraConfig(BaseModel):
         return value
 
 
+AUDIO_PRESETS = {
+    "standard": (16000, 16), "high": (48000, 24),
+    "middle": (12000, 16), "low": (8000, 16),
+}
+
+
+class CameraAudioConfig(BaseModel):
+    enabled: bool = False
+    preset: Literal["standard", "high", "middle", "low", "custom"] = "standard"
+    codec: Literal["pcm", "aac"] = "pcm"
+    sample_rate: Literal[8000, 12000, 16000, 22050, 24000, 32000, 44100, 48000] = 16000
+    bit_depth: Literal[16, 24] = 16
+    channels: Literal[1, 2] = 1
+    bitrate_kbps: int = Field(default=64, ge=16, le=320)
+
+    @model_validator(mode="after")
+    def use_preset(self):
+        if self.preset in AUDIO_PRESETS:
+            self.sample_rate, self.bit_depth = AUDIO_PRESETS[self.preset]
+            self.channels, self.codec = 1, "pcm"
+        return self
+
+
 class CameraConfig(BaseModel):
     id: str
     type: CameraType
@@ -337,6 +368,7 @@ class CameraConfig(BaseModel):
     display_name: str | None = None
     uvc: UvcCameraConfig | None = None
     ip: IpCameraConfig | None = None
+    audio: CameraAudioConfig = Field(default_factory=CameraAudioConfig)
 
     @field_validator("id", "path")
     @classmethod

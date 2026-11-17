@@ -114,13 +114,17 @@ binary so the orchestrator owns its startup and shutdown.
 Install the native Linux bundle at `/opt/flinteye` and create a `flinteye` system
 user/group. Install `packaging/flinteye.service` under `/etc/systemd/system/`.
 The host `video` group is required for USB capture; adapt this on hosts that use
-another device group. Then:
+another device group.
+
+For LAN HTTPS on a new service profile, set the network in the [systemd environment](LAN_ACCESS.md#network-selection-and-external-players-next-development-build) before the first start. USB microphones additionally require the host audio group.
 
 ```sh
 sudo systemctl daemon-reload
 sudo systemctl enable --now flinteye
 sudo cat /var/lib/flinteye/setup-token
 ```
+
+On the next development build, get the actual URL with `sudo -u flinteye /opt/flinteye/FlintEye --headless --data-dir /var/lib/flinteye --connection-info`. Open that address and enter the owner’s one-use code.
 
 Desktop and systemd instances must not share a running data directory or ports.
 The service starts without login; the desktop application starts after login.

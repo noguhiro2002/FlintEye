@@ -3,7 +3,7 @@ function Test-InstallationFirewallRule($Rule, [string]$Application, [string]$Med
     $group=[string]$Rule.Group
     if($group -notmatch '^FlintEye-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$') { return $false }
     if($Rule.Name -in @(($group+'-HTTPS'), ($group+'-HTTPS-staging'))) { $expected=$Application }
-    elseif($Rule.Name -in @(($group+'-WebRTC'), ($group+'-WebRTC-staging'))) { $expected=$Media }
+    elseif($Rule.Name -in @(($group+'-WebRTC'), ($group+'-WebRTC-staging'), ($group+'-RTSPS'), ($group+'-RTSPS-staging'))) { $expected=$Media }
     else { return $false }
     $filters=@($Rule | Get-NetFirewallApplicationFilter -ErrorAction Stop)
     if($filters.Count -ne 1 -or -not $filters[0].Program) { return $false }

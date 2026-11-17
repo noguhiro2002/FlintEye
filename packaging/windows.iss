@@ -33,8 +33,8 @@ Source: "..\dist\FlintEye\*"; DestDir: "{app}"; Flags: recursesubdirs createalls
 Source: "stop_windows.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "uninstall_windows.ps1"; DestDir: "{app}"; Flags: ignoreversion
 [Icons]
-Name: "{autoprograms}\FlintEye"; Filename: "{app}\FlintEye.exe"
-Name: "{autodesktop}\FlintEye"; Filename: "{app}\FlintEye.exe"
+Name: "{autoprograms}\FlintEye"; Filename: "{app}\FlintEye.exe"; IconFilename: "{app}\FlintEye.exe"; IconIndex: 0
+Name: "{autodesktop}\FlintEye"; Filename: "{app}\FlintEye.exe"; IconFilename: "{app}\FlintEye.exe"; IconIndex: 0
 [Run]
 Filename: "{app}\FlintEye.exe"; Parameters: "--setup"; Description: "Open FlintEye"; Flags: nowait postinstall skipifsilent; Check: ShouldStart
 ; The desktop launcher registers login startup after first setup, with ownership checks.
@@ -78,7 +78,6 @@ end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 var
-  ResultCode: Integer;
   RemovalKey, RemovalCommand: String;
 begin
   if CurStep = ssPostInstall then
@@ -94,10 +93,6 @@ begin
     if not RegWriteStringValue(HKCU, RemovalKey, 'QuietUninstallString', RemovalCommand + ' -Silent') then
       RaiseException('FlintEye could not register its silent maintenance launcher.');
   end;
-  if (CurStep = ssPostInstall) and (not WizardSilent) then
-    if not Exec(ExpandConstant('{app}\FlintEye.exe'), '--setup-only', '', SW_SHOWNORMAL,
-                ewWaitUntilTerminated, ResultCode) then
-      MsgBox('Password setup could not start. Open FlintEye to complete setup.', mbError, MB_OK);
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);

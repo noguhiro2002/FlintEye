@@ -267,10 +267,22 @@ export interface CameraItem {
   ip: CameraIpConfig | null;
   addresses: {
     rtsp_url: string;
+    client_rtsp_url?: string | null;
+    rtsp_status?: string;
     webrtc_url: string;
   };
   process: ProcessItem | null;
   health?: CameraHealth;
+}
+
+export interface CameraAudioConfig {
+  enabled: boolean;
+  preset: "standard" | "high" | "middle" | "low" | "custom";
+  codec: "pcm" | "aac";
+  sample_rate: number;
+  bit_depth: number;
+  channels: number;
+  bitrate_kbps: number;
 }
 
 export interface ViewerCameraItem {
@@ -278,9 +290,13 @@ export interface ViewerCameraItem {
   label: string;
   type: "uvc" | "ip";
   enabled: boolean;
+  audio_enabled?: boolean;
+  audio_receiving?: boolean;
   path: string;
   addresses: {
     rtsp_url: string;
+    client_rtsp_url?: string | null;
+    rtsp_status?: string;
     webrtc_url: string;
   };
   process: ProcessItem | null;
@@ -308,8 +324,9 @@ export interface UvcDeviceItem {
   index: string | null;
   ffmpeg_device: string;
   ffmpeg_device_index: string;
-  modes: Array<{ width: number; height: number; fps?: number }>;
-  recommended: { width: number; height: number; fps: number };
+  mode_warning?: string;
+  modes: Array<{ width: number; height: number; fps?: number; input_format?: string }>;
+  recommended: { width: number; height: number; fps: number; input_format?: string };
   ignored?: boolean;
   suggestion?: UvcSuggestion;
 }
@@ -522,6 +539,7 @@ export interface RuntimeConfigResponse {
     id: string;
     type: "uvc" | "ip";
     enabled: boolean;
+    audio?: CameraAudioConfig;
     path: string;
     display_name?: string | null;
     uvc?: CameraUvcConfig | null;
@@ -579,6 +597,7 @@ export interface RecordingListResponse {
 export interface RecordingPlaybackPrepareResponse {
   ok: boolean;
   file_id: string;
+  has_audio?: boolean | null;
   playable_path: string;
   cache_file: string;
 }
@@ -605,6 +624,8 @@ export interface ViewerInfoResponse {
     path: string;
     addresses: {
       rtsp_url: string;
+      client_rtsp_url?: string | null;
+      rtsp_status?: string;
       webrtc_url: string;
     };
     process: ProcessItem | null;

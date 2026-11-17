@@ -48,12 +48,9 @@ class InstanceControl:
         self.stop = stop
         self.closed = threading.Event()
         self.request.unlink(missing_ok=True)
-        temporary = self.path.with_suffix('.tmp')
-        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, 'w', encoding='utf-8') as stream:
-            json.dump({'token': self.token, 'pid': os.getpid(),
-                       'executable': str(Path(sys.executable).resolve()), 'port':port, 'url':url}, stream)
-        temporary.replace(self.path)
+        self.metadata = {'token': self.token, 'pid': os.getpid(),
+                         'executable': str(Path(sys.executable).resolve()), 'port': port, 'url': url}
+        self.write_connection()
         self.index = None
         if sys.platform == 'win32' and getattr(sys, 'frozen', False):
             from flinteye_app.flinteye_runtime import default_data_dir
@@ -69,6 +66,12 @@ class InstanceControl:
                 logging.getLogger(__name__).warning('Could not register the running profile. Use an explicit -DataDir when stopping this instance with the Windows helper.')
         self.thread = threading.Thread(target=self._watch, name='flinteye-stop-request', daemon=True)
         self.thread.start()
+
+    def write_connection(self, **values):
+        from flinteye_app.network_access import private_write
+
+        self.metadata.update(values)
+        private_write(self.path, json.dumps(self.metadata).encode())
 
     def _watch(self):
         while not self.closed.wait(.2):

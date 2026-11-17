@@ -44,6 +44,23 @@ ssh -L 18080:127.0.0.1:18080 your-server
 HTTP/API/MediaMTXリスナーはループバック上で動作し続けます。また、WebRTCにはUDP 8189も必要です。
 
 <a id="storage-and-cameras"></a>
+
+### 次期開発版の初回設定をHTTPSで行う
+
+ComposeはLinuxのホストネットワークを使用します。新しいデータボリュームで起動する前に、`compose.yaml` と同じフォルダの `.env` にサーバーのIPと許可するネットワークを指定します。以下の値は実際の環境に置き換えてください。
+
+```dotenv
+FLINTEYE_LAN_ADDRESS=192.168.1.10
+FLINTEYE_LAN_SOURCES=192.168.1.0/24
+```
+
+```sh
+docker compose up -d --wait
+docker compose exec flinteye python /opt/flinteye/flinteye.py --headless --connection-info
+```
+
+`/data/connection-guide` から公開証明書と手順書を閲覧端末にコピーします。サーバーで証明書の指紋を照合してから信頼し、表示されたHTTPSの接続先を開きます。管理者は `docker compose exec flinteye cat /data/setup-token` で使い捨てコードを取得し、ブラウザで入力します。LANを準備できない場合はローカルの接続先を使用します。既存のデータボリュームでは保存済みの接続設定を引き継ぎます。USBカメラのマイクも使う場合は、映像デバイスに加えて `/dev/snd` とホストのaudioグループをComposeで指定します。
+
 ## ストレージとカメラ
 
 名前付きボリューム `flinteye-data` により、コンテナの置き換え後も設定、インベントリ、録画が保持されます。

@@ -2,15 +2,15 @@
 
 [日本語](RELEASE_CHECKLIST_1_2_0.ja.md) · [Development QA](DEVELOPMENT_1_2_0.md) · [LAN trust guide](LAN_ACCESS.md)
 
-**All eight gates below are required before public 1.2.0 distribution. A failed or untested gate blocks publication.** This is a record to fill in, not a claim that the checks passed. The separate automated `all-native-architectures` gate has passed; CI builds and generated video do not replace these checks.
+**Public distribution of 1.2.0 requires all eight device gates below and a passing build for every OS and CPU on the same commit.** A failed or untested gate blocks publication.
 
 ## Use the exact QA build
 
 | Field | Required value or record |
 | --- | --- |
-| Release / application | `v1.2.0-preview.1` / `1.2.0` |
-| Tested application commit | `a0aa7592195a6b52cd732014603ea2fbc3ff4b22` |
-| Build | [Actions run 43800923694](https://github.com/noguhiro2002/FlintEye/actions/runs/43800923694), `release-bundle` artifact |
+| Release / application | `v1.2.0-preview.2` / `1.2.0` |
+| Tested application commit | Record the commit SHA from the tested build |
+| Build | Record the [Build release](https://github.com/noguhiro2002/FlintEye/actions/workflows/build-release.yml) run URL and its `release-bundle` artifact |
 | Package identity | Record the package filename and its matching `SHA256SUMS` value; confirm `build-manifest.json` and Information agree |
 | Environment | Date, tester, device, OS/build, CPU, browser/version, install method, install/data paths, actual API address/port, camera model/resolution/fps |
 | Results | For each operation, record expected behavior, observed behavior, Pass / Fail / Not tested, and an evidence reference |
@@ -113,3 +113,13 @@ These checks happen after acceptance and publication; they are not prerequisites
 - [ ] From clean computers, the real public one-command URLs download/install the intended OS/CPU/version without Git clone or separate runtimes, and their package hashes match the tested files.
 - [ ] GitHub Release downloads, sources/licenses, guides, Compose and checksums are accessible. The exact GHCR version pulls on amd64/arm64 and matches the recorded image identities; repeat the documented update/rollback route.
 - [ ] Preview status is explicit, no stable/latest promotion occurred, and the older version's assets/tags remain unchanged.
+
+## Additional checks for the next development build
+
+Record the actual candidate commit and package checksums above before applying these checks. The earlier 1.2.0 build does not attest to these changes.
+
+- [ ] Start from a clean profile using the one-command installer, native package, Docker Compose and systemd. Confirm that the printed address works after certificate trust on another device and that the browser setup accepts the owner’s one-use code. Confirm local recovery when there is no eligible LAN or firewall permission is refused.
+- [ ] Use a separate physical client and an RTSPS-capable player. Confirm a verified certificate and authenticated read for the intended camera. Try a wrong password, an unapproved source and publish access. Confirm the relay closes when disabled.
+- [ ] On Windows, macOS and Linux, compare reported 720p/1080p capture formats and rates with the actual video. Include 29.97 fps where supported and verify that refreshing devices keeps existing settings.
+- [ ] On each OS, test a USB camera with a microphone, a video-only USB camera and an IP camera with an audio track. Verify the audio-off default, unavailable-input feedback, audio-only failure with video continuing, initially muted Live View and audible, synchronized recording playback. Use ffprobe to confirm the actual PCM format and verify playback of a previous video-only recording.
+- [ ] Open a freshly built DMG in Finder and verify the icon there and after running from Applications. Check Windows installer, executable, shortcuts and Linux launcher icons.

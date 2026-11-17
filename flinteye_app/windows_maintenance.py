@@ -96,6 +96,7 @@ def manage_firewall(root: Path, config, action: str) -> dict:
     application, media = _programs()
     payload = {'action': action, 'id': installation_id(root), 'address': config.network.address,
                'subnets': config.network.allowed_subnets, 'port': config.api.port,
+               'rtsp_enabled': config.network.rtsp_enabled,
                'application': str(application), 'media': str(media)}
     with _operation(application):
         index = _inventory(application, payload['id'])
@@ -131,4 +132,3 @@ def remove_installation_firewall() -> dict:
                 private_write(owner, json.dumps({**receipt, 'applied': False}).encode())
             file.unlink(missing_ok=True)
     return {'ok': True, 'message': 'Confirmed LAN rules for this installation and its saved profiles were removed.'}
-

@@ -265,6 +265,8 @@ class OrchestratorSupervisor:
         self._stop_event = threading.Event()
         self._monitoring_enabled = True
         self.media_environment: dict[str, str] = {}
+        self.rtsps_profile = None
+        self.rtsps_network = None
         self._processes: dict[str, ManagedProcess] = {}
         self._last_config: RuntimeConfig | None = None
         self._monitor_thread = threading.Thread(target=self._monitor_loop, daemon=True)
@@ -544,6 +546,8 @@ class OrchestratorSupervisor:
                 safe_command[0] = resolved
                 logger.info('Starting MediaMTX executable=%s cwd=%s', resolved, working_dir)
             popen_env = os.environ.copy()
+            if proc.key == 'relay:rtsps':
+                popen_env = {key: value for key, value in popen_env.items() if not key.upper().startswith('MTX_')}
             if proc.env:
                 popen_env.update(proc.env)
             if proc.key == 'mediamtx:direct':
@@ -710,6 +714,41 @@ class OrchestratorSupervisor:
             self._start_process(proc, is_restart=proc.restart_count > 0 or force_restart)
         return proc
 
+    @staticmethod
+    def _audio_args(camera: CameraConfig) -> list[str]:
+        audio = camera.audio
+        if not audio.enabled:
+            return []
+        codec = "aac" if audio.codec == "aac" else f"pcm_s{audio.bit_depth}be"
+        return ["--audio-codec", codec, "--audio-rate", str(audio.sample_rate),
+                "--audio-channels", str(audio.channels), "--audio-bitrate", str(audio.bitrate_kbps)]
+
+    def _reconcile_live_audio(self, config: RuntimeConfig) -> None:
+        from flinteye_app.camera_audio import live_path
+
+        desired = set()
+        base = _publisher_rtsp_base_url(config)
+        if config.mediamtx.control_mode == "direct" and config.mediamtx.managed.enabled:
+            for camera in config.cameras:
+                if not camera.enabled or not camera.audio.enabled:
+                    continue
+                key = f"live-audio:{camera.id.lower()}"
+                desired.add(key)
+                ffmpeg = (camera.uvc.env.get("FFMPEG_BIN") if camera.uvc else None) or "ffmpeg"
+                command = [
+                    ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error",
+                    "-rtsp_transport", "tcp", "-timeout", "5000000",
+                    "-i", _join_url(base, camera.path),
+                    "-map", "0:v:0", "-map", "0:a:0?", "-c:v", "copy",
+                    "-c:a", "opus", "-strict", "experimental", "-ar", "48000", "-b:a", "96k",
+                    "-f", "rtsp", "-rtsp_transport", "tcp", "-muxdelay", "0",
+                    _join_url(base, live_path(camera.path)),
+                ]
+                self._ensure_process(key=key, kind="camera/live-audio", command=command, desired=True)
+        for key, proc in self._processes.items():
+            if key.startswith("live-audio:") and key not in desired:
+                self._stop_process(proc)
+
     def _camera_command(self, config: RuntimeConfig, camera: CameraConfig) -> list[str]:
         rtsp_url = _join_url(_publisher_rtsp_base_url(config), camera.path)
         default_loglevel = _default_ffmpeg_loglevel(config.logging.level)
@@ -749,7 +788,7 @@ class OrchestratorSupervisor:
             _append_arg(cmd, "--rtsp-url", rtsp_url)
             if camera.uvc and camera.uvc.extra_args:
                 cmd.extend(camera.uvc.extra_args)
-            return cmd
+            return cmd + self._audio_args(camera)
 
         ip_cfg = camera.ip
         if ip_cfg and ip_cfg.source_url:
@@ -779,7 +818,7 @@ class OrchestratorSupervisor:
         _append_arg(cmd, "--bufsize", (ip_cfg.bufsize if ip_cfg else None) or "4M")
         _append_arg(cmd, "--gop", ip_cfg.gop if ip_cfg else 40)
         _append_arg(cmd, "--x264-preset", (ip_cfg.x264_preset if ip_cfg else None) or "veryfast")
-        return cmd
+        return cmd + self._audio_args(camera)
 
     def _multiview_input_command(self, config: RuntimeConfig, camera: CameraConfig) -> list[str]:
         assert camera.ip is not None
@@ -1099,6 +1138,7 @@ class OrchestratorSupervisor:
             self._last_config = config
             if not self._monitoring_enabled:
                 return
+            self.reconcile_rtsps(config)
             desired_camera_keys: set[str] = set()
             for camera in config.cameras:
                 key = f"camera:{camera.id.lower()}"
@@ -1158,6 +1198,7 @@ class OrchestratorSupervisor:
                 if key.startswith("camera:") and key not in desired_camera_keys:
                     self._stop_process(proc)
 
+            self._reconcile_live_audio(config)
             desired_mv_input_keys: set[str] = set()
             selected_paths = {
                 path.strip().strip("/").lower()
@@ -1219,6 +1260,40 @@ class OrchestratorSupervisor:
                     self._refresh_maintenance_schedule(mv_proc, reference_time=mv_proc.started_at)
             elif mv_key in self._processes:
                 self._stop_process(self._processes[mv_key])
+
+    def reconcile_rtsps(self, config: RuntimeConfig) -> None:
+        from flinteye_app.rtsps_relay import KEY, prepare_relay
+
+        with self._lock:
+            network, root = self.rtsps_network, self.rtsps_profile
+            if (self._monitoring_enabled and root and network and network.enabled and network.rtsp_enabled
+                    and (root/'rtsps-password.sha256').is_file()):
+                try:
+                    command, changed = prepare_relay(root, network, config)
+                except (OSError, ValueError):
+                    logger.exception('Could not prepare the RTSPS relay')
+                else:
+                    if command:
+                        self._ensure_process(key=KEY, kind='rtsps/relay', command=command,
+                                             desired=True, cwd=str(root), force_restart=changed)
+                        return
+            if proc := self._processes.get(KEY):
+                self._stop_process(proc)
+
+    def rtsps_status(self) -> str:
+        from flinteye_app.rtsps_relay import KEY, PORT
+
+        network, root = self.rtsps_network, self.rtsps_profile
+        if not (network and network.enabled and network.rtsp_enabled):
+            return 'disabled'
+        if not root or not (root/'rtsps-password.sha256').is_file():
+            return 'credentials_required'
+        with self._lock:
+            proc = self._processes.get(KEY)
+            if not proc or not proc.is_running():
+                return 'unavailable'
+        ready, _ = _probe_rtsp_listener(f'rtsps://{network.address}:{PORT}', timeout_sec=.25)
+        return 'ready' if ready else 'unavailable'
 
     def _run_control_command(self, cmd: list[str]) -> tuple[int, str, str]:
         try:

@@ -55,3 +55,9 @@ Manual sleep, logout, or shutdown interrupts monitoring.
 Check for updates in **Settings → General → Software updates**. Updates are installed manually. The **Getting started** button in the top bar reopens the introductory tour.
 Quit FlintEye, back up configuration and recording inventory, install the replacement package, and restart.
 Uninstalling normally keeps settings and recordings. Data deletion requires a separate explicit choice.
+
+## Camera audio (next development build)
+
+In **Settings → Cameras**, open **Camera audio** for a saved USB or IP camera and select **Check audio input**. Audio starts off for each camera. If the camera has no detected microphone or audio stream, the checkbox stays disabled. On Linux, USB microphones use ALSA device permissions. On macOS and Windows, allow microphone access for the application if prompted.
+
+Choose **Standard** (16 kHz, 16-bit mono PCM), **High** (48 kHz, 24-bit), **Middle** (12 kHz, 16-bit), **Low** (8 kHz, 16-bit), or **Custom**. Custom can change the sample rate and channel count and use PCM depth or AAC target bitrate. Higher rates may increase file size without improving a source that captures at a lower rate. Save the setting. Use the player volume control in **Live View**, and open a new completed recording in **Recordings** to play its audio. The volume control starts muted in Live View.

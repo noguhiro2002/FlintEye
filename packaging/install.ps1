@@ -54,7 +54,7 @@ try {
     if ($NoStart) { $arguments += '/NOSTART' }
     $process = Start-Process -FilePath $installer -ArgumentList $arguments -Wait -PassThru
     if ($process.ExitCode -ne 0) { throw "Installer exited with code $($process.ExitCode)." }
-    Write-Host "Installed FlintEye $Version. Open it from the Start menu."
+    Write-Host "Installed FlintEye $Version. Follow the connection address in the setup window. If closed, open FlintEye from the Start menu."
 } finally {
     [Net.ServicePointManager]::SecurityProtocol = $previousProtocol
     Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue

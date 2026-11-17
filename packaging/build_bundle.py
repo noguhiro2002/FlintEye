@@ -92,14 +92,21 @@ if sys.platform.startswith('linux'):
 if sys.platform == 'darwin':
     import plistlib
     info = ROOT / 'dist/FlintEye.app/Contents/Info.plist'
+    icon = info.parent / 'Resources/flinteye.icns'
+    icon.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(ROOT / 'images/icons/flinteye.icns', icon)
     payload = plistlib.loads(info.read_bytes())
-    payload.update({'NSCameraUsageDescription': 'FlintEye uses connected cameras for live monitoring and recording.', 'LSMinimumSystemVersion': '14.0',
+    payload.update({'CFBundleIconFile': icon.name,
+                    'NSCameraUsageDescription': 'FlintEye uses connected cameras for live monitoring and recording.',
+                    'NSMicrophoneUsageDescription': 'FlintEye captures sound only for cameras with audio enabled.',
+                    'LSMinimumSystemVersion': '14.0',
                     'CFBundleShortVersionString': app_version, 'CFBundleVersion': app_version})
     info.write_bytes(plistlib.dumps(payload))
+    from verify_macos import verify_icon, verify_app
+    verify_icon(info.parent.parent)
     # Ad-hoc signing is required for local ARM64 executable integrity; no Developer ID/notarization.
     # PyInstaller signs nested native code. Only the outer seal changed above.
     subprocess.run(['codesign', '--force', '--sign', '-', str(ROOT / 'dist/FlintEye.app')], check=True)
-    from verify_macos import verify_app
     verify_app(ROOT / 'dist/FlintEye.app')
     dmg_contents = ROOT / 'build/dmg-contents'
     if dmg_contents.exists():

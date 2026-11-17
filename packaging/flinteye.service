@@ -7,7 +7,7 @@ Wants=network-online.target
 Type=simple
 User=flinteye
 Group=flinteye
-SupplementaryGroups=video
+SupplementaryGroups=video audio
 StateDirectory=flinteye
 Environment=FLINTEYE_DATA_DIR=/var/lib/flinteye
 ExecStart=/opt/flinteye/FlintEye --headless
