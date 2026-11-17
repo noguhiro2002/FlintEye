@@ -8,7 +8,7 @@
 
 The public history begins with a single **1.1.1 source snapshot**. The current public package is **`v1.1.3-preview.1`**. The current development build on `main` is **`1.2.0-preview.2`**. Its publication requires the 1.2.0 acceptance checks below. Keep old private installers and locally emulated builds outside public releases. Clone the public repository into a new directory if you still have a checkout with the old private history.
 
-Normal pushes run **Distribution checks**. A push to `main` that changes `flinteye_app/_version.py` also starts **Build release**, which creates desktop installers, tested container archives, and an assembled `release-bundle` in Actions. Run it manually when rebuilding the same version. On a public repository readers can access the logs and download artifacts after signing in to GitHub. Only **Publish tested release** uploads approved assets to Releases and GHCR. Keep camera credentials, recordings and personal profiles out of CI inputs and logs.
+Normal pushes run **Distribution checks**. A push to `main` that changes `flinteye_app/_version.py`, the frontend dependency manifests, frontend install/audit scripts, or the build workflow also starts **Build release**, which creates desktop installers, tested container archives, and an assembled `release-bundle` in Actions. Run it manually for other rebuilds of the same version. On a public repository readers can access the logs and download artifacts after signing in to GitHub. Only **Publish tested release** uploads approved assets to Releases and GHCR. Keep camera credentials, recordings and personal profiles out of CI inputs and logs.
 
 **Publish tested release** supports these channels:
 
@@ -53,6 +53,8 @@ Go modules use the upstream go.sum and are vendored into the retained source tre
 
 The Python dependency set is constrained in `packaging/constraints.txt`; npm uses its package lock.
 Refresh dependencies deliberately, then run tests and a new release build.
+
+The build applies a local fix to picomatch 4.0.7 for GHSA-fc5q-39xc-vjpf during `npm ci`. Repeated extglobs containing wildcard stars use the parser's existing literal fallback. The install hook verifies the upstream source hash and the applied change. `npm run audit` checks all dependencies and accounts for this specific advisory only when every reported copy has the verified fix. Other high/critical findings and audit service failures stop the build. Review and remove the local fix when upgrading picomatch. The regression tests cover malicious patterns, normal build globs, and rejected advisory exceptions. [Upstream advisory](https://github.com/advisories/GHSA-fc5q-39xc-vjpf).
 
 ## Build and test
 

@@ -2,7 +2,12 @@ name: Build release
 on:
   push:
     branches: [main]
-    paths: [flinteye_app/_version.py]
+    paths:
+      - flinteye_app/_version.py
+      - frontend/package.json
+      - frontend/package-lock.json
+      - frontend/scripts/**
+      - .github/workflows/build-release.yml
   workflow_dispatch:
     inputs:
       desktop_only:
