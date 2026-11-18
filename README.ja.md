@@ -2,7 +2,7 @@
 
 **FlintEyeは現在開発中です。これは安定版ではなく開発プレビューです。テストには開発プレビューをご利用ください。**
 
-現在の開発版は **1.2.0-preview.3** です。ビルドが完了すると、検証用インストーラーを [GitHub Actions](https://github.com/noguhiro2002/FlintEye/actions/workflows/build-release.yml) から取得できます。**公開されている 1.1.3-preview.1 スクリプトは古いアプリをインストールするものであり、1.2.0 のセットアップ、アイコン、ネットワークストリームの変更は含まれていません。**
+現在の開発版は **1.2.0-preview.3** です。ビルドが完了すると、検証用インストーラーを [GitHub Actions](https://github.com/noguhiro2002/FlintEye/actions/runs/44322574969) から取得できます。**公開されている 1.1.3-preview.1 スクリプトは古いアプリをインストールするものであり、1.2.0 のセットアップ、アイコン、ネットワークストリームの変更は含まれていません。**
 
 [既知の問題](docs/KNOWN_ISSUES.ja.md) · [バグを報告する](https://github.com/noguhiro2002/FlintEye/issues) · [質問とアイデア](https://github.com/noguhiro2002/FlintEye/discussions)
 
@@ -32,7 +32,7 @@ USBカメラやIPカメラの監視、ライブ映像の視聴、録画の検索
 
 ### 現在の修正をテストする：1.2.0-preview.3
 
-1. [GitHub Actions](https://github.com/noguhiro2002/FlintEye/actions/workflows/build-release.yml) で **1.2.0-preview.3** の成功した **Build release** 実行を開きます。お使いのコンピュータ用のアーティファクト（Apple Silicon Macの場合は `build-macos-arm64`、Intel Macの場合は `build-macos-amd64`、または `build-windows-ARCH` / `build-linux-ARCH`）をダウンロードして展開します。Actions のアーティファクトのダウンロードには GitHub へのサインインが必要です。
+1. [GitHub Actions](https://github.com/noguhiro2002/FlintEye/actions/runs/44322574969) で **1.2.0-preview.3** の成功した **Build release** 実行を開きます。お使いのコンピュータ用のアーティファクト（Apple Silicon Macの場合は `build-macos-arm64`、Intel Macの場合は `build-macos-amd64`、または `build-windows-ARCH` / `build-linux-ARCH`）をダウンロードして展開します。Actions のアーティファクトのダウンロードには GitHub へのサインインが必要です。
 2. 既存の FlintEye を終了し、展開したフォルダ内でターミナルを開き、以下のコマンドを実行します。これらのスクリプトは、ダウンロードしたパッケージとそのチェックサムを使用し、古い公開リリースをダウンロードすることはありません。
 
 | コンピュータ | 展開したフォルダ内でのコマンド |

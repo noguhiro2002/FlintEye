@@ -6,7 +6,7 @@ This procedure builds the current committed source on an Apple Silicon Mac witho
 
 The result is a local test build. Nothing is uploaded, published, installed into Applications, or changed in your existing FlintEye data. Existing GitHub installers remain unchanged. This procedure targets your own Mac; it does not establish compatibility with every supported macOS version.
 
-Build 1.2.0-preview.2 from `main`. Record the source commit printed by the build and use an isolated test profile.
+Build 1.2.0-preview.3 from `main`. Record the source commit printed by the build and use an isolated test profile.
 
 ## 1. Prepare the Mac once
 

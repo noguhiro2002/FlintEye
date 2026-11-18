@@ -4,15 +4,15 @@
 
 **Public distribution of 1.2.0 requires all eight device gates below and a passing build for every OS and CPU on the same commit.** A failed or untested gate blocks publication.
 
-The current candidate is 1.2.0-preview.3; its native build result must be recorded below. All eight physical-device gates remain pending. Earlier preview.2 results apply only to their original commit.
+The native OS/CPU build matrix and automated checks passed for 1.2.0-preview.3. All eight physical-device gates below remain pending. Earlier preview results apply only to their original commits.
 
 ## Use the exact QA build
 
 | Field | Required value or record |
 | --- | --- |
 | Release / application | `v1.2.0-preview.3` / `1.2.0` |
-| Tested application commit | Record after the same-commit build succeeds |
-| Build | [Build release](https://github.com/noguhiro2002/FlintEye/actions/workflows/build-release.yml), pending 1.2.0-preview.3 build |
+| Tested application commit | `abbc4926d793c290c15ce3c075fed93c9e164067` |
+| Build | [Actions run 44322574969](https://github.com/noguhiro2002/FlintEye/actions/runs/44322574969), OS-specific test artifacts or `release-bundle` |
 | Package identity | Record the package filename and its matching `SHA256SUMS` value; confirm `build-manifest.json` and Information agree |
 | Environment | Date, tester, device, OS/build, CPU, browser/version, install method, install/data paths, actual API address/port, camera model/resolution/fps |
 | Results | For each operation, record expected behavior, observed behavior, Pass / Fail / Not tested, and an evidence reference |

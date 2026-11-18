@@ -2,7 +2,7 @@
 
 **FlintEye is under active development. This is a development preview, not a stable release. Use development previews for testing.**
 
-The current development build is **1.2.0-preview.3**. Get its test installers from [GitHub Actions](https://github.com/noguhiro2002/FlintEye/actions/workflows/build-release.yml) after the build succeeds. **The published 1.1.3-preview.1 scripts install the older app; they do not include the 1.2.0 setup, icon or network-stream changes.**
+The current development build is **1.2.0-preview.3**. Get its test installers from [GitHub Actions](https://github.com/noguhiro2002/FlintEye/actions/runs/44322574969) after the build succeeds. **The published 1.1.3-preview.1 scripts install the older app; they do not include the 1.2.0 setup, icon or network-stream changes.**
 
 [Known issues](docs/KNOWN_ISSUES.md) · [Report a bug](https://github.com/noguhiro2002/FlintEye/issues) · [Questions and ideas](https://github.com/noguhiro2002/FlintEye/discussions)
 
@@ -31,7 +31,7 @@ Monitor USB and IP cameras, watch live video, and find recordings in your browse
 
 ### Test the current fixes: 1.2.0-preview.3
 
-1. Open a successful **Build release** run for **1.2.0-preview.3** in [GitHub Actions](https://github.com/noguhiro2002/FlintEye/actions/workflows/build-release.yml). Download and extract the artifact for your computer: `build-macos-arm64` for an Apple Silicon Mac, `build-macos-amd64` for an Intel Mac, or `build-windows-ARCH` / `build-linux-ARCH`. GitHub requires sign-in to download Actions artifacts.
+1. Open a successful **Build release** run for **1.2.0-preview.3** in [GitHub Actions](https://github.com/noguhiro2002/FlintEye/actions/runs/44322574969). Download and extract the artifact for your computer: `build-macos-arm64` for an Apple Silicon Mac, `build-macos-amd64` for an Intel Mac, or `build-windows-ARCH` / `build-linux-ARCH`. GitHub requires sign-in to download Actions artifacts.
 2. Quit your existing FlintEye, open a terminal in the extracted folder, and run the command below. These scripts use the downloaded package and its checksum; they do not download the older public release.
 
 | Computer | Command in the extracted folder |
