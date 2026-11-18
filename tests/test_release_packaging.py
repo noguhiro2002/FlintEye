@@ -354,6 +354,12 @@ cp "$TEST_PAYLOAD/${url##*/}" "$out"''')
         self.assertIn('Checksum mismatch', result.stderr)
         self.assertFalse((self.root / 'installed').exists())
 
+    def test_macos_directory_option_never_changes_a_linux_package_destination(self):
+        result = self.run_installer('--version', '1.2.3', '--install-directory', str(self.root/'apps'))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('only on macOS', result.stderr)
+        self.assertFalse((self.root/'urls').exists())
+
     def test_verified_download_uses_one_fixed_version_and_quoted_path(self):
         self.fixture()
         result = self.run_installer('--version', '1.2.3', '--no-start')

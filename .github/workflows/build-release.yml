@@ -8,6 +8,11 @@ on:
       - frontend/package-lock.json
       - frontend/scripts/**
       - packaging/smoke_bundle.sh
+      - packaging/smoke_desktop_bundle.py
+      - packaging/build_bundle.py
+      - packaging/install.sh
+      - packaging/install.ps1
+      - packaging/validation_install.py
       - .github/workflows/build-release.yml
   workflow_dispatch:
     inputs:

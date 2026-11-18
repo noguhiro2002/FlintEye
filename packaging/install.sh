@@ -4,12 +4,14 @@ set -euo pipefail
 version='@RELEASE_VERSION@'
 start_app=1
 package_directory=''
+install_directory=''
 fail() { printf 'FlintEye: %s\n' "$*" >&2; exit 1; }
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --version) [ "$#" -ge 2 ] || fail '--version requires X.Y.Z'; version=$2; shift 2 ;;
     --no-start) start_app=0; shift ;;
     --package-directory) [ "$#" -ge 2 ] || fail '--package-directory requires an artifact folder'; package_directory=$2; shift 2 ;;
+    --install-directory) [ "$#" -ge 2 ] || fail '--install-directory requires a macOS application folder'; install_directory=$2; shift 2 ;;
     *) fail "Unknown option: $1" ;;
   esac
 done
@@ -31,6 +33,7 @@ if [ "$os" = Darwin ]; then
   [ "$major" -ge 14 ] || fail 'macOS 14 or newer is required.'
   asset="FlintEye-$application_version-macos-$arch.dmg"
 elif [ "$os" = Linux ]; then
+  [ -z "$install_directory" ] || fail '--install-directory is available only on macOS.'
   [ -r /etc/os-release ] || fail 'Cannot identify Linux distribution.'
   . /etc/os-release
   major=${VERSION_ID%%.*}
@@ -81,7 +84,7 @@ else
 fi
 [ "$actual" = "$expected" ] || fail 'Checksum mismatch. Nothing was installed.'
 if [ "$os" = Darwin ]; then
-  destination="$HOME/Applications"
+  destination=${install_directory:-"$HOME/Applications"}
   mkdir -p "$destination"
   [ ! -L "$destination/FlintEye.app" ] || fail 'Destination app must not be a symbolic link.'
   [ ! -e "$destination/FlintEye.previous.app" ] || fail 'Move FlintEye.previous.app aside before another update.'

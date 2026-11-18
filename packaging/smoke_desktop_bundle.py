@@ -40,27 +40,18 @@ def installed_executable(directory: Path):
         verify_app(mount/'FlintEye.app')
     finally:
         subprocess.run(['hdiutil', 'detach', str(mount)], check=True, timeout=60)
-    # Exercise the same checksum-staged script users run, without a release URL
-    # or first-launch interaction. Never replace an existing runner app.
-    destination = Path.home()/'Applications/FlintEye.app'
-    if destination.exists() or destination.is_symlink():
-        raise AssertionError('One-command smoke test requires an unused app destination')
+    # Exercise the same script in an isolated installation folder. This also
+    # runs during local M1 builds, and must never touch the owner's installed app.
     inputs = directory/'installer-input'
     inputs.mkdir()
     (inputs/'SHA256SUMS').write_text(f'{digest(dmg)}  {dmg.name}\n')
     (inputs/dmg.name).symlink_to(dmg)
-    try:
-        subprocess.run(['bash', str(ROOT/'packaging/install.sh'), '--version', release_identity()[0],
-                        '--package-directory', str(inputs), '--no-start'], check=True, timeout=180)
-        verify_app(destination)
-        quarantine = subprocess.check_output(['xattr', '-p', 'com.apple.quarantine', str(destination)], text=True)
-        assert quarantine.startswith('0083;'), 'Installer must retain the normal Gatekeeper decision'
-        installed.parent.mkdir(parents=True)
-        shutil.move(str(destination), str(installed))
-        print('PASS: macOS one-command local-artifact installation, preview identity, icon and quarantine')
-    finally:
-        if destination.exists():
-            shutil.rmtree(destination)
+    subprocess.run(['bash', str(ROOT/'packaging/install.sh'), '--version', release_identity()[0],
+                    '--package-directory', str(inputs), '--install-directory', str(installed.parent),
+                    '--no-start'], check=True, timeout=180)
+    quarantine = subprocess.check_output(['xattr', '-p', 'com.apple.quarantine', str(installed)], text=True)
+    assert quarantine.startswith('0083;'), 'Installer must retain the normal Gatekeeper decision'
+    print('PASS: macOS one-command local-artifact installation, preview identity, icon and quarantine')
     verify_app(installed)
     assess_gatekeeper(installed, ROOT/f'dist/FlintEye-{version()}-macos-{architecture}-signature.json')
     # A real integrity check must reject modified final-bundle resources.
