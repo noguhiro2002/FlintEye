@@ -1,8 +1,8 @@
-# Required device checks before distributing 1.2.0
+# Required device checks before stable distribution of 1.2.0
 
 [日本語](RELEASE_CHECKLIST_1_2_0.ja.md) · [Development QA](DEVELOPMENT_1_2_0.md) · [LAN trust guide](LAN_ACCESS.md)
 
-**Public distribution of 1.2.0 requires all eight device gates below and a passing build for every OS and CPU on the same commit.** A failed or untested gate blocks publication.
+**Stable distribution of 1.2.0 requires all eight device gates below and a passing build for every OS and CPU on the same commit.** A failed or untested gate blocks stable promotion. A public UNDER DEVELOPMENT preview may distribute the passing build for testing while physical cases are pending; it must disclose those pending results and must not become Latest.
 
 The native OS/CPU build matrix and automated checks passed for 1.2.0-preview.3. All eight physical-device gates below remain pending. Earlier preview results apply only to their original commits.
 
@@ -106,11 +106,11 @@ For every gate, attach the environment record, operation/expected/observed resul
 | --- | --- | --- | --- | --- | --- | --- |
 | | | | | | Not tested | |
 
-Only after all eight gates pass, record the matching tested application commit and evidence in the [acceptance record](../packaging/acceptance-1.2.0.json), and follow the [release procedure](RELEASING.md). App-code or package changes require a matching new build and appropriate rechecks. Documentation/evidence-only updates do not turn an untested application into a tested one. This checklist does not publish anything or promote a stable/latest tag.
+Record each result and the matching tested application commit in the [acceptance record](../packaging/acceptance-1.2.0.json). Only after all eight gates pass may the [release procedure](RELEASING.md) promote the software to stable distribution. Keep pending cases unchanged when publishing a development preview for these tests. App-code or package changes require a matching new build and appropriate rechecks. Documentation/evidence-only updates do not turn an untested application into a tested one. This checklist does not publish anything or promote a stable/latest tag.
 
 ## Verify distribution after approved publication
 
-These checks happen after acceptance and publication; they are not prerequisites requiring an already-public 1.2.0 image during the device tests above.
+These checks happen after the selected preview or stable publication; they are not prerequisites requiring an already-public 1.2.0 image during the device tests above.
 
 - [ ] From clean computers, the real public one-command URLs download/install the intended OS/CPU/version without Git clone or separate runtimes, and their package hashes match the tested files.
 - [ ] GitHub Release downloads, sources/licenses, guides, Compose and checksums are accessible. The exact GHCR version pulls on amd64/arm64 and matches the recorded image identities; repeat the documented update/rollback route.

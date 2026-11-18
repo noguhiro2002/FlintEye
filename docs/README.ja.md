@@ -27,7 +27,7 @@
 - [パッケージのビルドとリリース / GHCR の公開](RELEASING.ja.md)
 - [M1 / Apple Silicon Mac でのローカル DMG のビルドと検証](LOCAL_MACOS_BUILD.ja.md)
 - [ご自身のコンピュータでの最終チェック](ACCEPTANCE.ja.md)
-- [公開前の必須実機チェック（1.2.0）](RELEASE_CHECKLIST_1_2_0.ja.md)
+- [安定版公開前の必須実機チェック（1.2.0）](RELEASE_CHECKLIST_1_2_0.ja.md)
 - [ライセンスと許可される用途](LICENSING.ja.md)
 - [環境変数のリファレンス](advanced/ENV_OPTIONS.ja.md)
 

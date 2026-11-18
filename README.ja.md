@@ -2,7 +2,7 @@
 
 **FlintEyeは現在開発中です。これは安定版ではなく開発プレビューです。テストには開発プレビューをご利用ください。**
 
-現在の開発版は **1.2.0-preview.3** です。ビルドが完了すると、検証用インストーラーを [GitHub Actions](https://github.com/noguhiro2002/FlintEye/actions/runs/44322574969) から取得できます。**公開されている 1.1.3-preview.1 スクリプトは古いアプリをインストールするものであり、1.2.0 のセットアップ、アイコン、ネットワークストリームの変更は含まれていません。**
+現在の開発プレビューは **1.2.0-preview.3** です。以下のクイックインストールコマンドで、macOSのセットアップ、アイコン、カメラの修正を含むこのバージョンをインストールできます。自動パッケージチェックは通過しましたが、物理デバイスでの受け入れ確認は進行中です。
 
 [既知の問題](docs/KNOWN_ISSUES.ja.md) · [バグを報告する](https://github.com/noguhiro2002/FlintEye/issues) · [質問とアイデア](https://github.com/noguhiro2002/FlintEye/discussions)
 
@@ -30,44 +30,27 @@ USBカメラやIPカメラの監視、ライブ映像の視聴、録画の検索
 <a id="quick-install"></a>
 ## クイックインストール
 
-### 現在の修正をテストする：1.2.0-preview.3
-
-1. [GitHub Actions](https://github.com/noguhiro2002/FlintEye/actions/runs/44322574969) で **1.2.0-preview.3** の成功した **Build release** 実行を開きます。お使いのコンピュータ用のアーティファクト（Apple Silicon Macの場合は `build-macos-arm64`、Intel Macの場合は `build-macos-amd64`、または `build-windows-ARCH` / `build-linux-ARCH`）をダウンロードして展開します。Actions のアーティファクトのダウンロードには GitHub へのサインインが必要です。
-2. 既存の FlintEye を終了し、展開したフォルダ内でターミナルを開き、以下のコマンドを実行します。これらのスクリプトは、ダウンロードしたパッケージとそのチェックサムを使用し、古い公開リリースをダウンロードすることはありません。
-
-| コンピュータ | 展開したフォルダ内でのコマンド |
-| --- | --- |
-| macOS / Linux | `bash ./install.sh --package-directory .` |
-| Windows PowerShell | `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -PackageDirectory .` |
-
-または、同じフォルダから EXE、DMG、DEB、RPM を開きます。アプリ内で **Information → System** を開き、`1.2.0-preview.3` を確認してください。その後、[クイック使用方法](#quick-usage)に進みます。[削除の手順](#uninstall)はどちらの方法でも適用されます。
-
-<details>
-<summary><strong>古い公開プレビュー：1.1.3-preview.1 — オンラインのワンコマンドインストール</strong></summary>
-
-**開発プレビュー：[v1.1.3-preview.1](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.1.3-preview.1)。** 以下のコマンドは、そのリリースのダウンロードアセットが一覧表示された後に動作します。実機での受け入れ確認は現在進行中です。お使いのコンピュータ用のコマンドを実行し、セットアップに従ってください。Python、FFmpeg、FFprobe、MediaMTXが同梱されているため、Gitのチェックアウトやコンパイルは不要です。
+**開発プレビュー：[v1.2.0-preview.3](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.2.0-preview.3)。** 実機での受け入れ確認は現在進行中です。お使いのコンピュータ用のコマンドを実行し、セットアップに従ってください。Python、FFmpeg、FFprobe、MediaMTXが同梱されているため、Gitのチェックアウトやコンパイルは不要です。
 
 **Windows — PowerShell**
 
 ```powershell
-irm https://github.com/noguhiro2002/FlintEye/releases/download/v1.1.3-preview.1/install.ps1 | iex
+irm https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.3/install.ps1 | iex
 ```
 
 **macOS — ターミナル**
 
 ```sh
-bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.1.3-preview.1/install.sh
+bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.3/install.sh
 ```
 
 **Linux — ターミナル**
 
 ```sh
-bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.1.3-preview.1/install.sh
+bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.3/install.sh
 ```
 
 また、選択したリリースからスクリプトをダウンロードして内容を確認し、ローカルで実行することもできます。パッケージ版にはPython、FFmpeg、FFprobe、MediaMTXが含まれています。別途インストールする必要はありません。Windows/macOSパッケージは署名なし/公証されていません。[OS確認画面](docs/INSTALL.ja.md#unsigned-packages)をご覧ください。
-
-</details>
 
 <details>
 <summary><strong>その他のインストールオプション</strong> — バイナリパッケージ、Docker、手動インストール</summary>
@@ -95,7 +78,7 @@ pipアプリケーションパッケージは最初のリリースには含ま�
 <a id="quick-usage"></a>
 ## クイック使用方法
 
-1. **FlintEyeが表示した接続先を開きます。** インストールした端末ではローカルのアドレスを使えます。このブランチをビルドした次期版では、信頼するネットワークを選ぶと、準備ができた時点でHTTPSのアドレスが表示されます。別端末では[証明書を信頼](docs/LAN_ACCESS.ja.md)してから開きます。公開版v1.1.3の初回設定はローカルから行います。
+1. **FlintEyeが表示した接続先を開きます。** インストールした端末ではローカルのアドレスを使えます。初回起動時に信頼するネットワークを選んでください。FlintEyeは準備ができた時点でHTTPSのアドレスを表示します。別端末では[証明書を信頼](docs/LAN_ACCESS.ja.md)してから開きます。
 2. **管理者を作成します。** セットアップ画面かサーバーの専用ファイルから使い捨てコードを取得し、ブラウザでコードと新しいパスワードを入力します。作成後は `admin` でログインします。
 3. **Settingsでカメラを追加します。** 入門ガイドに沿って、USBカメラやIPカメラを登録します。
 4. **Live Viewを開きます。** 必要に応じて録画を有効にし、**Recordings**で録画した映像を再生します。
@@ -135,7 +118,7 @@ ssh -N -L 127.0.0.1:18080:127.0.0.1:18080 your-server
 <details>
 <summary>1.2.0開発版：LAN上の他のPCおよびスマートフォン</summary>
 
-次期開発バージョンのソースでは、`https://SERVER-IP:18080` にてオプトインのHTTPSが追加されており、各視聴用PC/iPhone/iPad/Androidデバイスで一度だけ証明書を信頼する必要があります。**公開版の1.1.3にはこの機能は含まれていません。** 再構築したパッケージをテストする前に、[LAN接続と信頼](docs/LAN_ACCESS.ja.md) および [1.2.0の変更点と承認ステータス](docs/DEVELOPMENT_1_2_0.ja.md) を確認してください。
+この開発プレビューには `https://SERVER-IP:18080` にてオプトインのHTTPSが追加されており、各視聴用PC/iPhone/iPad/Androidデバイスで一度だけ証明書を信頼する必要があります。プレビューパッケージをテストする際は、[LAN接続と信頼](docs/LAN_ACCESS.ja.md) および [1.2.0の変更点と承認ステータス](docs/DEVELOPMENT_1_2_0.ja.md) を確認してください。
 
 </details>
 

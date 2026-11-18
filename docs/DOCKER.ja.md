@@ -12,14 +12,14 @@ Docker EngineとComposeプラグインがインストールされたLinuxサー�
 <a id="install-without-cloning"></a>
 ## クローンせずにインストールする
 
-**UNDER DEVELOPMENT.** プレビューイメージは `ghcr.io/noguhiro2002/flinteye:1.1.3-preview.1` です。配布URLからのインストールおよび実機のテストのために、このバージョンが[パブリックGHCRパッケージ](https://github.com/users/noguhiro2002/packages/container/package/flinteye)に掲載されたら、プルコマンドを使用してください。自動パッケージチェックは通過しましたが、実機での受け入れテストは進行中です。これは安定版リリースではありません。[ローカルでのビルド](#build-the-development-image)を行うことも可能です。
+**UNDER DEVELOPMENT.** プレビューイメージは `ghcr.io/noguhiro2002/flinteye:1.2.0-preview.3` です。配布URLからのインストールおよび実機のテストのために、このバージョンが[パブリックGHCRパッケージ](https://github.com/users/noguhiro2002/packages/container/package/flinteye)に掲載されたら、プルコマンドを使用してください。自動パッケージチェックは通過しましたが、実機での受け入れテストは進行中です。これは安定版リリースではありません。[ローカルでのビルド](#build-the-development-image)を行うことも可能です。
 
 公開されているパブリックイメージは、GitHubアカウントやトークンなしでプルできます。Dockerに期限切れの保存済み認証情報がある場合は、匿名でプルする前に `docker logout ghcr.io` を使用してください。管理者によるプライベートテストには、引き続き認証済みのアカウントと、`read:packages` を備えたクラシックトークンが必要です。これらは `docker login ghcr.io -u YOUR_GITHUB_USERNAME` のパスワードプロンプトに入力してください。トークンを `.env` やコマンド引数に入力しないでください。
 
-同じバージョンのGitHub Releaseから [compose.yaml](https://github.com/noguhiro2002/FlintEye/releases/download/v1.1.3-preview.1/compose.yaml) を新しいディレクトリにダウンロードし、`.env` を作成します。
+同じバージョンのGitHub Releaseから [compose.yaml](https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.3/compose.yaml) を新しいディレクトリにダウンロードし、`.env` を作成します。
 
 ```dotenv
-FLINTEYE_IMAGE=ghcr.io/noguhiro2002/flinteye:1.1.3-preview.1
+FLINTEYE_IMAGE=ghcr.io/noguhiro2002/flinteye:1.2.0-preview.3
 ```
 
 プレビュー版には `latest` イメージタグがありません。上記のように正確なバージョンを固定し、ハードウェア用の[受け入れチェック](ACCEPTANCE.ja.md)を完了させてください。
@@ -43,9 +43,7 @@ ssh -L 18080:127.0.0.1:18080 your-server
 その他のLANユーザー向けには、[HTTPSリバースプロキシ](DISTRIBUTION.ja.md#user-installation)を設定してください。
 HTTP/API/MediaMTXリスナーはループバック上で動作し続けます。また、WebRTCにはUDP 8189も必要です。
 
-<a id="storage-and-cameras"></a>
-
-### 次期開発版の初回設定をHTTPSで行う
+### Finish setup over HTTPS
 
 ComposeはLinuxのホストネットワークを使用します。新しいデータボリュームで起動する前に、`compose.yaml` と同じフォルダの `.env` にサーバーのIPと許可するネットワークを指定します。以下の値は実際の環境に置き換えてください。
 
@@ -60,6 +58,7 @@ docker compose exec flinteye python /opt/flinteye/flinteye.py --headless --conne
 ```
 
 `/data/connection-guide` から公開証明書と手順書を閲覧端末にコピーします。サーバーで証明書の指紋を照合してから信頼し、表示されたHTTPSの接続先を開きます。管理者は `docker compose exec flinteye cat /data/setup-token` で使い捨てコードを取得し、ブラウザで入力します。LANを準備できない場合はローカルの接続先を使用します。既存のデータボリュームでは保存済みの接続設定を引き継ぎます。USBカメラのマイクも使う場合は、映像デバイスに加えて `/dev/snd` とホストのaudioグループをComposeで指定します。
+
 
 ## ストレージとカメラ
 
@@ -128,6 +127,6 @@ docker compose -f deploy/compose.dev.yaml up -d --build
 このキャッシュを使用して再ビルドする場合は、`FLINTEYE_VENDOR_CACHE` を設定したままにしてください。設定しない場合、Composeは空のキャッシュコンテキストを使用し、通常通りダウンロードを行います。プロジェクト名と `flinteye-data` ボリュームは変更されません。リカバリ中に `down -v` を使用しないでください。
 
 
-## 1.2.0 UNDER DEVELOPMENT: Docker Desktop
+## 1.2.0 development: Docker Desktop
 
 1.2.0で再ビルドされたイメージを使用する場合は、チェックアウトから`docker compose -f deploy/compose.desktop.yaml up -d`を使用してください。配布後は、同じリリースの`compose.desktop.yaml`とその正確なイメージタグを使用してください。この個別のブリッジ設定では、HTTP TCP 18080およびWebRTC UDP 8189がホストのループバックに対してのみ公開されます。コンテナはHTTPリスナーを自身のインターフェースにバインドし、ホストループバックのICE候補をアドバタイズします。ホストのブラウザで http://127.0.0.1:18080 を開いてください。USB転送およびONVIFマルチキャスト検出は含まれていないため、アクセス可能なIPカメラを手動で設定してください。これはLANサーバー設定ではありません。既存のルートComposeは、Linuxホストネットワーキングとそのボリュームを維持します。更新時にプロジェクト名を変更したり、ボリュームを消去したりしないでください。どちらのルートも、停止時の通常の録画終了処理に60秒を要します。終了コード143のみを完了の証拠とするのではなく、停止の受付を確認し、最後の録画をデコードして確認してください。[LANサーバーのセットアップ](LAN_ACCESS.ja.md) · [必要な承認](DEVELOPMENT_1_2_0.ja.md)

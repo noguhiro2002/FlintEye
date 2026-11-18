@@ -27,7 +27,11 @@ Use `ghcr.io/noguhiro2002/flinteye:@IMAGE_VERSION@` for `linux/amd64` or `linux/
 
 ## Changes in this version
 
-This development build adds shared desktop/Web monitoring status, persistent Stop and optional startup resume, recording-finalization checks, and explicit Stop versus Quit controls. It retains MediaMTX path recovery on macOS, consolidated Settings on all platforms, hidden Windows media processes, and cleanup of owned API/media processes on quit and Windows uninstall. Preview-aware updates and version-pinned command installers are included. See the known-issues and acceptance guides in `documentation.zip`; automated checks alone do not prove every camera or minimum OS works.
+This development preview includes the macOS camera, setup and icon fixes in the matching online installers. Screen inputs are excluded from camera discovery and checked before capture, preventing an old camera index from selecting a display. Administrator setup uses the browser; native setup assistance shows the connection address and one-use code. Bundle and running-application icon settings use the FlintEye symbol.
+
+Other 1.2.0 changes include trusted-LAN HTTPS setup, authenticated RTSPS camera addresses, corrected USB capture modes, optional per-camera audio (off by default), and consistent uninstall instructions. Settings and recordings remain outside the application. Shared monitoring status, Stop versus Quit, recording completion and owned-process cleanup remain included.
+
+All eight installers and both container archives passed their automated checks for the recorded source commit. Physical-device acceptance remains in progress. See the acceptance record and guides in `documentation.zip`; this preview is UNDER DEVELOPMENT and is not a stable release.
 
 ## License
 

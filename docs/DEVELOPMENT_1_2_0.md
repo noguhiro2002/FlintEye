@@ -8,7 +8,7 @@ Baseline: application build `25718ed3f06833a1f291992753b4f0538d7dc939`, publishe
 
 ## Preview.3: macOS installation follow-up
 
-- The public one-command URLs still install 1.1.3-preview.1. README now leads to the current Actions packages and explicitly labels the old online commands. Each OS artifact includes its own version-pinned scripts, `validation-build.json` and `SHA256SUMS`, so testing no longer requires the multi-GB complete release bundle.
+- The public one-command URLs install 1.2.0-preview.3. README also links the matching Actions packages for artifact-based testing. Each OS artifact includes its own version-pinned scripts, `validation-build.json` and `SHA256SUMS`, so testing no longer requires the multi-GB complete release bundle.
 - macOS camera discovery excludes `Capture screen` before querying modes. Worker startup resolves a saved index to an available camera name and rejects displays and disconnected selections before capture. Capability queries use names to avoid a camera-unplug race selecting a display. This targets the repeated Screen Recording request; native permission behavior still needs the owner's Mac retest.
 - Initial password entry remains in the browser. Native setup assistance shows the exact preview. Bundle metadata, runtime native dialogs and Dock use the FlintEye icon; the script registers the exact installed app copy. Information shows the full release identifier and explains the authenticated RTSPS camera address separately from internal publishing addresses.
 - README and the removal guide cover script, native package, Docker, systemd and source removal, keeping data by default. An old `/Applications` copy and the script's `~/Applications` copy can coexist; remove or deliberately retain each one.
@@ -26,7 +26,7 @@ Baseline: application build `25718ed3f06833a1f291992753b4f0538d7dc939`, publishe
 | 26–27 | Linux preflight before download, desktop versus SSH Quick Usage, token location, tunnel limits, normal shutdown and systemd instructions. OS install/remove acceptance remains separate. |
 | 10 | Browser-based initial password entry; address/copy fallback; compact Linux controls; sanitized allowlisted diagnostics; recording completion metadata. Signing/notarization deferred by the owner's decision. UI remains English; documentation and installation instructions are bilingual. |
 
-## Acceptance required before publication
+## Acceptance required before stable distribution
 
 Use dedicated profiles, recording folders and container volumes. Preserve existing user recordings and configuration. Record exact release, checksum, commit, OS/CPU, browser, installation path, profile and steps, excluding secrets and personal footage.
 
@@ -43,7 +43,7 @@ Run the Python suite, frontend build/browser suites, documentation checks and ex
 
 Before migration, runtime/monitoring backups are stored privately under `backup-before-1.2.0` in the profile. They contain sensitive configuration: never attach them to issues. Stop the new application before restoring a matching old backup and reinstalling the pinned 1.1.3 package. Preserve existing recordings and inventory. Remove the new Windows firewall rules and obsolete client trust if rolling back LAN access. No automatic downgrade or data erasure is performed.
 
-**Publication is blocked while any 1.2.0 P1 acceptance gate is pending or failed.** Build artifacts may be delivered for testing. Do not overwrite the existing 1.1.3 tag/assets. After acceptance, publish matching tested source, installers, version-pinned scripts, both Compose routes, licenses/sources and checksums together, as a prerelease with no image `latest` tag.
+**Stable distribution is blocked while any 1.2.0 P1 acceptance gate is pending or failed.** A public UNDER DEVELOPMENT preview may distribute the successful same-commit build for installation-path and physical-device testing while the physical gates remain pending. Keep those results pending in the record and release notes; do not claim physical tests passed. Distribute matching tested source, installers, pinned scripts, Compose, licenses/sources and checksums together. Do not overwrite older tags/assets or create an image `latest` tag for a preview.
 
 ## Validate the one-command installer before publication
 
@@ -61,7 +61,7 @@ macOS or Linux, from the extracted bundle directory:
 bash public/install.sh --version 1.2.0-preview.3 --package-directory public
 ```
 
-Compare this installation with the standalone installer from the same folder and verify both SHA-256 values match. Keep the version and source commit fixed. Public download commands remain pinned to the currently published 1.1.3 release until 1.2.0 acceptance passes. To test the container before GHCR publication, load the matching `containers/container-amd64.tar.gz` or `container-arm64.tar.gz`, then set `FLINTEYE_IMAGE=flinteye:release-amd64` or `flinteye:release-arm64` before using Compose. Do not mistake a downloaded Compose file's future GHCR tag for an already published image.
+Compare this installation with the standalone installer from the same folder and verify both SHA-256 values match. Keep the version and source commit fixed. Public download commands pin the matching 1.2.0-preview.3 development release; stable promotion waits for physical acceptance. To test the container before GHCR publication, load the matching `containers/container-amd64.tar.gz` or `container-arm64.tar.gz`, then set `FLINTEYE_IMAGE=flinteye:release-amd64` or `flinteye:release-arm64` before using Compose. Do not mistake a downloaded Compose file's future GHCR tag for an already published image.
 
 ## Archived automated verification before the preview.2 changes
 

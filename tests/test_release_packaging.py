@@ -171,17 +171,29 @@ class ReleaseTests(unittest.TestCase):
             release.write_documentation(self.root/'second.zip')
         self.assertEqual((self.root/'first.zip').read_bytes(), (self.root/'second.zip').read_bytes())
 
-    def test_new_preview_is_blocked_until_every_p1_case_is_evidenced(self):
+    def test_stable_requires_every_p1_case_but_preview_discloses_pending_devices(self):
         root = self.root/'acceptance-source'; (root/'packaging').mkdir(parents=True)
         path = root/'packaging/acceptance-1.2.0.json'
         data = {'version': version(), 'commit': self.commit,
                 'cases': {name: {'status': 'passed', 'evidence': 'https://example.test/qa/'+name} for name in release.ACCEPTANCE_CASES}}
         path.write_text(json.dumps(data))
         release.check_development_acceptance(self.commit, root=root)
-        case = next(iter(data['cases'])); data['cases'][case]['status'] = 'pending'
+        case = 'native-menus-and-accessibility'; data['cases'][case]['status'] = 'pending'
         path.write_text(json.dumps(data))
         with self.assertRaisesRegex(ValueError, 'pending or failed'): release.check_development_acceptance(self.commit, root=root)
+        self.assertFalse(release.check_development_acceptance(self.commit, root=root, channel='public-preview'))
+        with self.assertRaisesRegex(ValueError, 'pending or failed'):
+            release.check_development_acceptance(self.commit, root=root, channel='public-preview', tested=True)
         with self.assertRaisesRegex(ValueError, 'commit'): release.check_development_acceptance('b'*40, root=root)
+        data['cases']['all-native-architectures']['status'] = 'pending'
+        path.write_text(json.dumps(data))
+        with self.assertRaisesRegex(ValueError, 'complete native build'):
+            release.check_development_acceptance(self.commit, root=root, channel='public-preview')
+        data['cases']['all-native-architectures']['status'] = 'passed'
+        for invalid in ({'status': 'failed', 'evidence': 'known failure'}, {'status': 'passed', 'evidence': ''}):
+            data['cases'][case] = invalid; path.write_text(json.dumps(data))
+            with self.assertRaisesRegex(ValueError, 'failed or missing evidence'):
+                release.check_development_acceptance(self.commit, root=root, channel='public-preview')
 
     def test_actions_rejects_workflow_mismatch_before_distribution(self):
         release.validate_publication_revision(self.commit, 'b'*40, ['docs/INSTALL.md'], workflow_token=True)

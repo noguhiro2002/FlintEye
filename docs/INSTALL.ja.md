@@ -5,7 +5,7 @@
 
 [Documentation](README.ja.md)
 
-**UNDER DEVELOPMENT.** To test the current fixes, use the **1.2.0-preview.3 Actions packages and local installer scripts** in [Quick Install](../README.md#quick-install). The public [1.1.3-preview.1 scripts](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.1.3-preview.1) install the old version; the native password window, old icon and internal RTSP display there are not evidence that the new build was installed. Check **Information → System** for the exact preview and source commit. Real-device acceptance is still in progress. [Source setup](MANUAL_INSTALL.ja.md), [local M1 DMG builds](LOCAL_MACOS_BUILD.ja.md) and [development Docker](DOCKER.ja.md#build-the-development-image) remain available. See [acceptance checks](ACCEPTANCE.ja.md) and [known issues](KNOWN_ISSUES.ja.md).
+**UNDER DEVELOPMENT.** [Quick Install](../README.md#quick-install) または [該当するリリース](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.2.0-preview.3) から **1.2.0-preview.3** をインストールしてください。どちらの方法でも、同じテスト済みアプリケーションが使用されます。正確なプレビュー版とソースコミットについては、**Information → System** を確認してください。自動パッケージチェックは合格しましたが、実機での検証は現在進行中です。以前にダウンロードした 1.1.3 インストーラーやスクリプトは、その旧バージョンに固定されたままです。[Source setup](MANUAL_INSTALL.ja.md)、[local M1 DMG builds](LOCAL_MACOS_BUILD.ja.md)、および [development Docker](DOCKER.ja.md#build-the-development-image) は引き続き利用可能です。
 
 <a id="choose-a-package"></a>
 ## パッケージの選択
@@ -36,9 +36,9 @@ ARCH は `amd64` または `arm64` です。これらは受け入れターゲッ
 ## 付属のメディアツールと macOS のリカバリ
 
 <a id="screen-recording-requests-in-older-previews"></a>
-### Screen Recording requests in older previews
+### 以前のプレビュー版における画面収録リクエスト
 
-FlintEye does not record your desktop. Older camera discovery included FFmpeg's `Capture screen` inputs and opened them while querying camera modes, causing repeated **Screen Recording** permission dialogs. In **1.2.0-preview.3**, screen inputs are excluded before probing. Saved camera indices are checked before capture too, so a removed camera cannot make its old index select the screen. OBS virtual cameras remain supported as camera inputs. You do not need to grant Screen Recording permission to FlintEye; microphone access is separate and is used only when camera audio is enabled. Confirm absence of repeated prompts on your Mac as part of physical-device QA.
+FlintEye はデスクトップを録画しません。以前のカメラ検出では FFmpeg の `Capture screen` 入力が含まれており、カメラモードの照会中にこれらを開いていたため、繰り返しの **画面収録 (Screen Recording)** 許可ダイアログが発生していました。**1.2.0-preview.3** では、スクリーン入力はプローブ（調査）前に除外されます。また、保存されたカメラインデックスはキャプチャ前に確認されるため、削除されたカメラが古いインデックスを使って画面を選択することはありません。OBS 仮想カメラは引き続きカメラ入力としてサポートされます。FlintEye に画面収録の許可を与える必要はありません。マイクアクセスは別個のものであり、カメラの音声が有効な場合にのみ使用されます。実機での品質保証の一環として、Mac 上で繰り返しプロンプトが表示されないことを確認してください。
 
 デスクトップパッケージには **MediaMTX、FFmpeg、FFprobe** が含まれています。個別の Homebrew や MediaMTX のインストールは不要です。macOS アプリでは、実行ファイルは `FlintEye.app/Contents/Frameworks/bin/` にあります。以前のプライベート ARM64 ビルドは検査され、3つすべてが含まれていました。
 
@@ -73,14 +73,14 @@ Gatekeeper をグローバルに無効にしたり、インストーラースク
 正確なプレビューリリースからインストーラーまたはコマンドスクリプトを directly ダウンロードします。プレビューリリースは GitHub の `releases/latest` URL では返されません。
 
 そのリリースから `install.sh` または `install.ps1` をダウンロードして、ローカルで実行します。
-生成される各スクリプトは、自身のリリースバージョンを固定します。オプションの `--version 1.1.3-preview.1`（シェル）または `-Version 1.1.3-preview.1`（PowerShell）によってその正確な開発リリースが選択され、`X.Y.Z` によって利用可能な場合に安定版リリースが選択されます。タグにはプレビューサフィックスが含まれますが、インストーラーのファイル名には数値のアプリケーションバージョン（`1.1.3`）が使用されます。`--no-start` / `-NoStart` は、アプリケーションを起動せずにインストールします。
+生成される各スクリプトは、自身のリリースバージョンを固定します。オプションの `--version 1.2.0-preview.3`（シェル）または `-Version 1.2.0-preview.3`（PowerShell）によってその正確な開発リリースが選択され、`X.Y.Z` によって利用可能な場合に安定版リリースが選択されます。タグにはプレビューサフィックスが含まれますが、インストーラーのファイル名には数値のアプリケーションバージョン（`1.2.0`）が使用されます。`--no-start` / `-NoStart` は、アプリケーションを起動せずにインストールします。
 
 パッケージには、アプリケーションランタイムとメディアツールが含まれています。Linux デスクトップパッケージでは、必要なデスクトップライブラリをインストールするようにシステムのパッケージマネージャーに要求することもあります。
 
 <a id="update-and-remove"></a>
 ## 更新とアンインストール
 
-The same removal method applies whether a script or a binary installer installed the package. macOS script installs go to `~/Applications`; dragging from the DMG normally installs to `/Applications`. [Removal by installation method](STOP_AND_UNINSTALL.md#remove-by-installation-method) lists both locations, Linux commands, Docker, systemd and source removal. Keep your data unless you deliberately choose to erase it.
+スクリプトでインストールした場合も、バイナリインストーラーでインストールした場合も、削除方法は同じです。macOS のスクリプトインストールは `~/Applications` に入りますが、DMG からドラッグした場合は通常 `/Applications` にインストールされます。[インストール方法別の削除手順](STOP_AND_UNINSTALL.md#remove-by-installation-method)には、両方の場所、Linux コマンド、Docker、systemd、およびソース削除の方法がリストされています。意図的に削除を選択しない限り、データは保持してください。
 
 完全な停止、Windows のアンインストール動作、プログラム/データの場所、およびプロセスを実行し続ける古いインストーラーからの回復については、[FlintEye の停止とアンインストール](STOP_AND_UNINSTALL.ja.md)を参照してください。
 
@@ -92,6 +92,6 @@ macOS コマンドインストーラーは、以前のアプリを `FlintEye.pre
 手動でデータを削除する前に、[データの場所](DISTRIBUTION.ja.md#recording-lifecycle)を参照してください。
 
 
-## 1.2.0 UNDER DEVELOPMENT インストーラーの確認
+## 1.2.0 開発インストーラーの確認
 
-次回の開発ビルドでは、管理者パスワードフォームにブラウザを使用します。初回起動で信頼するネットワークを選びます。起動後の画面にローカルURLと使い捨てコードが表示され、LAN HTTPSの準備ができた場合は別端末用のURLと証明書の案内も表示されます。再インストール後に既存のアカウントがリセットされることはありません。クリーンなプロファイル、保持されたプロファイル、および未完了のプロファイルを使用して、ワンコマンドインストーラーとスタンドアロンインストーラーを比較してください。Linuxの自動インストールでは、ダウンロードの前にsudoとパッケージマネージャーがチェックされます。Windowsの削除処理では、まず録画を終了し、アンインストールデータのロックを確認します。ロックが報告された場合でも、unins000.datを削除する権限があるとは限りません。「[1.2.0 acceptance](DEVELOPMENT_1_2_0.ja.md)」および「[LAN setup](LAN_ACCESS.ja.md)」を参照してください。公開済みの1.1.3インストーラーに変更はありません。
+1.2.0-preview.3 ビルドでは、管理者パスワードフォームにブラウザを使用します。初回起動で信頼するネットワークを選びます。起動後の画面にローカルURLと使い捨てコードが表示され、LAN HTTPSの準備ができた場合は別端末用のURLと証明書の案内も表示されます。再インストール後に既存のアカウントがリセットされることはありません。クリーンなプロファイル、保持されたプロファイル、および未完了のプロファイルを使用して、ワンコマンドインストーラーとスタンドアロンインストーラーを比較してください。Linuxの自動インストールでは、ダウンロードの前にsudoとパッケージマネージャーがチェックされます。Windowsの削除処理では、まず録画を終了し、アンインストールデータのロックを確認します。ロックが報告された場合でも、unins000.datを削除する権限があるとは限りません。「[1.2.0 acceptance](DEVELOPMENT_1_2_0.ja.md)」および「[LAN setup](LAN_ACCESS.ja.md)」を参照してください。公開済みの1.1.3インストーラーに変更はありません。

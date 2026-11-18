@@ -17,13 +17,27 @@ ACCEPTANCE_CASES = {'windows-owner-startup', 'windows-owner-removal', 'native-me
                     'docker-desktop-host-video', 'all-native-architectures'}
 
 
-def check_development_acceptance(commit: str, *, root=ROOT) -> None:
+def check_development_acceptance(commit: str, *, root=ROOT, channel: str = 'stable',
+                                tested: bool = False) -> bool:
+    """Separate CI-verified previews from completed physical-device acceptance."""
+    if channel not in {'stable', 'public-preview'}:
+        raise ValueError('Acceptance checks require a public-preview or stable channel')
     record = json.loads((root/'packaging/acceptance-1.2.0.json').read_text())
     if record.get('version') != version() or record.get('commit') != commit:
         raise ValueError('Acceptance evidence must identify this tested application version and commit')
     cases = record.get('cases', {})
-    if set(cases) != ACCEPTANCE_CASES or any(item.get('status') != 'passed' or not item.get('evidence') for item in cases.values()):
+    if set(cases) != ACCEPTANCE_CASES or any(
+        not isinstance(item, dict) or item.get('status') not in {'passed', 'pending'}
+        or not isinstance(item.get('evidence'), str) or not item['evidence'].strip()
+        for item in cases.values()
+    ):
+        raise ValueError('Acceptance cases are incomplete, failed or missing evidence')
+    complete = all(item['status'] == 'passed' for item in cases.values())
+    if cases['all-native-architectures']['status'] != 'passed':
+        raise ValueError('A public preview requires a passing complete native build')
+    if (channel == 'stable' or tested) and not complete:
         raise ValueError('1.2.0 publication blocked: P1 physical-device acceptance is pending or failed')
+    return complete
 
 
 def write_documentation(destination: Path) -> None:
@@ -217,7 +231,8 @@ def main() -> None:
         run = api(f'repos/{REPOSITORY}/actions/runs/{args.run_id}')
         build_commit = run['head_sha']
         if args.channel in {'public-preview', 'stable'}:
-            check_development_acceptance(build_commit)
+            check_development_acceptance(build_commit, channel=args.channel,
+                                         tested=os.environ.get('DEVICE_TESTS_CONFIRMED') == 'true')
         check_publication_revision(build_commit, args.commit)
         validate_publish_context(repo, run, commit=build_commit,
             enabled=os.environ.get('PUBLIC_PREVIEW_ENABLED' if args.channel == 'public-preview' else 'PUBLIC_RELEASE_ENABLED') == 'true',

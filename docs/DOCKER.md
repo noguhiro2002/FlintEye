@@ -10,14 +10,14 @@ Host networking preserves ONVIF discovery and WebRTC. Docker Desktop USB forward
 
 ## Install without cloning
 
-**UNDER DEVELOPMENT.** The preview image is `ghcr.io/noguhiro2002/flinteye:1.1.3-preview.1`. Use the pull commands once this version is listed in the [public GHCR package](https://github.com/users/noguhiro2002/packages/container/package/flinteye), for installation-path and physical-device testing. Automated package checks passed; real-device acceptance remains in progress. This is not a stable release. You can also [build locally](#build-the-development-image).
+**UNDER DEVELOPMENT.** The preview image is `ghcr.io/noguhiro2002/flinteye:1.2.0-preview.3`. Use the pull commands once this version is listed in the [public GHCR package](https://github.com/users/noguhiro2002/packages/container/package/flinteye), for installation-path and physical-device testing. Automated package checks passed; real-device acceptance remains in progress. This is not a stable release. You can also [build locally](#build-the-development-image).
 
 Published public images can be pulled without a GitHub account or token. If Docker has an expired saved credential, use `docker logout ghcr.io` before pulling anonymously. Private maintainer testing still requires an authorized account and a classic token with `read:packages`, entered at `docker login ghcr.io -u YOUR_GITHUB_USERNAME`'s password prompt; never put tokens in `.env` or command arguments.
 
-Download [compose.yaml](https://github.com/noguhiro2002/FlintEye/releases/download/v1.1.3-preview.1/compose.yaml) from the same version's GitHub Release into a new directory, and create `.env`:
+Download [compose.yaml](https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.3/compose.yaml) from the same version's GitHub Release into a new directory, and create `.env`:
 
 ```dotenv
-FLINTEYE_IMAGE=ghcr.io/noguhiro2002/flinteye:1.1.3-preview.1
+FLINTEYE_IMAGE=ghcr.io/noguhiro2002/flinteye:1.2.0-preview.3
 ```
 
 The preview has no `latest` image tag. Pin the exact version as above and complete the [acceptance checks](ACCEPTANCE.md) for your hardware.
@@ -41,7 +41,7 @@ Do not post the setup token in an issue or put a password into command arguments
 For other LAN users, configure the [HTTPS reverse proxy](DISTRIBUTION.md#user-installation).
 The HTTP/API/MediaMTX listeners stay on loopback; WebRTC also needs UDP 8189.
 
-### Next development build: finish setup over HTTPS
+### Finish setup over HTTPS
 
 Compose uses Linux host networking. In the directory with `compose.yaml`, set the following in `.env` before starting with a new data volume. Replace the example address and source range with your server's assigned address and trusted network.
 

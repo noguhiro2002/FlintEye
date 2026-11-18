@@ -2,7 +2,7 @@
 
 **FlintEye is under active development. This is a development preview, not a stable release. Use development previews for testing.**
 
-The current development build is **1.2.0-preview.3**. Get its test installers from [GitHub Actions](https://github.com/noguhiro2002/FlintEye/actions/runs/44322574969) after the build succeeds. **The published 1.1.3-preview.1 scripts install the older app; they do not include the 1.2.0 setup, icon or network-stream changes.**
+The current development preview is **1.2.0-preview.3**. The Quick Install commands below install this version, including the macOS setup, icon and camera fixes. Automated package checks passed; physical-device acceptance remains in progress.
 
 [Known issues](docs/KNOWN_ISSUES.md) · [Report a bug](https://github.com/noguhiro2002/FlintEye/issues) · [Questions and ideas](https://github.com/noguhiro2002/FlintEye/discussions)
 
@@ -29,44 +29,28 @@ Monitor USB and IP cameras, watch live video, and find recordings in your browse
 
 ## Quick Install
 
-### Test the current fixes: 1.2.0-preview.3
-
-1. Open a successful **Build release** run for **1.2.0-preview.3** in [GitHub Actions](https://github.com/noguhiro2002/FlintEye/actions/runs/44322574969). Download and extract the artifact for your computer: `build-macos-arm64` for an Apple Silicon Mac, `build-macos-amd64` for an Intel Mac, or `build-windows-ARCH` / `build-linux-ARCH`. GitHub requires sign-in to download Actions artifacts.
-2. Quit your existing FlintEye, open a terminal in the extracted folder, and run the command below. These scripts use the downloaded package and its checksum; they do not download the older public release.
-
-| Computer | Command in the extracted folder |
-| --- | --- |
-| macOS / Linux | `bash ./install.sh --package-directory .` |
-| Windows PowerShell | `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -PackageDirectory .` |
-
-Alternatively, open the EXE, DMG, DEB or RPM from that same folder. In the app, check **Information → System** for `1.2.0-preview.3`. Then follow [Quick Usage](#quick-usage). [Removal instructions](#uninstall) apply to either route.
-
-<details>
-<summary><strong>Older public preview: 1.1.3-preview.1 — online one-command installation</strong></summary>
-
-**Development preview: [v1.1.3-preview.1](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.1.3-preview.1).** The commands below work once that release lists its download assets. Real-device acceptance is still in progress. Run the command for your computer and follow setup. Python, FFmpeg, FFprobe and MediaMTX are included; no Git checkout or compilation is needed.
+**Development preview: [v1.2.0-preview.3](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.2.0-preview.3).** Real-device acceptance is still in progress. Run the command for your computer and follow setup. Python, FFmpeg, FFprobe and MediaMTX are included; no Git checkout or compilation is needed.
 
 **Windows — PowerShell**
 
 ```powershell
-irm https://github.com/noguhiro2002/FlintEye/releases/download/v1.1.3-preview.1/install.ps1 | iex
+irm https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.3/install.ps1 | iex
 ```
 
 **macOS — Terminal**
 
 ```sh
-bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.1.3-preview.1/install.sh
+bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.3/install.sh
 ```
 
 **Linux — Terminal**
 
 ```sh
-bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.1.3-preview.1/install.sh
+bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.3/install.sh
 ```
 
 You can also download the script from the selected release, inspect it, and run it locally. Packaged builds include Python, FFmpeg, FFprobe and MediaMTX. No separate copies are required. Windows/macOS packages are unsigned/not notarized; see [OS confirmation screens](docs/INSTALL.md#unsigned-packages).
 
-</details>
 
 <details>
 <summary><strong>Other Install Options</strong> — binary packages, Docker, manual installation</summary>
@@ -93,7 +77,7 @@ Then continue with [Quick Usage](#quick-usage).
 
 ## Quick Usage
 
-1. **Open the address shown by FlintEye.** On the computer running FlintEye, open the local browser address. A new build from this branch also offers a choice of trusted network and shows the HTTPS address when it is ready. On another device, [trust the installation's certificate](docs/LAN_ACCESS.md) before opening that address. Public v1.1.3 uses the local setup flow.
+1. **Open the address shown by FlintEye.** On the computer running FlintEye, open the local browser address. Choose a trusted network at first launch; FlintEye shows the HTTPS address when it is ready. On another device, [trust the installation's certificate](docs/LAN_ACCESS.md) before opening that address.
 2. **Create your administrator account.** Enter the one-use code from the setup window or the server's private token file, and set the password in your browser. Sign in as `admin`.
 3. **Add a camera in Settings.** Follow the getting-started tour for USB and IP cameras.
 4. **Open Live View.** Enable recording if needed, then open **Recordings** to play saved footage.
@@ -133,7 +117,7 @@ Open `http://127.0.0.1:18080` locally and enter the token to create the administ
 <details>
 <summary>1.2.0 development: other PCs and phones on your LAN</summary>
 
-The source for the next development version adds opt-in HTTPS at `https://SERVER-IP:18080`, with one-time certificate trust on each viewing PC/iPhone/iPad/Android device. **Public 1.1.3 does not include this feature.** See [LAN connection and trust](docs/LAN_ACCESS.md) and [1.2.0 changes and acceptance status](docs/DEVELOPMENT_1_2_0.md) before testing a rebuilt package.
+This development preview includes opt-in HTTPS at `https://SERVER-IP:18080`, with one-time certificate trust on each viewing PC/iPhone/iPad/Android device.  See [LAN connection and trust](docs/LAN_ACCESS.md) and [1.2.0 changes and acceptance status](docs/DEVELOPMENT_1_2_0.md) when testing the preview package.
 
 </details>
 

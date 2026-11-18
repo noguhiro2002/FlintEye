@@ -206,7 +206,8 @@ def publish(args) -> None:
     commit = build['head_sha']
     if args.channel in {'public-preview', 'stable'}:
         from release import check_development_acceptance
-        check_development_acceptance(commit)
+        check_development_acceptance(commit, channel=args.channel,
+                                     tested=os.environ.get('DEVICE_TESTS_CONFIRMED') == 'true')
     check_publication_revision(commit, publication_commit)
     flag = 'PUBLIC_PREVIEW_ENABLED' if args.channel == 'public-preview' else 'PUBLIC_RELEASE_ENABLED'
     validate_publish_context(repo, build, commit=commit, ref=os.environ['GITHUB_REF'], channel=args.channel,
