@@ -129,6 +129,12 @@ On the next development build, get the actual URL with `sudo -u flinteye /opt/fl
 Desktop and systemd instances must not share a running data directory or ports.
 The service starts without login; the desktop application starts after login.
 
+### Remove a server deployment
+
+For systemd, first run `sudo systemctl disable --now flinteye`. Remove the manually installed unit and your deployment's drop-ins, run `sudo systemctl daemon-reload`, then remove the package or dedicated program bundle. Keep `/var/lib/flinteye`, custom data and external recordings unless you explicitly want to erase them. [Complete systemd removal](STOP_AND_UNINSTALL.md#systemd)
+
+For Docker, use the same Compose file, deployment directory and project options that started it. `docker compose down` keeps data; the [Docker removal guide](STOP_AND_UNINSTALL.md#docker-compose) provides the Desktop/development variants and optional image cleanup. [Data erasure and LAN trust cleanup](STOP_AND_UNINSTALL.md#permanently-erase-data-optional) are separate steps.
+
 ## Building installers
 
 For automated builds, source/license archives and GHCR publication, use the [release guide](RELEASING.md).

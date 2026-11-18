@@ -4,7 +4,7 @@
 
 [Documentation](README.md)
 
-This route is for developers. General users should use the [desktop installer](INSTALL.md) once it is released.
+This route is for developers. General users should use the [desktop installer](INSTALL.md).
 
 ## Requirements
 
@@ -59,6 +59,12 @@ Development uses its own `runtime.json`; do not run it on the same ports as the 
 Keep API and Vite listeners on loopback.
 
 [API reference](advanced/API.md) · [Camera tools](advanced/CAMERA_TOOLS.md) · [Frontend details](advanced/DEVELOPMENT.md)
+
+## Uninstall a source environment
+
+Disable any login startup configured by the desktop launcher before removing the source. Choose **Quit FlintEye**, or press Ctrl+C and wait in each terminal running the API, frontend development server or tools. Stop and disable any [systemd service](STOP_AND_UNINSTALL.md#systemd) or [Compose deployment](STOP_AND_UNINSTALL.md#docker-compose) configured to restart it.
+
+Preserve `.env`, `runtime.json`, recordings and any other data inside the checkout. Deactivate the virtual environment with `deactivate` if active, then remove the dedicated checkout and virtual environment with your file manager. Remove an environment outside the checkout separately. Default desktop data and custom external recording folders are kept unless you deliberately delete them. [Source removal and shared dependencies](STOP_AND_UNINSTALL.md#manual-source-and-virtual-environment) · [Optional data erasure](STOP_AND_UNINSTALL.md#permanently-erase-data-optional)
 
 ## Verify changes
 

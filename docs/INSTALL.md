@@ -72,7 +72,9 @@ Packages include the application runtime and media tools. Linux desktop packages
 
 ## Update and remove
 
-The same removal method applies whether a script or a binary installer installed the package. macOS script installs go to `~/Applications`; dragging from the DMG normally installs to `/Applications`. [Removal by installation method](STOP_AND_UNINSTALL.md#remove-by-installation-method) lists both locations, Linux commands, Docker, systemd and source removal. Keep your data unless you deliberately choose to erase it.
+The same removal method applies whether a one-command script, an Actions artifact or a binary installer installed the native package. Start with the [README removal table](../README.md#uninstall), then follow [your installation method](STOP_AND_UNINSTALL.md#remove-by-installation-method) for the full steps. macOS script installs normally go to `~/Applications`; dragging from the DMG normally installs to `/Applications`. A custom install folder must be removed at its actual location.
+
+The guide covers Windows 10/11, Linux DEB/RPM, Docker, systemd and source environments. Normal removal retains accounts, settings and recordings; [permanent data erasure](STOP_AND_UNINSTALL.md#permanently-erase-data-optional) is a separate choice.
 
 See [Stop and uninstall FlintEye](STOP_AND_UNINSTALL.md) for complete shutdown, Windows uninstall behavior, program/data locations and recovery from older installers that leave processes running.
 

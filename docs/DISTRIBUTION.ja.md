@@ -65,7 +65,7 @@ SSHトンネル（`ssh -L 18080:127.0.0.1:18080 <server>`）を使用し、`http
 <a id="systemd"></a>
 ### systemd
 
-`/opt/flinteye` にあるネイティブLinuxバンドルをインストールし、`flinteye` システムユーザー/グループを作成します。`/etc/systemd/system/` の下に `packaging/flinteye.service` をインストールします。USBキャプチャにはホストの `video` グループが必要です。別のデバイスグループを使用するホストではこれを適宜変更してください。その後、以下を実行します：
+`/opt/flinteye` にあるネイティブLinuxバンドルをインストールし、`flinteye` システムユーザー/グループを作成します。`/etc/systemd/system/` の下に `packaging/flinteye.service` をインストールします。USBキャプチャにはホストの `video` グループが必要です。別のデバイスグループを使用するホストではこれを適宜変更してください。
 
 次期版の初回起動時からLAN HTTPSを利用する場合は、[サービスに接続先の環境変数を設定](LAN_ACCESS.ja.md)します。USBマイクを使う場合は、ホストのaudioグループへのアクセスも必要です。
 
@@ -78,6 +78,12 @@ sudo cat /var/lib/flinteye/setup-token
 次期版の接続先は `sudo -u flinteye /opt/flinteye/FlintEye --headless --data-dir /var/lib/flinteye --connection-info` で確認できます。そのURLを開き、使い捨てコードを入力します。
 
 デスクトップインスタンスとsystemdインスタンスの間で、実行中のデータディレクトリやポートを共有してはなりません。サービスはログインなしで起動し、デスクトップアプリケーションはログイン後に起動します。
+
+### サーバーデプロイの削除
+
+systemdの場合、まず `sudo systemctl disable --now flinteye` を実行します。手動でインストールしたユニットとデプロイメントのドロップインを削除し、`sudo systemctl daemon-reload` を実行してから、パッケージまたは専用プログラムバンドルを削除します。明示的に消去したい場合を除き、`/var/lib/flinteye`、カスタムデータ、および外部録画は保持してください。[systemdの完全削除](STOP_AND_UNINSTALL.ja.md#systemd)
+
+Dockerの場合、それを開始したのと同じComposeファイル、デプロイメントディレクトリ、およびプロジェクトオプションを使用します。`docker compose down` はデータを保持します。[Docker削除ガイド](STOP_AND_UNINSTALL.ja.md#docker-compose)には、デスクトップ/開発用のバリエーションとオプションのイメージクリーンアップが記載されています。[データ消去とLAN信頼のクリーンアップ](STOP_AND_UNINSTALL.ja.md#permanently-erase-data-optional)は個別のステップです。
 
 <a id="building-installers"></a>
 ## インストーラーのビルド

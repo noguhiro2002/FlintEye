@@ -43,6 +43,7 @@ ssh -L 18080:127.0.0.1:18080 your-server
 その他のLANユーザー向けには、[HTTPSリバースプロキシ](DISTRIBUTION.ja.md#user-installation)を設定してください。
 HTTP/API/MediaMTXリスナーはループバック上で動作し続けます。また、WebRTCにはUDP 8189も必要です。
 
+<a id="finish-setup-over-https"></a>
 ### Finish setup over HTTPS
 
 ComposeはLinuxのホストネットワークを使用します。新しいデータボリュームで起動する前に、`compose.yaml` と同じフォルダの `.env` にサーバーのIPと許可するネットワークを指定します。以下の値は実際の環境に置き換えてください。
@@ -83,8 +84,18 @@ docker compose logs --tail=50 flinteye
 コンテナを置き換えると、モニタリングが一時的に中断されます。アップデートが自動的に適用されることはありません。
 ロールバックするには、`.env` 内の正確な以前の `ghcr.io/noguhiro2002/flinteye:VERSION` を元に戻し、`docker compose pull` と `docker compose up -d` を実行します。リリースで必要な場合は、対応する設定のバックアップを復元してください。アップグレードが検証されるまで、古いバージョンとその設定のバックアップを保持してください。
 
-`docker compose down` は、ボリュームを保持したままコンテナを停止・削除します。
-保存されたデータを明示的に消去する意図がない限り、`-v` を追加しないでください。
+<a id="uninstall"></a>
+## アンインストール
+
+同じデプロイメントフォルダから、起動時に使用した同じ `.env` およびプロジェクトオプションを使用して以下を実行します。
+
+```sh
+docker compose down
+```
+
+これにより、データボリュームとバインドマウントされた録画ファイルを保持したまま、コンテナとそれらに付随するAPI/メディアプロセスが停止・削除されます。ダウンロードしたファイルを使用しているDocker Desktop環境では `docker compose -f compose.desktop.yaml down` を、チェックアウトしている場合は `docker compose -f deploy/compose.desktop.yaml down` を実行してください。開発イメージを使用している場合は、チェックアウトのルートから `docker compose -f deploy/compose.dev.yaml down` を実行してください。元の起動コマンドで使用したその他の `-f`、`-p` / `--project-name`、または `--env-file` オプションはそのまま維持してください。
+
+通常の削除で `--volumes` / `-v` は追加しないでください。キャッシュされたイメージは個別に削除するまで残ります。イメージのクリーンアップについては[完全なDocker削除](STOP_AND_UNINSTALL.ja.md#docker-compose)を、録画や設定も完全に削除したい場合は[オプションのデータ完全消去](STOP_AND_UNINSTALL.ja.md#permanently-erase-data-optional)を参照してください。
 
 <a id="build-the-development-image"></a>
 ## 開発イメージのビルド

@@ -80,8 +80,17 @@ docker compose logs --tail=50 flinteye
 Replacing the container briefly interrupts monitoring. Updates are never applied automatically.
 For rollback, put the previous exact `ghcr.io/noguhiro2002/flinteye:VERSION` back in `.env`, then run `docker compose pull` and `docker compose up -d`. Restore the matching configuration backup if a release requires it. Keep the old version and its configuration backup until the upgrade is verified.
 
-`docker compose down` stops/removes the container while preserving the volume.
-Do not add `-v` unless you explicitly intend to erase stored data.
+## Uninstall
+
+From the same deployment folder, with the same `.env` and project options used to start it, run:
+
+```sh
+docker compose down
+```
+
+This stops/removes the containers and their bundled API/media processes, while preserving the data volume and any bind-mounted recordings. Docker Desktop with a downloaded file uses `docker compose -f compose.desktop.yaml down`; a checkout uses `docker compose -f deploy/compose.desktop.yaml down`. For the development image, run `docker compose -f deploy/compose.dev.yaml down` from the checkout root. Preserve any additional `-f`, `-p` / `--project-name` or `--env-file` options from your original startup command.
+
+Do not add `--volumes` / `-v` for normal removal. Cached images remain until you remove them separately. See [complete Docker removal](STOP_AND_UNINSTALL.md#docker-compose) for image cleanup, and [optional permanent data erasure](STOP_AND_UNINSTALL.md#permanently-erase-data-optional) if you intend to delete the recordings and configuration too.
 
 ## Build the development image
 

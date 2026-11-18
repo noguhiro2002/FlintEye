@@ -5,7 +5,7 @@
 
 [Documentation](README.ja.md)
 
-**UNDER DEVELOPMENT.** [Quick Install](../README.md#quick-install) または [該当するリリース](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.2.0-preview.3) から **1.2.0-preview.3** をインストールしてください。どちらの方法でも、同じテスト済みアプリケーションが使用されます。正確なプレビュー版とソースコミットについては、**Information → System** を確認してください。自動パッケージチェックは合格しましたが、実機での検証は現在進行中です。以前にダウンロードした 1.1.3 インストーラーやスクリプトは、その旧バージョンに固定されたままです。[Source setup](MANUAL_INSTALL.ja.md)、[local M1 DMG builds](LOCAL_MACOS_BUILD.ja.md)、および [development Docker](DOCKER.ja.md#build-the-development-image) は引き続き利用可能です。
+**UNDER DEVELOPMENT.** [Quick Install](../README.ja.md#quick-install) または [該当するリリース](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.2.0-preview.3) から **1.2.0-preview.3** をインストールしてください。どちらの方法でも、同じテスト済みアプリケーションが使用されます。正確なプレビュー版とソースコミットについては、**Information → System** を確認してください。自動パッケージチェックは合格しましたが、実機での検証は現在進行中です。以前にダウンロードした 1.1.3 インストーラーやスクリプトは、その旧バージョンに固定されたままです。[Source setup](MANUAL_INSTALL.ja.md)、[local M1 DMG builds](LOCAL_MACOS_BUILD.ja.md)、および [development Docker](DOCKER.ja.md#build-the-development-image) は引き続き利用可能です。
 
 <a id="choose-a-package"></a>
 ## パッケージの選択
@@ -80,7 +80,9 @@ Gatekeeper をグローバルに無効にしたり、インストーラースク
 <a id="update-and-remove"></a>
 ## 更新とアンインストール
 
-スクリプトでインストールした場合も、バイナリインストーラーでインストールした場合も、削除方法は同じです。macOS のスクリプトインストールは `~/Applications` に入りますが、DMG からドラッグした場合は通常 `/Applications` にインストールされます。[インストール方法別の削除手順](STOP_AND_UNINSTALL.md#remove-by-installation-method)には、両方の場所、Linux コマンド、Docker、systemd、およびソース削除の方法がリストされています。意図的に削除を選択しない限り、データは保持してください。
+ワンコマンドスクリプト、Actions アーティファクト、またはバイナリインストーラーのいずれでネイティブパッケージをインストールした場合も、削除方法は同じです。[README の削除テーブル](../README.ja.md#uninstall)から開始し、[インストール方法](STOP_AND_UNINSTALL.ja.md#remove-by-installation-method)に従って全手順を行ってください。macOS のスクリプトインストールは通常 `~/Applications` に入りますが、DMG からドラッグした場合は通常 `/Applications` にインストールされます。カスタムインストールフォルダは、実際の場所で削除する必要があります。
+
+このガイドは、Windows 10/11、Linux DEB/RPM、Docker、systemd、およびソース環境をカバーしています。通常の削除ではアカウント、設定、録画が保持されます。[恒久的なデータ消去](STOP_AND_UNINSTALL.ja.md#permanently-erase-data-optional)は個別の選択肢です。
 
 完全な停止、Windows のアンインストール動作、プログラム/データの場所、およびプロセスを実行し続ける古いインストーラーからの回復については、[FlintEye の停止とアンインストール](STOP_AND_UNINSTALL.ja.md)を参照してください。
 

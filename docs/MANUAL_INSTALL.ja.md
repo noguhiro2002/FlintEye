@@ -5,7 +5,7 @@
 
 [Documentation](README.ja.md)
 
-この手順は開発者向けです。一般ユーザーはリリースされたら[デスクトップインストーラー](INSTALL.ja.md)を使用してください。
+この手順は開発者向けです。一般ユーザーは[デスクトップインストーラー](INSTALL.ja.md)を使用してください。
 
 <a id="requirements"></a>
 ## 必要条件
@@ -63,6 +63,13 @@ python -m tools.start_orchestrator_stack --env-file .env --runtime-file runtime.
 APIおよびViteリスナーをループバックに維持してください。
 
 [API reference](advanced/API.ja.md) · [Camera tools](advanced/CAMERA_TOOLS.ja.md) · [Frontend details](advanced/DEVELOPMENT.ja.md)
+
+<a id="uninstall-a-source-environment"></a>
+## ソース環境のアンインストール
+
+ソースを削除する前に、デスクトップランチャーで構成されたログイン起動設定を無効にしてください。「Quit FlintEye」を選択するか、API、フロントエンド開発サーバー、またはツールを実行している各ターミナルでCtrl+Cを押して待機します。再起動するように構成された[systemdサービス](STOP_AND_UNINSTALL.ja.md#systemd)または[Composeデプロイメント](STOP_AND_UNINSTALL.ja.md#docker-compose)を停止および無効化してください。
+
+`.env`、`runtime.json`、録画データ、およびチェックアウト内のその他のデータは保持されます。仮想環境がアクティブな場合は`deactivate`で非アクティブ化し、ファイルマネージャーを使用して専用のチェックアウトと仮想環境を削除してください。チェックアウト外の環境は個別に削除してください。デフォルトのデスクトップデータおよびカスタムの外部録画フォルダーは、意図的に削除しない限り保持されます。[ソースの削除と共有依存関係](STOP_AND_UNINSTALL.ja.md#manual-source-and-virtual-environment) · [オプションのデータ消去](STOP_AND_UNINSTALL.ja.md#permanently-erase-data-optional)
 
 <a id="verify-changes"></a>
 ## 変更の検証

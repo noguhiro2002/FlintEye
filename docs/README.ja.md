@@ -5,7 +5,7 @@
 
 [プロジェクトホーム](../README.ja.md)
 
-**UNDER DEVELOPMENT.** ソースは現在公開されています。パブリックインストーラーと GHCR イメージの準備が進められています。
+**開発中。** ソース、パブリックプレビューインストーラー、GHCR イメージが利用可能です。物理デバイスでの受け入れテストは現在進行中です。
 
 - [既知の問題と検証の制限事項](KNOWN_ISSUES.ja.md)
 - [貢献について](../.github/CONTRIBUTING.ja.md)
@@ -15,6 +15,7 @@
 ## FlintEye の使用
 
 - [Windows、macOS、または Linux へのインストール](INSTALL.ja.md)
+- [OS・インストール方法別のアンインストール（データ保持・削除）](STOP_AND_UNINSTALL.ja.md)
 - [カメラの追加、ライブ映像の視聴、および録画の管理](USER_GUIDE.ja.md)
 - [監視インジケータ、一時停止/再開、およびデスクトップでの起動](MONITORING.ja.md)
 - [Docker Compose](DOCKER.ja.md)
@@ -27,7 +28,7 @@
 - [パッケージのビルドとリリース / GHCR の公開](RELEASING.ja.md)
 - [M1 / Apple Silicon Mac でのローカル DMG のビルドと検証](LOCAL_MACOS_BUILD.ja.md)
 - [ご自身のコンピュータでの最終チェック](ACCEPTANCE.ja.md)
-- [安定版公開前の必須実機チェック（1.2.0）](RELEASE_CHECKLIST_1_2_0.ja.md)
+- [安定版配布 1.2.0 前の必須実機チェック](RELEASE_CHECKLIST_1_2_0.ja.md)
 - [ライセンスと許可される用途](LICENSING.ja.md)
 - [環境変数のリファレンス](advanced/ENV_OPTIONS.ja.md)
 

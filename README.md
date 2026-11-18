@@ -73,7 +73,7 @@ A pip application package is not part of the first release.
 | Docker Compose | Start the container and retrieve its browser address and setup instructions. [Docker setup →](docs/DOCKER.md#install-without-cloning) |
 | Linux server | Start the systemd service and retrieve the address printed at startup. [Server setup →](docs/DISTRIBUTION.md#systemd) |
 
-Then continue with [Quick Usage](#quick-usage).
+Then continue with [Quick Usage](#quick-usage). To remove an installation later, see [Uninstall](#uninstall).
 
 ## Quick Usage
 
@@ -125,18 +125,24 @@ This development preview includes opt-in HTTPS at `https://SERVER-IP:18080`, wit
 
 ## Uninstall
 
-Settings and recordings are kept by default. Quit FlintEye completely before removing it; closing the browser leaves monitoring running.
+**Accounts, settings and recordings are kept by default.** Quit FlintEye completely before removing it; closing the browser or choosing **Stop monitoring** leaves the application running. One-command scripts install the same native packages as the binary installers, so their removal methods are the same.
 
 | Installation | Remove the application |
 | --- | --- |
-| Windows script or EXE | **Settings → Apps → Installed apps → FlintEye → Uninstall**. |
-| macOS script | Menu-bar icon → **Disable start at login and quit**, then move `~/Applications/FlintEye.app` to Trash. Remove `FlintEye.previous.app` there too if you no longer need the rollback copy. |
-| macOS DMG | Same quit action, then move `/Applications/FlintEye.app` to Trash (or the location you chose). |
-| Linux script or DEB/RPM | Disable login startup, quit, then `sudo apt-get remove flinteye` or `sudo dnf remove flinteye`. |
-| Docker Compose | From the deployment folder, `docker compose down`. For Docker Desktop, `docker compose -f deploy/compose.desktop.yaml down`. Keep the data volume. |
-| systemd / source | Stop and disable the service first; then remove the package or dedicated source environment after preserving any data inside it. |
+| Windows script / EXE / Actions package | Windows 11: **Settings → Apps → Installed apps**. Windows 10: **Settings → Apps → Apps & features**. Select **FlintEye → Uninstall**; keep the default data-retention choice. |
+| macOS script | Menu-bar icon → **Disable start at login and quit**, then move `~/Applications/FlintEye.app` to Trash (or use your custom install folder). Remove `FlintEye.previous.app` too if you no longer need the rollback copy. |
+| macOS DMG / locally built DMG | Choose **Disable start at login and quit**, then move `/Applications/FlintEye.app` to Trash, or remove it from the folder you chose. |
+| Linux script / DEB | Disable login startup, quit, then run `sudo apt-get remove flinteye`. |
+| Linux script / RPM | Disable login startup, quit, then run `sudo dnf remove flinteye`. |
+| Docker Engine, downloaded `compose.yaml` | In the original deployment folder, run `docker compose down`. |
+| Docker Desktop, downloaded `compose.desktop.yaml` | In the original deployment folder, run `docker compose -f compose.desktop.yaml down`. For a source checkout use `-f deploy/compose.desktop.yaml` instead. |
+| Development Docker | From the checkout root, run `docker compose -f deploy/compose.dev.yaml down`. |
+| systemd | Run `sudo systemctl disable --now flinteye`, then [remove the manually installed service and application](docs/STOP_AND_UNINSTALL.md#systemd). |
+| Manual source / virtual environment | Disable any login startup, stop the launcher/terminal processes or service, then preserve data before removing the dedicated checkout and virtual environment. [Source removal →](docs/STOP_AND_UNINSTALL.md#manual-source-and-virtual-environment) |
 
-[Complete removal commands, data locations and old-installation recovery →](docs/STOP_AND_UNINSTALL.md)
+Native app removal also removes its bundled Python/FastAPI, FFmpeg, FFprobe and MediaMTX. Docker keeps its data volume and cached image after `down`; see [Docker removal](docs/STOP_AND_UNINSTALL.md#docker-compose). Data erasure is a separate, explicit choice.
+
+[Full removal guide: data locations, optional data erasure, startup recovery and LAN certificate removal →](docs/STOP_AND_UNINSTALL.md)
 
 
 ## Documentation

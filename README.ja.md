@@ -73,7 +73,7 @@ pipアプリケーションパッケージは最初のリリースには含ま�
 | Docker Compose | コンテナを起動して接続先を確認します。[Dockerの初回設定](docs/DOCKER.ja.md#install-without-cloning) |
 | Linuxサーバー | systemdサービスを起動し、起動時に表示される接続先を確認します。[サーバーの初回設定](docs/DISTRIBUTION.ja.md#systemd) |
 
-起動したら[クイック使用方法](#quick-usage)に進みます。
+起動したら[クイック使用方法](#quick-usage)に進みます。アンインストールについては[こちら](#uninstall)をご覧ください。
 
 <a id="quick-usage"></a>
 ## クイック使用方法
@@ -127,18 +127,24 @@ ssh -N -L 127.0.0.1:18080:127.0.0.1:18080 your-server
 <a id="uninstall"></a>
 ## アンインストール
 
-設定と録画はデフォルトで保持されます。削除する前に FlintEye を完全に終了してください。ブラウザを閉じても監視は継続して実行されます。
+**アカウント、設定、録画はデフォルトで保持されます。** 削除する前に FlintEye を完全に終了してください。ブラウザを閉じたり **Stop monitoring** を選択してもアプリケーションは実行されたままになります。ワンコマンドスクリプトはバイナリインストーラーと同じネイティブパッケージをインストールするため、削除方法も同一です。
 
 | インストール方法 | アプリケーションの削除 |
 | --- | --- |
-| Windows スクリプトまたは EXE | **Settings → Apps → Installed apps → FlintEye → Uninstall**。 |
-| macOS スクリプト | メニューバーアイコン → **Disable start at login and quit** を選択し、`~/Applications/FlintEye.app` をゴミ箱に移動します。ロールバック用のコピーが不要な場合は、そこにある `FlintEye.previous.app` も削除してください。 |
-| macOS DMG | 同様に終了操作を行った後、`/Applications/FlintEye.app` をゴミ箱に移動します（または選択した場所）。 |
-| Linux スクリプトまたは DEB/RPM | ログイン起動を無効にして終了した後、`sudo apt-get remove flinteye` または `sudo dnf remove flinteye` を実行します。 |
-| Docker Compose | デプロイメントフォルダから `docker compose down` を実行します。Docker Desktop の場合は `docker compose -f deploy/compose.desktop.yaml down` を実行します。データボリュームは保持されます。 |
-| systemd / ソース | 最初にサービスを停止および無効化し、その中のデータを保持した上でパッケージまたは専用のソース環境を削除します。 |
+| Windows スクリプト / EXE / Actions パッケージ | Windows 11: **設定 → アプリ → インストールされているアプリ**。Windows 10: **設定 → アプリ → アプリと機能**。**FlintEye → アンインストール**を選択し、データ保持の選択はデフォルトのままにします。 |
+| macOS スクリプト | メニューバーアイコン → **Disable start at login and quit** を選択し、`~/Applications/FlintEye.app` をゴミ箱に移動します（またはカスタムインストールフォルダを使用）。ロールバック用のコピーが不要な場合は `FlintEye.previous.app` も削除してください。 |
+| macOS DMG / ローカルビルド DMG | **Disable start at login and quit** を選択し、`/Applications/FlintEye.app` をゴミ箱に移動します（または選択したフォルダから削除）。 |
+| Linux スクリプト / DEB | ログイン起動を無効にして終了し、`sudo apt-get remove flinteye` を実行します。 |
+| Linux スクリプト / RPM | ログイン起動を無効にして終了し、`sudo dnf remove flinteye` を実行します。 |
+| Docker Engine, ダウンロードした `compose.yaml` | 元のデプロイメントフォルダで `docker compose down` を実行します。 |
+| Docker Desktop, ダウンロードした `compose.desktop.yaml` | 元のデプロイメントフォルダで `docker compose -f compose.desktop.yaml down` を実行します。ソースチェックアウトの場合は `-f deploy/compose.desktop.yaml` を使用してください。 |
+| 開発用 Docker | チェックアウトのルートから `docker compose -f deploy/compose.dev.yaml down` を実行します。 |
+| systemd | `sudo systemctl disable --now flinteye` を実行し、[手動インストールしたサービスとアプリケーションを削除](docs/STOP_AND_UNINSTALL.ja.md#systemd)します。 |
+| 手動ソース / 仮想環境 | ログイン起動を無効にし、ランチャー/ターミナルプロセスやサービスを停止してから、データを保持した上で専用のチェックアウトおよび仮想環境を削除します。[ソースの削除 →](docs/STOP_AND_UNINSTALL.ja.md#manual-source-and-virtual-environment) |
 
-[完全な削除コマンド、データの保存場所、古いインストールの復元 →](docs/STOP_AND_UNINSTALL.ja.md)
+ネイティブアプリの削除では、同梱されているPython/FastAPI、FFmpeg、FFprobe、MediaMTXも削除されます。Dockerは `down` 後もデータボリュームとキャッシュされたイメージを保持します。[Dockerの削除](docs/STOP_AND_UNINSTALL.ja.md#docker-compose)を参照してください。データの消去は、別途明確な選択が必要です。
+
+[完全な削除ガイド：データの保存場所、オプションのデータ消去、起動設定の復旧、LAN証明書の削除 →](docs/STOP_AND_UNINSTALL.ja.md)
 
 <a id="documentation"></a>
 ## ドキュメント
