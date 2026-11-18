@@ -3,6 +3,24 @@
 
 [English](STOP_AND_UNINSTALL.md) · [Documentation](README.ja.md) · [Installation](INSTALL.ja.md)
 
+<a id="remove-by-installation-method"></a>
+## インストール方法別の削除
+
+**意図的に消去しない限り、アカウント、設定、録画は保持されます。** 1コマンドのインストーラーは、バイナリインストーラーと同じネイティブアプリケーションをインストールします。そのバンドルされたPython/FastAPI、FFmpeg、FFprobe、およびMediaMTXはアプリケーションと共に削除されます。他のソフトウェアで使用されているシステム全体のコピーは削除しないでください。
+
+| インストール方法 | 停止と削除 |
+| --- | --- |
+| Windowsスクリプト / EXE / Actionsパッケージ | **Quit FlintEye** を選択し、**Settings → アプリ → インストールされているアプリ → FlintEye → アンインストール** を選択します。実行中の場合、アンインストーラーが自動的にシャットダウンを要求します。データ保持のデフォルト選択を維持してください。 |
+| macOSスクリプト / Actions `install.sh` | メニューバーアイコン → **Disable start at login and quit** を選択します。Finderで **移動 → フォルダへ移動** を選択し、`~/Applications` と入力して、`FlintEye.app` をゴミ箱に移動します。存在する場合は、ロールバックで不要になった `FlintEye.previous.app` も削除してください。 |
+| macOS DMGドラッグ＆ドロップ | 同様に終了アクションを行い、`/Applications/FlintEye.app` をゴミ箱に移動するか、選択したフォルダからアプリを削除します。不要になったらDMGを取り出し、ダウンロードしたDMGを削除してください。 |
+| Linuxスクリプト / DEB / RPM | FlintEyeでログイン起動を無効にして終了し、`sudo apt-get remove flinteye` (DEB) または `sudo dnf remove flinteye` (RPM) を実行します。 |
+| Docker Engine / 開発用Compose | デプロイフォルダで `docker compose down` を実行するか、ソースデプロイメントの場合は `docker compose -f deploy/compose.dev.yaml down` を実行します。データボリュームやバインドマウントされたデータは保持されます。 |
+| Docker Desktop Compose | インストール時に使用したComposeファイルを使用します。チェックアウトから `docker compose -f deploy/compose.desktop.yaml down` を実行するか、そのファイルを個別にダウンロードした場合は `docker compose -f compose.desktop.yaml down` を実行します。 |
+| systemd | `sudo systemctl disable --now flinteye` を実行します。その後、手動でインストールした `/etc/systemd/system/flinteye.service` を削除し、`sudo systemctl daemon-reload` を実行してから、上記のようにパッケージを削除します。`/var/lib/flinteye` と外部の録画フォルダは保持してください。ユーザーサービスの場合は、`systemctl --user` とその実際のユニット名および場所を使用してください。 |
+| 手動ソース / 仮想環境 | フォアグラウンドプロセスを Ctrl+C で停止するか、設定したサービスを停止および無効化します。専用のチェックアウト/仮想環境を削除する前に、チェックアウト内の録画、`.env`、ランタイムJSON、およびその他のデータを保持してください。 |
+
+`docker compose down` は名前付きボリュームを保持します。データを削除する意図がない限り、`--volumes` / `-v` を追加しないでください。ダウンロードしたインストーラーやActionsのZIPファイルも個別に削除可能です。`/Applications/FlintEye.app` と `~/Applications/FlintEye.app` の両方が存在する場合は、これらは別々のコピーです。アクティブな方を終了し、不要になった各コピーを削除してください。検証中に古いコピーを起動しないように注意してください。
+
 <a id="stop-monitoring-and-quit"></a>
 ## Stop monitoring and quit
 

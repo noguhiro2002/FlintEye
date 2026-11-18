@@ -1,10 +1,17 @@
-# 1.2.0-preview.2 開発およびQAフォローアップ
+# 1.2.0-preview.3 開発およびQAフォローアップ
 
-[English](DEVELOPMENT_1_2_0.md) · [Acceptance](ACCEPTANCE.ja.md) · [LAN access](LAN_ACCESS.ja.md) · [公開前の必須実機チェック（1.2.0）](RELEASE_CHECKLIST_1_2_0.ja.md)
+[English](DEVELOPMENT_1_2_0.md) · [Acceptance](ACCEPTANCE.ja.md) · [Required device checklist](RELEASE_CHECKLIST_1_2_0.ja.md) · [LAN access](LAN_ACCESS.ja.md)
 
 **UNDER DEVELOPMENT。公開版 1.1.3-preview.1 に変更はありません。本ソースは、報告されているWindowsでの障害が所有者のマシンで回復したことを主張するものではありません。**
 
-ベースライン：アプリケーションビルド `25718ed3f06833a1f291992753b4f0538d7dc939`、公開タグ `v1.1.3-preview.1`。実装は main `8e13378` から開始。入力：2026年11月15日付の所有者によるQA rev11。以下の調査結果は、観察された不具合、新規製品リクエスト、未実施のテストを区別して保持しています。アプリケーション 1.2.0 およびリリース v1.2.0-preview.2 は、安定版チャネルではなく、次回のターゲットです。
+ベースライン：アプリケーションビルド `25718ed3f06833a1f291992753b4f0538d7dc939`、公開タグ `v1.1.3-preview.1`。実装は main `8e13378` から開始。入力：2026年11月15日付の所有者によるQA rev11、およびmacOSインストーラーのフォローアップ。アプリケーション 1.2.0 およびリリース v1.2.0-preview.3 は、安定版チャネルではなく、現在のテストターゲットです。
+
+## Preview.3: macOSインストールフォローアップ
+
+- 公開されているワンコマンドURLは引き続き 1.1.3-preview.1 をインストールします。READMEは現在、Actionsの各パッケージへ誘導し、オンラインの旧コマンドについて明示しています。各OSの成果物には独自のバージョン固定スクリプト、`validation-build.json`、および `SHA256SUMS` が含まれているため、テストには数GBのリリースバンドル全体は不要になりました。
+- macOSのカメラ検出では、モードを問い合わせる前に `Capture screen` を除外します。ワーカーの起動時に保存されたインデックスを有効なカメラ名に解決し、キャプチャ前にディスプレイや切断されたデバイスの選択を拒否します。対応モードの問い合わせにはカメラ名を使用して、カメラの取り外し時にディスプレイが選択されてしまう競合を回避します。これは繰り返される画面録画のリクエストに対処するためのもので、ネイティブの権限動作については依然として所有者のMacでの再テストが必要です。
+- 初期パスワード入力はブラウザ内で行われます。ネイティブのセットアップ支援には正確なプレビュー版が表示されます。バンドルメタデータ、ランタイムネイティブダイアログ、およびDockにはFlintEyeアイコンが使用されます。スクリプトはインストールされた正確なアプリのコピーを登録します。Informationにはプレビュー番号まで表示され、認証付きのRTSPSカメラアドレスと、内部処理用のアドレスを区別できます。
+- READMEおよび削除ガイドには、スクリプト、ネイティブパッケージ、Docker、systemd、およびソースの削除手順が記載されており、デフォルトでデータは保持されます。古い `/Applications` のコピーとスクリプトによる `~/Applications` のコピーは共存可能なため、それぞれを削除するか、意図的に保持してください。
 
 | QA章 | 実装およびエビデンスの状態 |
 | --- | --- |
@@ -45,13 +52,13 @@ Pythonスイート、フロントエンドビルド/ブラウザスイート、�
 Windows PowerShell（展開したバンドルディレクトリから実行）:
 
 ```powershell
-.\public\install.ps1 -Version 1.2.0-preview.2 -PackageDirectory .\public
+.\public\install.ps1 -Version 1.2.0-preview.3 -PackageDirectory .\public
 ```
 
 macOS または Linux（展開したバンドルディレクトリから実行）:
 
 ```sh
-bash public/install.sh --version 1.2.0-preview.2 --package-directory public
+bash public/install.sh --version 1.2.0-preview.3 --package-directory public
 ```
 
 このインストールを同じフォルダ内のスタンドアロンインストーラーと比較し、両方の SHA-256 値が一致することを確認してください。バージョンとソースコミットは固定してください。パブリックダウンロードコマンドは、1.2.0 の承認が完了するまで、現在公開されている 1.1.3 リリースに固定されたままです。GHCR 公開前にコンテナをテストするには、対応する `containers/container-amd64.tar.gz` または `container-arm64.tar.gz` を読み込み、Compose を使用する前に `FLINTEYE_IMAGE=flinteye:release-amd64` または `flinteye:release-arm64` を設定してください。ダウンロードした Compose ファイルにある将来の GHCR タグを、すでに公開されているイメージと見間違えないように注意してください。
