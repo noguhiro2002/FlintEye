@@ -4,9 +4,20 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from flinteye_app import macos_lifecycle
+from flinteye_app.desktop_icon import apply_application_icon
 
 
 class MacQuitTests(unittest.TestCase):
+    def test_native_dialog_restores_the_running_application_icon(self):
+        image, application = Mock(), Mock()
+        appkit = SimpleNamespace(NSImage=Mock(), NSApplication=Mock())
+        appkit.NSImage.alloc.return_value.initWithContentsOfFile_.return_value = image
+        appkit.NSApplication.sharedApplication.return_value = application
+        with patch.dict(sys.modules, {'AppKit': appkit}), patch('sys.platform', 'darwin'):
+            apply_application_icon()
+        application.setApplicationIconImage_.assert_called_once_with(image)
+        self.assertTrue(appkit.NSImage.alloc.return_value.initWithContentsOfFile_.call_args.args[0].endswith('flinteye.icns'))
+
     def check_quit(self, appkit):
         application = appkit.NSApplication.sharedApplication()
         previous = application.delegate()

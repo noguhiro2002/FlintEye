@@ -2,7 +2,7 @@
 
 **FlintEyeは現在開発中です。これは安定版ではなく開発プレビューです。テストには開発プレビューをご利用ください。**
 
-現在の開発版は **1.2.0-preview.2** です。ビルドが完了すると、検証用インストーラーを [GitHub Actions](https://github.com/noguhiro2002/FlintEye/actions/workflows/build-release.yml) から取得できます。下のクイックインストールは公開済みのプレビュー版を使います。
+現在の開発版は **1.2.0-preview.3** です。ビルドが完了すると、検証用インストーラーを [GitHub Actions](https://github.com/noguhiro2002/FlintEye/actions/workflows/build-release.yml) から取得できます。**公開されている 1.1.3-preview.1 スクリプトは古いアプリをインストールするものであり、1.2.0 のセットアップ、アイコン、ネットワークストリームの変更は含まれていません。**
 
 [既知の問題](docs/KNOWN_ISSUES.ja.md) · [バグを報告する](https://github.com/noguhiro2002/FlintEye/issues) · [質問とアイデア](https://github.com/noguhiro2002/FlintEye/discussions)
 
@@ -30,6 +30,21 @@ USBカメラやIPカメラの監視、ライブ映像の視聴、録画の検索
 <a id="quick-install"></a>
 ## クイックインストール
 
+### 現在の修正をテストする：1.2.0-preview.3
+
+1. [GitHub Actions](https://github.com/noguhiro2002/FlintEye/actions/workflows/build-release.yml) で **1.2.0-preview.3** の成功した **Build release** 実行を開きます。お使いのコンピュータ用のアーティファクト（Apple Silicon Macの場合は `build-macos-arm64`、Intel Macの場合は `build-macos-amd64`、または `build-windows-ARCH` / `build-linux-ARCH`）をダウンロードして展開します。Actions のアーティファクトのダウンロードには GitHub へのサインインが必要です。
+2. 既存の FlintEye を終了し、展開したフォルダ内でターミナルを開き、以下のコマンドを実行します。これらのスクリプトは、ダウンロードしたパッケージとそのチェックサムを使用し、古い公開リリースをダウンロードすることはありません。
+
+| コンピュータ | 展開したフォルダ内でのコマンド |
+| --- | --- |
+| macOS / Linux | `bash ./install.sh --package-directory .` |
+| Windows PowerShell | `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -PackageDirectory .` |
+
+または、同じフォルダから EXE、DMG、DEB、RPM を開きます。アプリ内で **Information → System** を開き、`1.2.0-preview.3` を確認してください。その後、[クイック使用方法](#quick-usage)に進みます。[削除の手順](#uninstall)はどちらの方法でも適用されます。
+
+<details>
+<summary><strong>古い公開プレビュー：1.1.3-preview.1 — オンラインのワンコマンドインストール</strong></summary>
+
 **開発プレビュー：[v1.1.3-preview.1](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.1.3-preview.1)。** 以下のコマンドは、そのリリースのダウンロードアセットが一覧表示された後に動作します。実機での受け入れ確認は現在進行中です。お使いのコンピュータ用のコマンドを実行し、セットアップに従ってください。Python、FFmpeg、FFprobe、MediaMTXが同梱されているため、Gitのチェックアウトやコンパイルは不要です。
 
 **Windows — PowerShell**
@@ -51,6 +66,8 @@ bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap clean
 ```
 
 また、選択したリリースからスクリプトをダウンロードして内容を確認し、ローカルで実行することもできます。パッケージ版にはPython、FFmpeg、FFprobe、MediaMTXが含まれています。別途インストールする必要はありません。Windows/macOSパッケージは署名なし/公証されていません。[OS確認画面](docs/INSTALL.ja.md#unsigned-packages)をご覧ください。
+
+</details>
 
 <details>
 <summary><strong>その他のインストールオプション</strong> — バイナリパッケージ、Docker、手動インストール</summary>
@@ -124,6 +141,21 @@ ssh -N -L 127.0.0.1:18080:127.0.0.1:18080 your-server
 
 [完全なユーザーガイド →](docs/USER_GUIDE.ja.md)
 
+<a id="uninstall"></a>
+## アンインストール
+
+設定と録画はデフォルトで保持されます。削除する前に FlintEye を完全に終了してください。ブラウザを閉じても監視は継続して実行されます。
+
+| インストール方法 | アプリケーションの削除 |
+| --- | --- |
+| Windows スクリプトまたは EXE | **Settings → Apps → Installed apps → FlintEye → Uninstall**。 |
+| macOS スクリプト | メニューバーアイコン → **Disable start at login and quit** を選択し、`~/Applications/FlintEye.app` をゴミ箱に移動します。ロールバック用のコピーが不要な場合は、そこにある `FlintEye.previous.app` も削除してください。 |
+| macOS DMG | 同様に終了操作を行った後、`/Applications/FlintEye.app` をゴミ箱に移動します（または選択した場所）。 |
+| Linux スクリプトまたは DEB/RPM | ログイン起動を無効にして終了した後、`sudo apt-get remove flinteye` または `sudo dnf remove flinteye` を実行します。 |
+| Docker Compose | デプロイメントフォルダから `docker compose down` を実行します。Docker Desktop の場合は `docker compose -f deploy/compose.desktop.yaml down` を実行します。データボリュームは保持されます。 |
+| systemd / ソース | 最初にサービスを停止および無効化し、その中のデータを保持した上でパッケージまたは専用のソース環境を削除します。 |
+
+[完全な削除コマンド、データの保存場所、古いインストールの復元 →](docs/STOP_AND_UNINSTALL.ja.md)
 
 <a id="documentation"></a>
 ## ドキュメント

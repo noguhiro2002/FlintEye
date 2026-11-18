@@ -43,7 +43,8 @@ elif [ "$os" = Linux ]; then
   esac
   asset="FlintEye-$application_version-linux-$arch.$kind"
   command -v sudo >/dev/null || fail 'sudo is required before downloading the package. Ask your administrator to install it, or download the package for administrator installation. See docs/MANUAL_INSTALL.md.'
-  if [ "$kind" = deb ]; then command -v apt-get >/dev/null || fail 'apt-get is required.'; else command -v dnf >/dev/null || fail 'dnf is required.'; fi
+  if [ "$kind" = deb ]; then manager=apt-get; else manager=dnf; fi
+  command -v "$manager" >/dev/null || fail "$manager is required."
 else
   fail "Unsupported OS: $os"
 fi
@@ -87,6 +88,13 @@ if [ "$os" = Darwin ]; then
   mount_dir="$work/mounted"
   mkdir "$mount_dir"
   hdiutil attach "$work/$asset" -mountpoint "$mount_dir" -nobrowse -readonly -quiet
+  info="$mount_dir/FlintEye.app/Contents/Info.plist"
+  bundled_version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$info")
+  [ "$bundled_version" = "$application_version" ] || fail 'The app inside the DMG has a different version. Nothing was installed.'
+  bundled_release=$(/usr/libexec/PlistBuddy -c 'Print :FlintEyeReleaseVersion' "$info" 2>/dev/null || true)
+  if [ -n "$bundled_release" ] || [[ "$application_version" = 1.2.* ]]; then
+    [ "$bundled_release" = "$version" ] || fail 'The app inside the DMG is a different preview. Nothing was installed.'
+  fi
   stage=$(mktemp -d "$destination/.flinteye-install.XXXXXXXX")
   if ! ditto "$mount_dir/FlintEye.app" "$stage/FlintEye.app"; then
     rm -rf -- "$stage"; fail 'Could not copy the application. The existing app was preserved.'
@@ -103,14 +111,19 @@ if [ "$os" = Darwin ]; then
     rm -rf -- "$stage"; fail 'Could not install the app; the previous app was restored.'
   fi
   rmdir "$stage"
+  # Register this exact installed copy, rather than asking Launch Services to
+  # choose an older app with the same bundle identifier.
+  /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$destination/FlintEye.app" || true
   printf 'Installed FlintEye %s. macOS may ask you to allow this unsigned app in Privacy & Security.\n' "$version"
   if [ "$start_app" = 1 ]; then
     open "$destination/FlintEye.app"
   fi
   printf 'On first launch, choose a trusted network and follow the setup address shown by FlintEye.\n'
+  printf 'To remove: choose Disable start at login and quit, then move %s to Trash. Settings and recordings are kept.\n' "$destination/FlintEye.app"
 else
   if [ "$kind" = deb ]; then sudo apt-get install -y "$work/$asset"; else sudo dnf install -y "$work/$asset"; fi
   printf 'Installed FlintEye %s. Open FlintEye from your application menu.\n' "$version"
+  printf 'To remove after quitting: sudo %s remove flinteye. Settings and recordings are kept.\n' "$manager"
   if [ "$start_app" = 1 ] && [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
     /opt/flinteye/FlintEye </dev/null &
     /opt/flinteye/FlintEye --headless --connection-info ||

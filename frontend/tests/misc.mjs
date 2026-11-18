@@ -14,7 +14,7 @@ const syntheticCameras = [{ id: 'usb1', type: 'uvc', enabled: true, path: 'usb1'
 config.cameras = syntheticCameras.map(({ id, type, enabled, path, display_name, uvc, ip }) => ({ id, type, enabled, path, display_name, uvc, ip }));
 const device = { device_id: '/dev/video99', driver: 'v4l2', display_name: 'Front USB Camera', index: '99', ffmpeg_device: '/dev/video99', ffmpeg_device_index: '99', modes: [{ width: 1280, height: 720, fps: 30 }, { width: 640, height: 480, fps: 15 }], recommended: { width: 1280, height: 720, fps: 30 } };
 const info = { api: { swagger_url: 'http://example.test/docs', redoc_url: 'http://example.test/redoc', openapi_url: 'http://example.test/openapi.json' }, rtsp_base_url: 'rtsp://example.test:8554', webrtc_base_url: 'http://example.test:8889', generated_at: 1700000000, snapshot: { timeout_sec: 5, thumbnail_refresh_interval_sec: 10 }, cameras: [], multiview: { enabled: false, output_prefix: 'multi', tile_count: 4, canvas_width: 1920, canvas_height: 1080, fps: 30, bitrate: '4M', encoder: 'h264', quality_preset: 'balanced' } };
-async function context(scenario, width = 1440, height = 900, colorScheme = 'light') {
+async function context(scenario, width = 1440, height = 900, colorScheme = 'light', streamStatus) {
     const ctx = await browser.newContext({ viewport: { width, height }, colorScheme });
     let errors = [];
     ctx.on('page', p => p.on('pageerror', e => errors.push(String(e))));
@@ -41,7 +41,7 @@ async function context(scenario, width = 1440, height = 900, colorScheme = 'ligh
                 v = { resume_on_startup: false };
                 break;
             case '/api/v1/build':
-                v = { version: '1.1.1', release: '1.1.1', channel: 'stable', commit: null, dirty: false };
+                v = { version: '1.2.0', release: '1.2.0-preview.3', channel: 'preview', commit: null, dirty: false };
                 break;
             case '/api/v1/auth/me':
                 v = { authenticated: scenario === 'admin', role: scenario === 'admin' ? 'admin' : null, username: 'admin', viewer_auth_required: true, setup_required: scenario === 'setup', provider: 'local', local: { viewer_username: 'viewer', admin_username: 'admin' } };
@@ -88,7 +88,12 @@ async function context(scenario, width = 1440, height = 900, colorScheme = 'ligh
                 v = { mediamtx: { running: true, status: 'running', mode: 'direct' }, cameras_enabled: 0, cameras_total: 0, multiview_enabled: false, running_processes: 1, processes: { items: [] } };
                 break;
             case '/api/v1/viewer/info':
-                v = info;
+                v = streamStatus ? { ...info, rtsp_base_url: 'rtsp://127.0.0.1:8554', cameras: [{
+                    id: 'camera', label: 'Test camera', type: 'uvc', enabled: true,
+                    addresses: { rtsp_url: 'rtsp://127.0.0.1:8554/camera',
+                        client_rtsp_url: streamStatus === 'ready' ? 'rtsps://192.168.10.20:8322/camera' : null,
+                        rtsp_status: streamStatus, webrtc_url: '/media/camera' }, settings: {},
+                }] } : info;
                 break;
             case '/api/v1/multiview/status':
                 v = { updated_at: null, views: [] };
@@ -132,6 +137,27 @@ catch (e) {
     process.exitCode = 1;
 } }
 try {
+    await run('preview identity and client-facing RTSPS address', async () => {
+        for (const status of ['ready', 'disabled']) {
+            const { ctx, p } = await context('admin', 1440, 900, 'light', status);
+            try {
+                await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
+                await p.locator('.sidebar').getByRole('button', { name: 'Information', exact: true }).click();
+                await p.getByText('FlintEye 1.2.0-preview.3 · preview', { exact: true }).waitFor();
+                const table = p.locator('.information-camera-table');
+                assert.doesNotMatch(await table.innerText(), /127\.0\.0\.1|8554/);
+                if (status === 'ready') {
+                    await table.getByRole('button', { name: 'Copy', exact: true }).click();
+                    await table.getByRole('status').waitFor();
+                    assert.equal(await p.evaluate(() => navigator.clipboard.readText()), 'rtsps://192.168.10.20:8322/camera');
+                } else {
+                    await table.getByText('Network viewing disabled', { exact: true }).waitFor();
+                    assert.equal(await table.getByRole('button', { name: 'Copy', exact: true }).count(), 0);
+                }
+                assert.equal(await p.getByText('rtsp://127.0.0.1:8554', { exact: true }).isVisible(), false);
+            } finally { await ctx.close(); }
+        }
+    });
     await run('8 encoder search', async () => { let { ctx, p } = await context('admin'); await p.locator('.sidebar').getByRole('button', { name: 'Settings', exact: true }).click(); const search = p.getByRole('searchbox', { name: 'Find a setting' }); await search.fill('Encoder'); await p.waitForTimeout(200); assert.doesNotMatch(await p.locator('.settings-page').innerText(), /0 settings found/i); await ctx.close(); });
     await run('10 mandatory login', async () => { let { ctx, p } = await context('viewer'); assert.equal(await p.getByRole('button', { name: 'Back', exact: true }).count(), 0); await ctx.close(); });
     await run('13 unsaved summary', async () => { let { ctx, p } = await context('admin'); await p.locator('.sidebar').getByRole('button', { name: 'Settings', exact: true }).click(); let nav = p.getByRole('complementary', { name: 'Settings categories' }); await nav.getByRole('button', { name: 'General', exact: true }).click(); await p.getByRole('textbox', { name: /^App Title/ }).fill('Draft'); await nav.getByRole('button', { name: 'Quick settings', exact: true }).click(); const recording = p.locator('.quick-setting-row').filter({ hasText: 'Recording' }).getByRole('checkbox'); await recording.uncheck(); const txt = await p.locator('.settings-page').innerText(); assert.doesNotMatch(txt, /1 pending change\b/i); await ctx.close(); });

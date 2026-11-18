@@ -9,7 +9,7 @@ import subprocess
 import sys
 import platform
 import tarfile
-from release_lib import version, binary_architecture
+from release_lib import version, binary_architecture, release_identity
 from collect_licenses import collect
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -18,6 +18,7 @@ parser.add_argument('--vendor', type=Path, required=True, help='Directory contai
 args = parser.parse_args()
 vendor = args.vendor.resolve()
 app_version = version()
+release_version, release_channel = release_identity()
 architecture = {'x86_64': 'amd64', 'amd64': 'amd64', 'aarch64': 'arm64', 'arm64': 'arm64'}.get(platform.machine().lower())
 if architecture is None:
     raise SystemExit('Only native x86-64 and ARM64 builds are supported')
@@ -53,7 +54,8 @@ dirty = False
 if (ROOT / '.git').exists():
     commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     dirty = bool(subprocess.check_output(['git', 'status', '--porcelain', '--untracked-files=no'], cwd=ROOT, text=True).strip())
-identity.write_text(json.dumps({'commit': commit, 'dirty': dirty}) + '\n')
+identity.write_text(json.dumps({'version': app_version, 'release': release_version,
+                                'channel': release_channel, 'commit': commit, 'dirty': dirty}) + '\n')
 sep = os.pathsep
 command = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', '--onedir', '--name', 'FlintEye',
            '--exclude-module', 'readline',
@@ -97,6 +99,8 @@ if sys.platform == 'darwin':
     shutil.copy2(ROOT / 'images/icons/flinteye.icns', icon)
     payload = plistlib.loads(info.read_bytes())
     payload.update({'CFBundleIconFile': icon.name,
+                    'CFBundleName': 'FlintEye', 'CFBundleDisplayName': 'FlintEye',
+                    'FlintEyeReleaseVersion': release_version,
                     'NSCameraUsageDescription': 'FlintEye uses connected cameras for live monitoring and recording.',
                     'NSMicrophoneUsageDescription': 'FlintEye captures sound only for cameras with audio enabled.',
                     'LSMinimumSystemVersion': '14.0',

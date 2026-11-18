@@ -77,6 +77,10 @@ def _parse_avfoundation_devices(text: str) -> list[dict[str, Any]]:
             continue
         idx = m.group(1).strip()
         name = m.group(2).strip()
+        # FFmpeg lists displays beside cameras. Probing a display opens an
+        # AVCaptureScreenInput and requests Screen Recording permission.
+        if re.match(r"Capture screen\s+\d+\b", name, flags=re.IGNORECASE):
+            continue
         device_id = f"avfoundation-{idx}-{_slug(name)}"
         devices.append(
             {
@@ -91,6 +95,30 @@ def _parse_avfoundation_devices(text: str) -> list[dict[str, Any]]:
             }
         )
     return devices
+
+
+def avfoundation_camera_device(ffmpeg_bin: str, device: str) -> str:
+    """Resolve saved indices to camera names before FFmpeg can select a display.
+
+    A disconnected camera can leave its former index pointing at Capture screen.
+    Enumeration only lists devices; it never opens a capture session.
+    """
+    result = _run_capture([ffmpeg_bin, "-hide_banner", "-f", "avfoundation",
+                           "-list_devices", "true", "-i", ""], DEFAULT_PROBE_TIMEOUT_SEC)
+    devices = _parse_avfoundation_devices((result.stdout or "") + "\n" + (result.stderr or ""))
+    selector = device.rsplit(":", 1)[0] if ":" in device else device
+    for item in devices:
+        if selector in {item["index"], item["display_name"]} or selector == "default":
+            _validate_avfoundation_name(item["display_name"])
+            return item["ffmpeg_device"]
+    raise UvcProbeError("The selected input is not an available camera. Select a camera in Settings; screen capture is not supported.")
+
+
+def _validate_avfoundation_name(name: str) -> None:
+    # AVFoundation's FFmpeg input treats a leading number as an index, even
+    # when it is followed by a camera name. Never let that select a display.
+    if re.match(r"\s*[+-]?\d", name) or ":" in name:
+        raise UvcProbeError("FFmpeg cannot safely select this camera by name. Use a camera name without a leading number or colon; screen capture is disabled.")
 
 
 def _parse_avfoundation_modes(text: str) -> list[dict[str, Any]]:
@@ -253,7 +281,8 @@ def _probe_v4l2_devices(ffmpeg_bin: str, timeout_sec: float) -> list[dict[str, A
     return devices
 
 
-def _probe_avfoundation_modes(ffmpeg_bin: str, device_index: str, timeout_sec: float) -> list[dict[str, Any]]:
+def _probe_avfoundation_modes(ffmpeg_bin: str, device_name: str, timeout_sec: float) -> list[dict[str, Any]]:
+    _validate_avfoundation_name(device_name)
     result = _run_capture(
         [
             ffmpeg_bin,
@@ -267,7 +296,7 @@ def _probe_avfoundation_modes(ffmpeg_bin: str, device_index: str, timeout_sec: f
             "-video_size",
             "999x999",
             "-i",
-            f"{device_index}:none",
+            f"{device_name}:none",
             "-frames:v",
             "1",
             "-f",
@@ -296,11 +325,14 @@ def probe_uvc_devices(
         devices = _parse_avfoundation_devices(text)
         mode_timeout_sec = max(1.0, min(timeout_sec, 3.0))
         for device in devices:
-            index = str(device.get("index") or "").strip()
-            if not index:
-                continue
             try:
-                modes = _probe_avfoundation_modes(ffmpeg_bin, index, mode_timeout_sec)
+                # A name cannot become a display index if a camera disconnects
+                # between enumeration and this capability query.
+                modes = _probe_avfoundation_modes(ffmpeg_bin, device["display_name"], mode_timeout_sec)
+            except UvcProbeError as error:
+                device["modes"] = []
+                device["mode_warning"] = str(error)
+                continue
             except (subprocess.TimeoutExpired, OSError):
                 modes = []
             device["modes"] = modes

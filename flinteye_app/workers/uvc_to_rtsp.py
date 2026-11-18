@@ -660,6 +660,15 @@ def main() -> int:
         print(str(e), file=sys.stderr)
         return 2
 
+    if input_driver == "avfoundation":
+        from flinteye_app.orchestrator_uvc_probe import avfoundation_camera_device, UvcProbeError
+        try:
+            args.device = avfoundation_camera_device(
+                args.ffmpeg_bin, args.device or default_device_for_driver(input_driver))
+        except (UvcProbeError, OSError, subprocess.SubprocessError) as error:
+            print(str(error), file=sys.stderr)
+            return 2
+
     if not args.fontfile:
         auto_font = find_default_fontfile()
         if auto_font:

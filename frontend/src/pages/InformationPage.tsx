@@ -81,7 +81,7 @@ export function InformationPage({ api }: InformationPageProps): JSX.Element {
         <>
           <div className="section">
             <h3>System</h3>
-            <p>FlintEye {build?.version ?? 'version unavailable'} · {build?.channel ?? 'channel unavailable'}</p>
+            <p>FlintEye {build?.release ?? build?.version ?? 'version unavailable'} · {build?.channel ?? 'channel unavailable'}</p>
             <p className="panel-note">Build: <code>{build?.commit ?? 'source commit not recorded'}</code>{build?.dirty ? ' (local changes)' : ''}</p>
             <div className="form-grid">
               <label>
@@ -103,10 +103,6 @@ export function InformationPage({ api }: InformationPageProps): JSX.Element {
                 </a>
               </label>
               <label>
-                Internal RTSP Base URL
-                <input value={info.rtsp_base_url} readOnly />
-              </label>
-              <label>
                 WebRTC Base URL
                 <input value={info.webrtc_base_url} readOnly />
               </label>
@@ -123,10 +119,16 @@ export function InformationPage({ api }: InformationPageProps): JSX.Element {
                 <input value={`${info.snapshot.thumbnail_refresh_interval_sec}s`} readOnly />
               </label>
             </div>
+            <details>
+              <summary>Internal media address (on the server only)</summary>
+              <p className="panel-note">This address is for internal publishing and diagnostics. For a player on another device, use the camera's RTSPS address below.</p>
+              <code>{info.rtsp_base_url}</code>
+            </details>
           </div>
 
           <div className="section">
             <h3>Cameras</h3>
+            <p className="panel-note">For VLC or another network player, enable LAN access and RTSPS in Settings → Runtime &amp; access, then use the reader credentials and trust the server certificate. WebRTC opens in your browser.</p>
             {info.cameras.length === 0 && <p className="panel-note">No cameras are configured. An administrator can add cameras in Settings.</p>}
             <div className="table-scroll">
             <table className="table responsive-table information-camera-table">
@@ -212,7 +214,7 @@ export function InformationPage({ api }: InformationPageProps): JSX.Element {
                   <thead>
                     <tr>
                       <th>View</th>
-                      <th>RTSP</th>
+                      <th>Internal RTSP (server only)</th>
                       <th>WebRTC</th>
                       <th>Sources</th>
                     </tr>
@@ -221,7 +223,7 @@ export function InformationPage({ api }: InformationPageProps): JSX.Element {
                     {info.multiview.views.map((view) => (
                       <tr key={view.id}>
                         <td data-label="View">{view.id}</td>
-                        <td data-label="RTSP"><code>{view.rtsp_url}</code></td>
+                        <td data-label="Internal RTSP (server only)"><code>{view.rtsp_url}</code></td>
                         <td data-label="WebRTC">
                           <a href={view.webrtc_url} target="_blank" rel="noreferrer">
                             {view.webrtc_url}

@@ -149,6 +149,8 @@ def _confirm_force_quit():
 
 def _run_tray(url, server, root, controller, actions):
     import pystray
+    from flinteye_app.desktop_icon import apply_application_icon
+    apply_application_icon()
     from flinteye_app.cli import autostart_status
     snapshot = controller.status()
     startup = autostart_status()

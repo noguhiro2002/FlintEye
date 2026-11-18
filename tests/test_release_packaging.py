@@ -19,9 +19,24 @@ sys.path.insert(0, str(ROOT / 'packaging'))
 import release
 from container_sources import package_owner
 from release_lib import REPOSITORY, version, binary_architecture
+from validation_install import prepare as prepare_validation_install
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_per_os_validation_download_has_pinned_scripts_and_checksums(self):
+        prepare_validation_install(self.inputs, self.commit)
+        identity = json.loads((self.inputs/'validation-build.json').read_text())
+        self.assertEqual(identity['commit'], self.commit)
+        for name in ('install.sh', 'install.ps1'):
+            self.assertIn(identity['release'], (self.inputs/name).read_text())
+            self.assertNotIn('@RELEASE_VERSION@', (self.inputs/name).read_text())
+        checksums = dict((line.split('  ', 1)[1], line.split('  ', 1)[0])
+                         for line in (self.inputs/'SHA256SUMS').read_text().splitlines())
+        for name, expected in checksums.items():
+            self.assertEqual(hashlib.sha256((self.inputs/name).read_bytes()).hexdigest(), expected)
+        self.assertEqual(identity['packages']['FlintEye-'+version()+'-macos-arm64.dmg'],
+                         checksums['FlintEye-'+version()+'-macos-arm64.dmg'])
+
     def test_debian_diversions_are_not_mistaken_for_package_names(self):
         output = ('diversion by libc6 from: /lib64/ld-linux-x86-64.so.2\n'
                   'diversion by libc6 to: /lib64/ld-linux-x86-64.so.2.usr-is-merged\n'

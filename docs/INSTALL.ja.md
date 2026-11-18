@@ -5,7 +5,7 @@
 
 [Documentation](README.ja.md)
 
-**UNDER DEVELOPMENT.** パッケージまたは[クイックインストールコマンド](../README.ja.md#quick-install)を使用して、[1.1.3 開発用プレビュー版](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.1.3-preview.1)をインストールしてください。リンク先のリリースに配布ファイルが掲載されると、ダウンロードできます。これらは安定版リリースとしてではなく、配布URLからのインストールおよび実機のテスト用に提供されています。自動チェックは合格しましたが、実機での受け入れテストは現在も進行中です。[ソース設定](MANUAL_INSTALL.ja.md)、[ローカルでの M1 DMG ビルド](LOCAL_MACOS_BUILD.ja.md)、および[開発用 Docker](DOCKER.ja.md#build-the-development-image)を引き続きご利用いただけます。[受け入れチェック](ACCEPTANCE.ja.md)および[既知の問題](KNOWN_ISSUES.ja.md)を参照してください。
+**UNDER DEVELOPMENT.** To test the current fixes, use the **1.2.0-preview.3 Actions packages and local installer scripts** in [Quick Install](../README.md#quick-install). The public [1.1.3-preview.1 scripts](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.1.3-preview.1) install the old version; the native password window, old icon and internal RTSP display there are not evidence that the new build was installed. Check **Information → System** for the exact preview and source commit. Real-device acceptance is still in progress. [Source setup](MANUAL_INSTALL.ja.md), [local M1 DMG builds](LOCAL_MACOS_BUILD.ja.md) and [development Docker](DOCKER.ja.md#build-the-development-image) remain available. See [acceptance checks](ACCEPTANCE.ja.md) and [known issues](KNOWN_ISSUES.ja.md).
 
 <a id="choose-a-package"></a>
 ## パッケージの選択
@@ -24,7 +24,7 @@ ARCH は `amd64` または `arm64` です。これらは受け入れターゲッ
 <a id="desktop-installation"></a>
 ## デスクトップへのインストール
 
-- **Windows:** EXEを開き、セットアップに従って管理者パスワードを選択します。インストールはユーザーごとに行われ、スタートメニューのエントリが作成されます。
+- **Windows:** EXEを開き、セットアップに従います。現在のビルドでは、管理者パスワードの入力にブラウザが開きます。インストールはユーザーごとに行われ、スタートメニューのエントリが作成されます。
 - **macOS:** DMGを開き、FlintEyeをアプリケーションフォルダにドラッグして開きます。ワンコマンドインストーラーは、個人の `~/Applications` フォルダを使用します。
 - **Linux:** パッケージマネージャーで DEB/RPM を開き、アプリケーションメニューから FlintEye を起動します。パッケージのインストールには管理者権限が必要です。
 
@@ -34,6 +34,11 @@ ARCH は `amd64` または `arm64` です。これらは受け入れターゲッ
 
 <a id="included-media-tools-and-macos-recovery"></a>
 ## 付属のメディアツールと macOS のリカバリ
+
+<a id="screen-recording-requests-in-older-previews"></a>
+### Screen Recording requests in older previews
+
+FlintEye does not record your desktop. Older camera discovery included FFmpeg's `Capture screen` inputs and opened them while querying camera modes, causing repeated **Screen Recording** permission dialogs. In **1.2.0-preview.3**, screen inputs are excluded before probing. Saved camera indices are checked before capture too, so a removed camera cannot make its old index select the screen. OBS virtual cameras remain supported as camera inputs. You do not need to grant Screen Recording permission to FlintEye; microphone access is separate and is used only when camera audio is enabled. Confirm absence of repeated prompts on your Mac as part of physical-device QA.
 
 デスクトップパッケージには **MediaMTX、FFmpeg、FFprobe** が含まれています。個別の Homebrew や MediaMTX のインストールは不要です。macOS アプリでは、実行ファイルは `FlintEye.app/Contents/Frameworks/bin/` にあります。以前のプライベート ARM64 ビルドは検査され、3つすべてが含まれていました。
 
@@ -65,7 +70,7 @@ Gatekeeper をグローバルに無効にしたり、インストーラースク
 <a id="install-a-specific-version"></a>
 ## 特定のバージョンのインストール
 
-正確なプレビューリリースからインストーラーまたはコマンドスクリプトを直接ダウンロードします。プレビューリリースは GitHub の `releases/latest` URL では返されません。
+正確なプレビューリリースからインストーラーまたはコマンドスクリプトを directly ダウンロードします。プレビューリリースは GitHub の `releases/latest` URL では返されません。
 
 そのリリースから `install.sh` または `install.ps1` をダウンロードして、ローカルで実行します。
 生成される各スクリプトは、自身のリリースバージョンを固定します。オプションの `--version 1.1.3-preview.1`（シェル）または `-Version 1.1.3-preview.1`（PowerShell）によってその正確な開発リリースが選択され、`X.Y.Z` によって利用可能な場合に安定版リリースが選択されます。タグにはプレビューサフィックスが含まれますが、インストーラーのファイル名には数値のアプリケーションバージョン（`1.1.3`）が使用されます。`--no-start` / `-NoStart` は、アプリケーションを起動せずにインストールします。
@@ -74,6 +79,8 @@ Gatekeeper をグローバルに無効にしたり、インストーラースク
 
 <a id="update-and-remove"></a>
 ## 更新とアンインストール
+
+The same removal method applies whether a script or a binary installer installed the package. macOS script installs go to `~/Applications`; dragging from the DMG normally installs to `/Applications`. [Removal by installation method](STOP_AND_UNINSTALL.md#remove-by-installation-method) lists both locations, Linux commands, Docker, systemd and source removal. Keep your data unless you deliberately choose to erase it.
 
 完全な停止、Windows のアンインストール動作、プログラム/データの場所、およびプロセスを実行し続ける古いインストーラーからの回復については、[FlintEye の停止とアンインストール](STOP_AND_UNINSTALL.ja.md)を参照してください。
 

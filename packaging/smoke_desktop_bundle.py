@@ -17,7 +17,7 @@ import time
 
 import httpx
 
-from release_lib import version
+from release_lib import version, release_identity, digest
 
 ROOT = Path(__file__).resolve().parents[1]
 PASSWORD = 'synthetic-bundle-password'
@@ -38,9 +38,29 @@ def installed_executable(directory: Path):
     try:
         from verify_macos import verify_app, assess_gatekeeper
         verify_app(mount/'FlintEye.app')
-        shutil.copytree(mount/'FlintEye.app', installed, symlinks=True)
     finally:
         subprocess.run(['hdiutil', 'detach', str(mount)], check=True, timeout=60)
+    # Exercise the same checksum-staged script users run, without a release URL
+    # or first-launch interaction. Never replace an existing runner app.
+    destination = Path.home()/'Applications/FlintEye.app'
+    if destination.exists() or destination.is_symlink():
+        raise AssertionError('One-command smoke test requires an unused app destination')
+    inputs = directory/'installer-input'
+    inputs.mkdir()
+    (inputs/'SHA256SUMS').write_text(f'{digest(dmg)}  {dmg.name}\n')
+    (inputs/dmg.name).symlink_to(dmg)
+    try:
+        subprocess.run(['bash', str(ROOT/'packaging/install.sh'), '--version', release_identity()[0],
+                        '--package-directory', str(inputs), '--no-start'], check=True, timeout=180)
+        verify_app(destination)
+        quarantine = subprocess.check_output(['xattr', '-p', 'com.apple.quarantine', str(destination)], text=True)
+        assert quarantine.startswith('0083;'), 'Installer must retain the normal Gatekeeper decision'
+        installed.parent.mkdir(parents=True)
+        shutil.move(str(destination), str(installed))
+        print('PASS: macOS one-command local-artifact installation, preview identity, icon and quarantine')
+    finally:
+        if destination.exists():
+            shutil.rmtree(destination)
     verify_app(installed)
     assess_gatekeeper(installed, ROOT/f'dist/FlintEye-{version()}-macos-{architecture}-signature.json')
     # A real integrity check must reject modified final-bundle resources.
@@ -107,6 +127,7 @@ def check_application(executable: Path, profile: Path, cwd: Path, *, first_run: 
                 assert client.get('/api/v1/desktop/startup').status_code == 403, 'Headless mode exposed login-start settings'
                 identity = client.get('/api/v1/build').json()
                 assert identity['version'] == version() and identity['commit'], identity
+                assert identity['release'] == release_identity()[0], identity
                 runtime = client.get('/api/v1/config/effective')
                 assert runtime.status_code == 200
                 active_listener = client.get('/api/v1/status/listener').json()

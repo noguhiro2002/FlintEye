@@ -2,7 +2,7 @@
 
 **FlintEye is under active development. This is a development preview, not a stable release. Use development previews for testing.**
 
-The current development build is **1.2.0-preview.2**. Get test installers from [GitHub Actions](https://github.com/noguhiro2002/FlintEye/actions/workflows/build-release.yml) after the build succeeds. The Quick Install commands below use the published preview.
+The current development build is **1.2.0-preview.3**. Get its test installers from [GitHub Actions](https://github.com/noguhiro2002/FlintEye/actions/workflows/build-release.yml) after the build succeeds. **The published 1.1.3-preview.1 scripts install the older app; they do not include the 1.2.0 setup, icon or network-stream changes.**
 
 [Known issues](docs/KNOWN_ISSUES.md) · [Report a bug](https://github.com/noguhiro2002/FlintEye/issues) · [Questions and ideas](https://github.com/noguhiro2002/FlintEye/discussions)
 
@@ -29,6 +29,21 @@ Monitor USB and IP cameras, watch live video, and find recordings in your browse
 
 ## Quick Install
 
+### Test the current fixes: 1.2.0-preview.3
+
+1. Open a successful **Build release** run for **1.2.0-preview.3** in [GitHub Actions](https://github.com/noguhiro2002/FlintEye/actions/workflows/build-release.yml). Download and extract the artifact for your computer: `build-macos-arm64` for an Apple Silicon Mac, `build-macos-amd64` for an Intel Mac, or `build-windows-ARCH` / `build-linux-ARCH`. GitHub requires sign-in to download Actions artifacts.
+2. Quit your existing FlintEye, open a terminal in the extracted folder, and run the command below. These scripts use the downloaded package and its checksum; they do not download the older public release.
+
+| Computer | Command in the extracted folder |
+| --- | --- |
+| macOS / Linux | `bash ./install.sh --package-directory .` |
+| Windows PowerShell | `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -PackageDirectory .` |
+
+Alternatively, open the EXE, DMG, DEB or RPM from that same folder. In the app, check **Information → System** for `1.2.0-preview.3`. Then follow [Quick Usage](#quick-usage). [Removal instructions](#uninstall) apply to either route.
+
+<details>
+<summary><strong>Older public preview: 1.1.3-preview.1 — online one-command installation</strong></summary>
+
 **Development preview: [v1.1.3-preview.1](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.1.3-preview.1).** The commands below work once that release lists its download assets. Real-device acceptance is still in progress. Run the command for your computer and follow setup. Python, FFmpeg, FFprobe and MediaMTX are included; no Git checkout or compilation is needed.
 
 **Windows — PowerShell**
@@ -50,6 +65,8 @@ bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap clean
 ```
 
 You can also download the script from the selected release, inspect it, and run it locally. Packaged builds include Python, FFmpeg, FFprobe and MediaMTX. No separate copies are required. Windows/macOS packages are unsigned/not notarized; see [OS confirmation screens](docs/INSTALL.md#unsigned-packages).
+
+</details>
 
 <details>
 <summary><strong>Other Install Options</strong> — binary packages, Docker, manual installation</summary>
@@ -121,6 +138,21 @@ The source for the next development version adds opt-in HTTPS at `https://SERVER
 </details>
 
 [Full user guide →](docs/USER_GUIDE.md)
+
+## Uninstall
+
+Settings and recordings are kept by default. Quit FlintEye completely before removing it; closing the browser leaves monitoring running.
+
+| Installation | Remove the application |
+| --- | --- |
+| Windows script or EXE | **Settings → Apps → Installed apps → FlintEye → Uninstall**. |
+| macOS script | Menu-bar icon → **Disable start at login and quit**, then move `~/Applications/FlintEye.app` to Trash. Remove `FlintEye.previous.app` there too if you no longer need the rollback copy. |
+| macOS DMG | Same quit action, then move `/Applications/FlintEye.app` to Trash (or the location you chose). |
+| Linux script or DEB/RPM | Disable login startup, quit, then `sudo apt-get remove flinteye` or `sudo dnf remove flinteye`. |
+| Docker Compose | From the deployment folder, `docker compose down`. For Docker Desktop, `docker compose -f deploy/compose.desktop.yaml down`. Keep the data volume. |
+| systemd / source | Stop and disable the service first; then remove the package or dedicated source environment after preserving any data inside it. |
+
+[Complete removal commands, data locations and old-installation recovery →](docs/STOP_AND_UNINSTALL.md)
 
 
 ## Documentation

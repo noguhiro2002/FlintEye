@@ -13,7 +13,7 @@ from unittest.mock import patch
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
-from flinteye_app._version import VERSION
+from flinteye_app._version import RELEASE_VERSION
 from flinteye_app.cli import WORKERS
 from flinteye_app.flinteye_runtime import application_dir, worker_command
 from flinteye_app.orchestrator_supervisor import _protected_worker_command
@@ -27,7 +27,7 @@ class LayoutTests(unittest.TestCase):
             env = {k:v for k,v in os.environ.items() if k != 'PYTHONPATH'}
             result = subprocess.run([sys.executable,str(ROOT/'flinteye.py'),'--version'],cwd=cwd,env=env,capture_output=True,text=True,timeout=20)
             self.assertEqual(result.returncode,0,result.stderr)
-            self.assertEqual(result.stdout.strip(),VERSION)
+            self.assertEqual(result.stdout.strip(),RELEASE_VERSION)
             for worker in sorted(WORKERS):
                 with self.subTest(worker=worker):
                     result=subprocess.run([*worker_command(worker),'--help'],cwd=cwd,env=env,capture_output=True,text=True,timeout=20)

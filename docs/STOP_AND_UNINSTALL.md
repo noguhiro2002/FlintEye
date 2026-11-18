@@ -2,6 +2,23 @@
 
 [日本語](STOP_AND_UNINSTALL.ja.md) · [Documentation](README.md) · [Installation](INSTALL.md)
 
+## Remove by installation method
+
+**Keep accounts, settings and recordings unless you deliberately choose to erase them.** A one-command installer installs the same native application as the binary installer. Its bundled Python/FastAPI, FFmpeg, FFprobe and MediaMTX are removed with the application; do not remove system-wide copies used by other software.
+
+| How you installed | Stop and remove |
+| --- | --- |
+| Windows script / EXE / Actions package | Choose **Quit FlintEye**, then **Settings → Apps → Installed apps → FlintEye → Uninstall**. If running, the uninstaller requests shutdown itself. Keep the default data-retention choice. |
+| macOS script / Actions `install.sh` | Menu-bar icon → **Disable start at login and quit**. In Finder choose **Go → Go to Folder**, enter `~/Applications`, and move `FlintEye.app` to Trash. If present, remove `FlintEye.previous.app` when you no longer need it for rollback. |
+| macOS DMG drag-and-drop | Same quit action, then move `/Applications/FlintEye.app` to Trash, or remove the app from the folder you selected. Eject the DMG and remove the downloaded DMG if no longer needed. |
+| Linux script / DEB / RPM | Disable login startup in FlintEye, quit, then run `sudo apt-get remove flinteye` (DEB) or `sudo dnf remove flinteye` (RPM). |
+| Docker Engine / development Compose | In the deployment folder run `docker compose down`, or `docker compose -f deploy/compose.dev.yaml down` for a source deployment. Keep the data volume and any bind-mounted data. |
+| Docker Desktop Compose | Use the same Compose file used at installation: `docker compose -f deploy/compose.desktop.yaml down` from the checkout, or `docker compose -f compose.desktop.yaml down` if you downloaded that file separately. |
+| systemd | Run `sudo systemctl disable --now flinteye`. Then remove the manually installed `/etc/systemd/system/flinteye.service`, run `sudo systemctl daemon-reload`, and remove the package as above. Preserve `/var/lib/flinteye` and external recording folders. For a user service, use `systemctl --user` and its actual unit name and location. |
+| Manual source / virtual environment | Stop the foreground process with Ctrl+C, or stop and disable the service you configured. Preserve recordings, `.env`, runtime JSON and any other data inside the checkout before removing the dedicated checkout/virtual environment. |
+
+`docker compose down` keeps named volumes. Do not add `--volumes` / `-v` unless you intend to delete data. Downloaded installer/Actions ZIP files can also be removed independently. If both `/Applications/FlintEye.app` and `~/Applications/FlintEye.app` exist, they are separate copies: quit the active one and remove each copy you no longer need. Avoid launching the older copy during verification.
+
 ## Stop monitoring and quit
 
 To exit completely, on Windows choose **Quit FlintEye** from the FlintEye notification-area icon (check the hidden-icons arrow). On macOS, use the FlintEye menu-bar icon. On Linux, use the compact FlintEye control window. **Stop monitoring** instead pauses cameras/recording while leaving settings and the API available; **Start monitoring** resumes. [Status colors, recording finalization and startup preferences](MONITORING.md). Closing the browser or signing out only closes the viewing session; it intentionally leaves monitoring running.

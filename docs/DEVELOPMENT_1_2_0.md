@@ -1,10 +1,17 @@
-# 1.2.0-preview.2 development and QA follow-up
+# 1.2.0-preview.3 development and QA follow-up
 
 [日本語](DEVELOPMENT_1_2_0.ja.md) · [Acceptance](ACCEPTANCE.md) · [Required device checklist](RELEASE_CHECKLIST_1_2_0.md) · [LAN access](LAN_ACCESS.md)
 
 **UNDER DEVELOPMENT. Public 1.1.3-preview.1 is unchanged. This source is not a claim that the reported Windows failures have recovered on the owner's machine.**
 
-Baseline: application build `25718ed3f06833a1f291992753b4f0538d7dc939`, published tag `v1.1.3-preview.1`; implementation starts from main `8e13378`. Input: the owner's QA rev11 dated 2026-11-15. Findings below preserve the distinction between observed defects, new product requests and unperformed tests. Application 1.2.0 and release v1.2.0-preview.2 are the next target, not the stable channel.
+Baseline: application build `25718ed3f06833a1f291992753b4f0538d7dc939`, published tag `v1.1.3-preview.1`; implementation starts from main `8e13378`. Input: the owner's QA rev11 dated 2026-11-15 and macOS installer follow-up. Application 1.2.0 and release v1.2.0-preview.3 are the current testing target, not the stable channel.
+
+## Preview.3: macOS installation follow-up
+
+- The public one-command URLs still install 1.1.3-preview.1. README now leads to the current Actions packages and explicitly labels the old online commands. Each OS artifact includes its own version-pinned scripts, `validation-build.json` and `SHA256SUMS`, so testing no longer requires the multi-GB complete release bundle.
+- macOS camera discovery excludes `Capture screen` before querying modes. Worker startup resolves a saved index to an available camera name and rejects displays and disconnected selections before capture. Capability queries use names to avoid a camera-unplug race selecting a display. This targets the repeated Screen Recording request; native permission behavior still needs the owner's Mac retest.
+- Initial password entry remains in the browser. Native setup assistance shows the exact preview. Bundle metadata, runtime native dialogs and Dock use the FlintEye icon; the script registers the exact installed app copy. Information shows the full release identifier and explains the authenticated RTSPS camera address separately from internal publishing addresses.
+- README and the removal guide cover script, native package, Docker, systemd and source removal, keeping data by default. An old `/Applications` copy and the script's `~/Applications` copy can coexist; remove or deliberately retain each one.
 
 | QA chapters | Implementation and evidence status |
 | --- | --- |
@@ -45,13 +52,13 @@ Download and extract the successful Build release run's `release-bundle` artifac
 Windows PowerShell, from the extracted bundle directory:
 
 ```powershell
-.\public\install.ps1 -Version 1.2.0-preview.2 -PackageDirectory .\public
+.\public\install.ps1 -Version 1.2.0-preview.3 -PackageDirectory .\public
 ```
 
 macOS or Linux, from the extracted bundle directory:
 
 ```sh
-bash public/install.sh --version 1.2.0-preview.2 --package-directory public
+bash public/install.sh --version 1.2.0-preview.3 --package-directory public
 ```
 
 Compare this installation with the standalone installer from the same folder and verify both SHA-256 values match. Keep the version and source commit fixed. Public download commands remain pinned to the currently published 1.1.3 release until 1.2.0 acceptance passes. To test the container before GHCR publication, load the matching `containers/container-amd64.tar.gz` or `container-arm64.tar.gz`, then set `FLINTEYE_IMAGE=flinteye:release-amd64` or `flinteye:release-arm64` before using Compose. Do not mistake a downloaded Compose file's future GHCR tag for an already published image.

@@ -4,7 +4,7 @@
 
 [Documentation](README.md)
 
-**UNDER DEVELOPMENT.** Install the [1.1.3 development preview](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.1.3-preview.1) using a package or the [Quick Install command](../README.md#quick-install). Downloads are ready when the linked release lists its assets. They are provided for installation-path and physical-device testing, not as a stable release. Automated checks passed; real-device acceptance is still in progress. [Source setup](MANUAL_INSTALL.md), [local M1 DMG builds](LOCAL_MACOS_BUILD.md) and [development Docker](DOCKER.md#build-the-development-image) remain available. See [acceptance checks](ACCEPTANCE.md) and [known issues](KNOWN_ISSUES.md).
+**UNDER DEVELOPMENT.** To test the current fixes, use the **1.2.0-preview.3 Actions packages and local installer scripts** in [Quick Install](../README.md#quick-install). The public [1.1.3-preview.1 scripts](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.1.3-preview.1) install the old version; the native password window, old icon and internal RTSP display there are not evidence that the new build was installed. Check **Information → System** for the exact preview and source commit. Real-device acceptance is still in progress. [Source setup](MANUAL_INSTALL.md), [local M1 DMG builds](LOCAL_MACOS_BUILD.md) and [development Docker](DOCKER.md#build-the-development-image) remain available. See [acceptance checks](ACCEPTANCE.md) and [known issues](KNOWN_ISSUES.md).
 
 ## Choose a package
 
@@ -21,7 +21,7 @@ ARCH is `amd64` or `arm64`. These are acceptance targets, not a claim that all h
 
 ## Desktop installation
 
-- **Windows:** open the EXE, follow setup, and choose your admin password. Installation is per-user and creates a Start menu entry.
+- **Windows:** open the EXE and follow setup. The current build opens the browser for your admin password. Installation is per-user and creates a Start menu entry.
 - **macOS:** open the DMG, drag FlintEye into Applications, and open it. The one-command installer uses your personal `~/Applications` folder.
 - **Linux:** open the DEB/RPM with your package manager, then launch FlintEye from the application menu. Package installation needs administrator privileges.
 
@@ -30,6 +30,10 @@ They do not compile software on your computer. Quit a running FlintEye instance 
 For an unattended Linux server, install without launching the desktop UI and follow the [systemd guide](DISTRIBUTION.md#systemd).
 
 ## Included media tools and macOS recovery
+
+### Screen Recording requests in older previews
+
+FlintEye does not record your desktop. Older camera discovery included FFmpeg's `Capture screen` inputs and opened them while querying camera modes, causing repeated **Screen Recording** permission dialogs. In **1.2.0-preview.3**, screen inputs are excluded before probing. Saved camera indices are checked before capture too, so a removed camera cannot make its old index select the screen. OBS virtual cameras remain supported as camera inputs. You do not need to grant Screen Recording permission to FlintEye; microphone access is separate and is used only when camera audio is enabled. Confirm absence of repeated prompts on your Mac as part of physical-device QA.
 
 Desktop packages include **MediaMTX, FFmpeg and FFprobe**. No separate Homebrew or MediaMTX installation is required. In the macOS app, the executables are in `FlintEye.app/Contents/Frameworks/bin/`. Earlier private ARM64 builds were inspected and contained all three.
 
@@ -67,6 +71,8 @@ Each generated script pins its own release version. Optional `--version 1.1.3-pr
 Packages include the application runtime and media tools. Linux desktop packages also ask the system package manager to install any required desktop libraries.
 
 ## Update and remove
+
+The same removal method applies whether a script or a binary installer installed the package. macOS script installs go to `~/Applications`; dragging from the DMG normally installs to `/Applications`. [Removal by installation method](STOP_AND_UNINSTALL.md#remove-by-installation-method) lists both locations, Linux commands, Docker, systemd and source removal. Keep your data unless you deliberately choose to erase it.
 
 See [Stop and uninstall FlintEye](STOP_AND_UNINSTALL.md) for complete shutdown, Windows uninstall behavior, program/data locations and recovery from older installers that leave processes running.
 

@@ -17,7 +17,8 @@ from flinteye_app.flinteye_runtime import application_dir, data_dir, default_dat
 
 WORKERS = {'uvc_to_rtsp', 'ip_camera_to_rtsp', 'multiview_input_to_rtsp',
            'multiview_buffer_to_rtsp', 'multiview_raw_compositor', 'multiview_to_rtsp'}
-from flinteye_app._version import VERSION
+from flinteye_app._version import RELEASE_VERSION
+from flinteye_app.desktop_icon import create_window
 
 
 def _repair_bundled_media_path(runtime: Path, root: Path) -> None:
@@ -114,8 +115,7 @@ def select_setup_network():
         candidates = lan_candidates()
     except (OSError, ValueError, subprocess.SubprocessError):
         candidates = []
-    window = tk.Tk()
-    window.title('FlintEye — Choose where to connect')
+    window = create_window('FlintEye — Choose where to connect')
     frame = ttk.Frame(window, padding=20)
     frame.pack()
     options = ['This computer only'] + [f'{name} — {address} ({source})' for name, address, source in candidates]
@@ -175,11 +175,11 @@ def setup_dialog(runtime: Path) -> None:
     import tkinter as tk
     from tkinter import ttk
     root = runtime.parent
-    window = tk.Tk()
-    window.title('FlintEye — Installation complete')
+    window = create_window('FlintEye — Installation complete')
     window.resizable(False, False)
     frame = ttk.Frame(window, padding=20); frame.pack()
     connection = _connection_state(root)
+    ttk.Label(frame, text=f'FlintEye {RELEASE_VERSION}').pack(anchor='w', pady=(0, 8))
     ttk.Label(frame, text='FlintEye is running. Open the address below to finish setup.',
               wraplength=460).pack(anchor='w')
     ttk.Label(frame, text='Copy this one-use setup token into the web form. It expires in 30 minutes.', wraplength=460).pack(anchor='w', pady=8)
@@ -230,7 +230,7 @@ def _startup_command() -> list[str]:
 def connection_information(root: Path, url: str) -> None:
     import tkinter as tk
     from tkinter import ttk
-    window = tk.Tk(); window.title('FlintEye connection information')
+    window = create_window('FlintEye connection information')
     frame = ttk.Frame(window, padding=18); frame.pack(fill='both', expand=True)
     ttk.Label(frame, text='Open this address in your browser:').pack(anchor='w')
     text = tk.StringVar(value=url)
@@ -421,13 +421,13 @@ def main() -> int:
     if '--pick-folder' in sys.argv:
         import tkinter as tk
         from tkinter import filedialog
-        window = tk.Tk(); window.withdraw()
+        window = create_window('FlintEye — Choose recording folder'); window.withdraw()
         selected = filedialog.askdirectory(title='Choose the recording folder on this computer')
         Path(sys.argv[sys.argv.index('--pick-folder') + 1]).write_text(json.dumps({'path': selected}), encoding='utf-8')
         window.destroy()
         return 0
     parser = argparse.ArgumentParser(description='FlintEye')
-    parser.add_argument('--version', action='version', version=VERSION)
+    parser.add_argument('--version', action='version', version=RELEASE_VERSION)
     parser.add_argument('--headless', action='store_true')
     parser.add_argument('--setup', action='store_true')
     parser.add_argument('--setup-only', action='store_true')
@@ -666,7 +666,7 @@ def entrypoint() -> None:
         if '--headless' not in sys.argv and '--worker' not in sys.argv and desktop_available() and not any(arg.startswith('--segment-') for arg in sys.argv):
             import tkinter as tk
             from tkinter import messagebox
-            window = tk.Tk(); window.withdraw()
+            window = create_window('FlintEye could not start'); window.withdraw()
             messagebox.showerror('FlintEye could not start', str(error))
             window.destroy()
         raise

@@ -1,6 +1,6 @@
 {
   "version": "1.2.0",
-  "commit": "14591aa9797b83447c320130c154816a5a9e934c",
+  "commit": "pending",
   "cases": {
     "windows-owner-startup": {
       "status": "pending",
@@ -35,8 +35,8 @@
       "evidence": "Host browser and WebRTC"
     },
     "all-native-architectures": {
-      "status": "passed",
-      "evidence": "https://github.com/noguhiro2002/FlintEye/actions/runs/44203223413; same-commit 1.2.0-preview.2 Windows/macOS/Linux x64+ARM64 native builds and installed/frozen setup, authentication, synthetic recording/playback, quit and Windows uninstall/data-retention checks passed. Both container checks and release-bundle assembly passed. macOS ARM64 artifact upload timed out once and passed on the same-commit retry. Physical-device acceptance remains pending."
+      "status": "pending",
+      "evidence": "1.2.0-preview.3 must pass a new same-commit build. Earlier preview.2 success: https://github.com/noguhiro2002/FlintEye/actions/runs/44203223413. Physical-device acceptance remains pending."
     }
   }
 }

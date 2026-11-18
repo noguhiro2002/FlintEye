@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import plistlib
 import subprocess
+from release_lib import release_identity
 
 
 def verify_icon(app: Path) -> None:
@@ -14,6 +15,10 @@ def verify_icon(app: Path) -> None:
         raise RuntimeError('The app bundle must refer to its FlintEye icon')
     if icon.read_bytes() != source.read_bytes():
         raise RuntimeError('The app bundle icon differs from the FlintEye symbol')
+    if metadata.get('FlintEyeReleaseVersion') != release_identity()[0]:
+        raise RuntimeError('The app bundle does not identify this exact preview')
+    if metadata.get('CFBundleDisplayName') != 'FlintEye':
+        raise RuntimeError('The app bundle must use the FlintEye display name')
 
 
 def verify_app(app: Path) -> None:
