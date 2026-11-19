@@ -23,5 +23,16 @@ class MirrorTests(unittest.TestCase):
         with patch.dict('os.environ', {'GITHUB_ACTIONS': 'false'}):
             with self.assertRaises(SystemExit): ci_apt.main()
 
+    def test_runner_mirror_list_routes_security_and_arm_to_the_correct_archive(self):
+        base = ('Types: deb\nURIs: mirror+file:/etc/apt/apt-mirrors.txt\nSuites: noble noble-updates\n'
+                'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n')
+        security = base.replace('noble noble-updates', 'noble-security')
+        value = base+'\n'+security
+        self.assertEqual(ci_apt.rewrite_sources(value), base.replace('mirror+file:/etc/apt/apt-mirrors.txt',
+            'https://archive.ubuntu.com/ubuntu')+'\n'+security.replace('mirror+file:/etc/apt/apt-mirrors.txt',
+            'https://security.ubuntu.com/ubuntu'))
+        self.assertEqual(ci_apt.rewrite_sources(value, architecture='arm64'), value.replace(
+            'mirror+file:/etc/apt/apt-mirrors.txt', 'https://ports.ubuntu.com/ubuntu-ports'))
+
 
 if __name__ == '__main__': unittest.main()
