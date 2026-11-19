@@ -26,6 +26,8 @@ The later Windows/Mac/Linux review adds packaging, startup and shutdown findings
 
 ## Validation and remaining limits
 
+The next 1.2.0-preview.4 suite adds [real installed API/browser lifecycle checks](INSTALLATION_QA.md). Its 32-case Actions matrix is not complete until that build finishes. macOS ad-hoc integrity does not establish OS permission: the reported M1 launch refusal came from `amfid`, despite a valid executable/signature. Approved first launch and physical-device gates remain pending. Existing published installers are unchanged.
+
 The regression suite uses a built frontend, Chromium and synthetic API responses. It exercises delayed and failed requests, draft protection, camera switching, keyboard interaction and narrow layouts. It blocks requests to external hosts and does not connect to physical cameras. See [Contributing](../.github/CONTRIBUTING.md) for the test commands.
 
 - **Real-device acceptance remains required:** Windows and macOS desktop behavior, physical USB/IP cameras, PTZ movement/stop, microphone/privacy permissions, sleep/resume, minimum-OS support and actual video decoding must be checked on the intended machines. Linux browser tests do not establish compatibility with every browser or screen reader.

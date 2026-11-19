@@ -52,6 +52,9 @@ bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap clean
 
 また、選択したリリースからスクリプトをダウンロードして内容を確認し、ローカルで実行することもできます。パッケージ版にはPython、FFmpeg、FFprobe、MediaMTXが含まれています。別途インストールする必要はありません。Windows/macOSパッケージは署名なし/公証されていません。[OS確認画面](docs/INSTALL.ja.md#unsigned-packages)をご覧ください。
 
+<a id="macos-trust"></a>
+**macOSでの初回起動:** このコミュニティプレビューを開こうとした後、要求があれば **システム設定 → プライバシーとセキュリティ → このまま開く → 開く** を使用してください。このアプリはアドホック署名されており、公証されていません。インストールしただけでは実行権限が付与されません。[macOSでファイルが見つからないと言われた場合 →](docs/INSTALL.ja.md#unsigned-packages)
+
 <details>
 <summary><strong>その他のインストールオプション</strong> — バイナリパッケージ、Docker、手動インストール</summary>
 

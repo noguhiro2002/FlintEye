@@ -2,7 +2,8 @@
 param(
     [string]$Version = '@RELEASE_VERSION@',
     [string]$PackageDirectory,
-    [switch]$NoStart
+    [switch]$NoStart,
+    [switch]$Silent
 )
 $ErrorActionPreference = 'Stop'
 if ($Version -cnotmatch '^[0-9]+\.[0-9]+\.[0-9]+(-preview\.[1-9][0-9]{0,5})?$') { throw 'Use a published release or pass -Version X.Y.Z[-preview.N].' }
@@ -51,6 +52,7 @@ try {
     # Mark the downloaded installer as Internet-origin; do not bypass SmartScreen.
     Set-Content -LiteralPath $installer -Stream Zone.Identifier -Value "[ZoneTransfer]`r`nZoneId=3" -ErrorAction Stop
     $arguments = @('/CURRENTUSER')
+    if ($Silent) { $arguments += @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') }
     if ($NoStart) { $arguments += '/NOSTART' }
     $process = Start-Process -FilePath $installer -ArgumentList $arguments -Wait -PassThru
     if ($process.ExitCode -ne 0) { throw "Installer exited with code $($process.ExitCode)." }

@@ -740,7 +740,7 @@ class OrchestratorSupervisor:
                     "-rtsp_transport", "tcp", "-timeout", "5000000",
                     "-i", _join_url(base, camera.path),
                     "-map", "0:v:0", "-map", "0:a:0?", "-c:v", "copy",
-                    "-c:a", "opus", "-strict", "experimental", "-ar", "48000", "-b:a", "96k",
+                    "-c:a", "opus", "-strict", "experimental", "-ar", "48000", "-ac", "2", "-b:a", "96k",
                     "-f", "rtsp", "-rtsp_transport", "tcp", "-muxdelay", "0",
                     _join_url(base, live_path(camera.path)),
                 ]

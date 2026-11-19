@@ -304,6 +304,16 @@ def install_routes(app, context, *, setup_token: str, desktop: bool):
         upstream_path = path
         original = None
         config = context.store.get_effective()
+        # Only the administrator's managed listener port is configurable. The
+        # proxy host stays loopback; request URLs and headers cannot choose it.
+        upstream_port = 8889
+        if config.mediamtx.control_mode == 'direct' and config.mediamtx.managed.enabled:
+            import re
+            address = config.mediamtx.managed.global_.get('webrtcAddress', '127.0.0.1:8889')
+            match = re.fullmatch(r'(?:127\.0\.0\.1|localhost|0\.0\.0\.0|\[::1\]|\[::\])?:(\d+)', str(address))
+            if not match or not 1 <= int(match[1]) <= 65535:
+                raise HTTPException(503, 'The managed WebRTC listener address is invalid')
+            upstream_port = int(match[1])
         for camera in sorted(config.cameras, key=lambda item: -len(item.path)):
             if path == camera.path or path.startswith(camera.path + '/'):
                 if camera.audio.enabled and config.mediamtx.control_mode == 'direct' and config.mediamtx.managed.enabled:
@@ -314,7 +324,7 @@ def install_routes(app, context, *, setup_token: str, desktop: bool):
                    if key.lower() in {'content-type', 'accept', 'if-match'}}
         try:
             async with httpx.AsyncClient(timeout=30, trust_env=False) as client:
-                upstream = await client.request(request.method, 'http://127.0.0.1:8889/' + upstream_path,
+                upstream = await client.request(request.method, f'http://127.0.0.1:{upstream_port}/' + upstream_path,
                                                 params=request.query_params, headers=headers,
                                                 content=await request.body())
         except httpx.HTTPError as exc: raise HTTPException(502, 'Media server is unavailable') from exc

@@ -92,6 +92,10 @@ if [ "$os" = Darwin ]; then
   mkdir "$mount_dir"
   hdiutil attach "$work/$asset" -mountpoint "$mount_dir" -nobrowse -readonly -quiet
   info="$mount_dir/FlintEye.app/Contents/Info.plist"
+  bundled_executable=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$info")
+  [ "$bundled_executable" = FlintEye ] || fail 'The DMG does not declare the FlintEye executable. Nothing was installed.'
+  [ -x "$mount_dir/FlintEye.app/Contents/MacOS/FlintEye" ] || fail 'The app executable is missing or is not executable. Nothing was installed.'
+  codesign --verify --deep --strict "$mount_dir/FlintEye.app" || fail 'The app signature is damaged. Nothing was installed.'
   bundled_version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$info")
   [ "$bundled_version" = "$application_version" ] || fail 'The app inside the DMG has a different version. Nothing was installed.'
   bundled_release=$(/usr/libexec/PlistBuddy -c 'Print :FlintEyeReleaseVersion' "$info" 2>/dev/null || true)
@@ -108,6 +112,9 @@ if [ "$os" = Darwin ]; then
   if ! xattr -w com.apple.quarantine "0083;$quarantine_date;FlintEyeInstaller;" "$stage/FlintEye.app"; then
     rm -rf -- "$stage"; fail 'Could not mark the downloaded app for the normal macOS security check.'
   fi
+  if ! codesign --verify --deep --strict "$stage/FlintEye.app"; then
+    rm -rf -- "$stage"; fail 'The copied app failed its integrity check. The existing app was preserved.'
+  fi
   if [ -e "$destination/FlintEye.app" ]; then mv "$destination/FlintEye.app" "$destination/FlintEye.previous.app"; fi
   if ! mv "$stage/FlintEye.app" "$destination/FlintEye.app"; then
     if [ -e "$destination/FlintEye.previous.app" ]; then mv "$destination/FlintEye.previous.app" "$destination/FlintEye.app"; fi
@@ -117,12 +124,26 @@ if [ "$os" = Darwin ]; then
   # Register this exact installed copy, rather than asking Launch Services to
   # choose an older app with the same bundle identifier.
   /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$destination/FlintEye.app" || true
-  printf 'Installed FlintEye %s. macOS may ask you to allow this unsigned app in Privacy & Security.\n' "$version"
+  printf 'FlintEye %s files installed at: %s\n' "$version" "$destination/FlintEye.app"
+  printf 'FIRST LAUNCH: this development preview has an ad-hoc signature and is not notarized.\n'
+  printf 'After trying to open FlintEye, use System Settings > Privacy & Security > Open Anyway, then Open.\n'
+  printf 'An integrity check does not grant macOS permission to run the app. Managed Macs may require your administrator.\n'
+  printf 'Guide: https://github.com/noguhiro2002/FlintEye/blob/main/docs/INSTALL.md#unsigned-packages\n'
+  printf 'To remove: choose Disable start at login and quit, then move %s to Trash. Settings and recordings are kept.\n' "$destination/FlintEye.app"
   if [ "$start_app" = 1 ]; then
-    open "$destination/FlintEye.app"
+    if launch_output=$(open "$destination/FlintEye.app" 2>&1); then
+      printf 'Application launch requested. If no window appears, complete the macOS permission step above.\n'
+    else
+      launch_status=$?
+      printf 'FlintEye: application launch request failed (exit %s):\n%s\n' "$launch_status" "$launch_output" >&2
+      printf 'Files remain installed at %s; application startup has not been confirmed.\n' "$destination/FlintEye.app" >&2
+      printf 'For this unnotarized preview, check Privacy & Security > Open Anyway. Other launch errors may need investigation.\n' >&2
+      exit "$launch_status"
+    fi
+  else
+    printf 'Application was not started (--no-start). First-launch permission and operation remain unverified.\n'
   fi
   printf 'On first launch, choose a trusted network and follow the setup address shown by FlintEye.\n'
-  printf 'To remove: choose Disable start at login and quit, then move %s to Trash. Settings and recordings are kept.\n' "$destination/FlintEye.app"
 else
   if [ "$kind" = deb ]; then sudo apt-get install -y "$work/$asset"; else sudo dnf install -y "$work/$asset"; fi
   printf 'Installed FlintEye %s. Open FlintEye from your application menu.\n' "$version"

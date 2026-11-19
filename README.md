@@ -51,6 +51,8 @@ bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap clean
 
 You can also download the script from the selected release, inspect it, and run it locally. Packaged builds include Python, FFmpeg, FFprobe and MediaMTX. No separate copies are required. Windows/macOS packages are unsigned/not notarized; see [OS confirmation screens](docs/INSTALL.md#unsigned-packages).
 
+**macOS first launch:** after trying to open this community preview, use **System Settings → Privacy & Security → Open Anyway → Open** if offered. The app is ad-hoc signed and not notarized; installation alone does not grant permission to run it. [If macOS says the file cannot be found →](docs/INSTALL.md#unsigned-packages)
+
 
 <details>
 <summary><strong>Other Install Options</strong> — binary packages, Docker, manual installation</summary>

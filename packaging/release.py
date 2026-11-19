@@ -11,6 +11,7 @@ import subprocess
 import zipfile
 
 from release_lib import ARCHES, REPOSITORY, ROOT, digest, package_names, version, release_identity
+from lifecycle_report import collect as collect_lifecycle, required_matrix, validate as validate_lifecycle
 
 ACCEPTANCE_CASES = {'windows-owner-startup', 'windows-owner-removal', 'native-menus-and-accessibility',
                     'lan-pc', 'lan-mobile', 'physical-cameras-and-long-run', 'linux-native-and-docker',
@@ -97,7 +98,7 @@ def required_assets(v: str) -> set[str]:
     return names
 
 
-def assemble(source: Path, destination: Path, commit: str) -> None:
+def assemble(source: Path, destination: Path, commit: str, lifecycle: Path | None = None) -> None:
     if not re.fullmatch('[0-9a-f]{40}', commit):
         raise ValueError('A full source commit SHA is required')
     if destination.exists():
@@ -113,6 +114,7 @@ def assemble(source: Path, destination: Path, commit: str) -> None:
             found[path.name] = path
     if missing := expected - found.keys():
         raise ValueError('Missing artifacts: ' + ', '.join(sorted(missing)))
+    qa = collect_lifecycle(lifecycle or source.parent/'lifecycle-artifacts', release=release_value, commit=commit)
     public = destination / 'public'
     containers = destination / 'containers'
     public.mkdir(parents=True)
@@ -125,6 +127,7 @@ def assemble(source: Path, destination: Path, commit: str) -> None:
         (public / name).write_text(text, encoding='utf-8', newline='\n')
     for name in ('LICENSE', 'THIRD_PARTY_NOTICES.md'):
         shutil.copy2(ROOT / name, public / name)
+    (public/'QA-RESULTS.json').write_text(json.dumps(qa, indent=2)+'\n')
     compose = (ROOT/'compose.yaml').read_text()
     compose = re.sub(r'ghcr\.io/noguhiro2002/flinteye:[\w.-]+', 'ghcr.io/noguhiro2002/flinteye:'+release_value, compose)
     (public/'compose.yaml').write_text(compose)
@@ -167,6 +170,7 @@ def verify(destination: Path, commit: str | None = None) -> dict:
     required = {'public/' + name for name in required_assets(version())}
     required.update('containers/container-' + arch + '.tar.gz' for arch in ARCHES)
     required.update('public/' + name for name in ('install.sh', 'install.ps1', 'SHA256SUMS', 'compose.yaml', 'LICENSE', 'documentation.zip', 'ACCEPTANCE.ja.md'))
+    required.add('public/QA-RESULTS.json')
     if not required.issubset(files):
         raise ValueError('Incomplete release bundle')
     for name, expected in files.items():
@@ -179,6 +183,16 @@ def verify(destination: Path, commit: str | None = None) -> dict:
     wanted = [f'{digest(p)}  {p.name}' for p in sorted((destination / 'public').iterdir()) if p.name != 'SHA256SUMS']
     if sums != wanted:
         raise ValueError('Public checksums do not cover the complete public asset set')
+    qa = json.loads((destination/'public/QA-RESULTS.json').read_text())
+    keys = set()
+    for receipt in qa.get('cases', []):
+        validate_lifecycle(receipt, release=manifest['release_version'], commit=manifest['commit'])
+        cpu = {'x86_64': 'amd64', 'amd64': 'amd64', 'aarch64': 'arm64', 'arm64': 'arm64'}.get(receipt.get('cpu'))
+        key = receipt['method'], receipt.get('runner'), cpu
+        if key in keys: raise ValueError('Duplicate lifecycle case')
+        keys.add(key)
+    if keys != required_matrix() or qa.get('ci_cases') != len(keys):
+        raise ValueError('Missing required lifecycle evidence')
     return manifest
 
 
@@ -245,6 +259,7 @@ def main() -> None:
         if os.environ.get('GITHUB_OUTPUT'):
             with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
                 output.write('build_commit=' + build_commit + '\n')
+                output.write('release=' + release_identity()[0] + '\n')
         print('Publication prerequisites verified; no remote state changed.')
 
 

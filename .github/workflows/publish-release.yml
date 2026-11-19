@@ -50,6 +50,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       build_commit: ${{ steps.verify.outputs.build_commit }}
+      release: ${{ steps.verify.outputs.release }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -113,3 +114,13 @@ jobs:
             distribution/SHA256SUMS
           if-no-files-found: warn
           retention-days: 30
+
+  public_installation:
+    if: ${{ inputs.phase == 'publish' && inputs.channel != 'private-test' }}
+    needs: [guard, publish]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/online-lifecycle.yml
+    with:
+      release: ${{ needs.guard.outputs.release }}
+      build_commit: ${{ needs.guard.outputs.build_commit }}

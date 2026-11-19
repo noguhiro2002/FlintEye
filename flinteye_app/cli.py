@@ -564,7 +564,13 @@ def main() -> int:
             options.update(webrtcLocalUDPAddress=config.network.address + ':8189', webrtcIPsFromInterfaces=False,
                            webrtcAdditionalHosts=[config.network.address])
         elif not os.environ.get('FLINTEYE_CONTAINER_BRIDGE'):
-            options.update(webrtcLocalUDPAddress='127.0.0.1:8189', webrtcIPsFromInterfaces=False,
+            # Preserve an explicitly configured local port for isolated profiles.
+            # LAN and Docker bridge modes keep their documented/firewalled 8189.
+            import re
+            configured = str(options.get('webrtcLocalUDPAddress', ''))
+            local = re.fullmatch(r'127\.0\.0\.1:(\d+)', configured)
+            local_udp = configured if local and 1 <= int(local[1]) <= 65535 else '127.0.0.1:8189'
+            options.update(webrtcLocalUDPAddress=local_udp, webrtcIPsFromInterfaces=False,
                            webrtcAdditionalHosts=['127.0.0.1'])
         if os.environ.get('FLINTEYE_CONTAINER_BRIDGE') == '1':
             options.update(webrtcLocalUDPAddress=':8189', webrtcIPsFromInterfaces=False,

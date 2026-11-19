@@ -84,3 +84,6 @@ frontend/vite.config.d.ts
 
 /distribution/
 /distribution-body.md
+/lifecycle-results/
+/lifecycle-artifacts/
+/qa-extract/

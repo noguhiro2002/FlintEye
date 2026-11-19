@@ -1,0 +1,122 @@
+name: Published installation lifecycle
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Published release matching this checkout, without v (X.Y.Z-preview.N)
+        required: true
+        type: string
+      build_commit:
+        description: Full commit embedded in that release's application
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      release:
+        required: true
+        type: string
+      build_commit:
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  scripts:
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {runner: windows-2022, method: windows-script}
+          - {runner: windows-11-arm, method: windows-script}
+          - {runner: macos-26-intel, method: macos-script}
+          - {runner: macos-26, method: macos-script}
+          - {runner: ubuntu-24.04, method: linux-deb-script}
+          - {runner: ubuntu-24.04, method: linux-rpm-script}
+          - {runner: ubuntu-24.04-arm, method: linux-deb-script}
+          - {runner: ubuntu-24.04-arm, method: linux-rpm-script}
+    runs-on: ${{ matrix.runner }}
+    env:
+      FLINTEYE_QA_RUNNER: ${{ matrix.runner }}
+      QA_METHOD: ${{ matrix.method }}
+      QA_RELEASE: ${{ inputs.release }}
+      QA_COMMIT: ${{ inputs.build_commit }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.14.10'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - name: Download anonymously and check the real public tag/assets
+        shell: bash
+        run: |
+          flags=()
+          if [[ "$QA_METHOD" == *rpm* ]]; then flags+=(--rpm); fi
+          python packaging/public_install_inputs.py --output public-input --release "$QA_RELEASE" --commit "$QA_COMMIT" "${flags[@]}"
+      - name: Prepare independent QA browser and HTTP client
+        shell: bash
+        run: |
+          python -m pip install httpx==0.28.1
+          npm --prefix frontend ci
+          (cd frontend && npx playwright install --with-deps chromium)
+      - name: Use public script URLs, then real API/GUI, quit, remove and reinstall
+        shell: bash
+        run: python packaging/lifecycle.py --online --method "$QA_METHOD" --artifact-directory public-input --release "$QA_RELEASE" --commit "$QA_COMMIT" --output lifecycle-results/online
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: online-${{ matrix.method }}-${{ matrix.runner }}
+          path: |
+            lifecycle-results/online/
+            public-input/public-download.json
+          if-no-files-found: error
+          retention-days: 14
+  ghcr:
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    env:
+      FLINTEYE_QA_RUNNER: ${{ matrix.runner }}
+      QA_RELEASE: ${{ inputs.release }}
+      QA_COMMIT: ${{ inputs.build_commit }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13.18'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - name: Anonymous GHCR pull, native CPU, commit and published digest
+        run: |
+          python packaging/public_install_inputs.py --container --output public-input --release "$QA_RELEASE" --commit "$QA_COMMIT"
+          export DOCKER_CONFIG="$RUNNER_TEMP/flinteye-anonymous-docker"
+          mkdir -p "$DOCKER_CONFIG"
+          printf '{"auths":{}}\n' > "$DOCKER_CONFIG/config.json"
+          image="ghcr.io/noguhiro2002/flinteye:$QA_RELEASE"
+          docker pull "$image"
+          python packaging/public_install_inputs.py --verify-image "$image" --output public-input --release "$QA_RELEASE" --commit "$QA_COMMIT"
+      - name: Installed GHCR image real API/GUI lifecycle
+        run: |
+          python -m pip install httpx==0.28.1
+          npm --prefix frontend ci
+          (cd frontend && npx playwright install --with-deps chromium)
+          python packaging/lifecycle.py --method compose --image "ghcr.io/noguhiro2002/flinteye:$QA_RELEASE" --release "$QA_RELEASE" --commit "$QA_COMMIT" --output lifecycle-results/ghcr
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: online-ghcr-${{ matrix.runner }}
+          path: |
+            lifecycle-results/ghcr/
+            public-input/public-download.json
+          if-no-files-found: error
+          retention-days: 14

@@ -63,6 +63,37 @@ class ReleaseTests(unittest.TestCase):
         self.commit = 'a' * 40
         for name in release.required_assets(version()) | {'container-amd64.tar.gz', 'container-arm64.tar.gz'}:
             (self.inputs / name).write_bytes(('test artifact: ' + name).encode())
+        self.lifecycle = self.root/'lifecycle-artifacts'
+        self.write_lifecycle(release.release_identity()[0])
+
+    def write_lifecycle(self, value):
+        from lifecycle_report import Report, STAGES, required_matrix, BROWSER_CHECKS, RETAINED_CHECKS
+        if self.lifecycle.exists(): shutil.rmtree(self.lifecycle)
+        for method, runner, arch in required_matrix():
+            report = Report(self.lifecycle/f'{method}-{runner}', method=method, release=value, commit=self.commit)
+            report.data.update(cpu=arch, runner=runner,
+                               platform='darwin' if runner.startswith('macos') else 'windows' if runner.startswith('windows') else 'linux')
+            for stage in STAGES: report.stage(stage, 'passed', 'Fixture evidence')
+            for name in ('browser', 'retained'):
+                target = report.output/name; target.mkdir()
+                (target/'browser.json').write_text(json.dumps({'result': 'passed', 'apiMocked': False,
+                    'stages': sorted(BROWSER_CHECKS if name == 'browser' else RETAINED_CHECKS),
+                    'realApiRequests': ['POST /api/v1/setup'], 'identity': {'release': value, 'commit': self.commit, 'dirty': False}}))
+            (report.output/'decoded-recordings.json').write_text('["qa-camera-1/test.mp4"]')
+            (report.output/'decode.log').write_text('')
+            (report.output/'recording-audio.json').write_text('{"enabled_camera":[{"codec_name":"pcm_s16be"}],"disabled_camera":[]}')
+
+    def test_missing_browser_or_platform_evidence_blocks_assembly(self):
+        evidence = next(self.lifecycle.rglob('browser/browser.json'))
+        original = json.loads(evidence.read_text())
+        evidence.write_text(json.dumps({**original, 'apiMocked': True}))
+        with self.assertRaisesRegex(ValueError, 'real API/browser'): release.assemble(self.inputs, self.output, self.commit)
+        self.assertFalse(self.output.exists())
+        evidence.write_text(json.dumps({**original, 'stages': []}))
+        with self.assertRaisesRegex(ValueError, 'Incomplete browser'): release.assemble(self.inputs, self.output, self.commit)
+        evidence.write_text(json.dumps(original))
+        next(self.lifecycle.rglob('lifecycle.json')).unlink()
+        with self.assertRaisesRegex(ValueError, 'Missing lifecycle cases'): release.assemble(self.inputs, self.output, self.commit)
 
     def test_complete_build_has_version_pinned_scripts_and_public_checksums(self):
         release.assemble(self.inputs, self.output, self.commit)
@@ -218,6 +249,7 @@ class ReleaseTests(unittest.TestCase):
         from publish_release import prepare, finalize
         from unittest.mock import patch
         with patch('release.release_identity', return_value=(version()+'-preview.2', 'preview')):
+            self.write_lifecycle(version()+'-preview.2')
             release.assemble(self.inputs, self.output, self.commit)
         original = release.verify(self.output, self.commit)
         with self.assertRaisesRegex(ValueError, 'embedded release'):

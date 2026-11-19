@@ -21,3 +21,6 @@ frontend/*.tsbuildinfo
 frontend/vite.config.js
 frontend/vite.config.d.ts
 /distribution
+/lifecycle-results
+/lifecycle-artifacts
+/qa-extract

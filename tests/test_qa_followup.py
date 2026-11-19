@@ -46,7 +46,8 @@ class LicenseCollectionTests(unittest.TestCase):
             self.assertEqual(json.loads((destination/'inventory.json').read_text())[0]['name'], 'pyobjc-core')
 
     def test_bad_signature_is_fatal_but_untrusted_preview_is_reported(self):
-        with patch.object(verify_macos.subprocess, 'run', side_effect=subprocess.CalledProcessError(1, 'codesign')):
+        with patch.object(verify_macos, 'verify_structure'), \
+             patch.object(verify_macos.subprocess, 'run', side_effect=subprocess.CalledProcessError(1, 'codesign')):
             with self.assertRaises(subprocess.CalledProcessError):
                 verify_macos.verify_app(Path('FlintEye.app'))
         with tempfile.TemporaryDirectory() as tmp, patch.object(verify_macos.subprocess, 'run',

@@ -147,6 +147,23 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(result.headers['location'], '/media/test/whep/session')
         self.assertNotIn('cookie', upstream.request.call_args.kwargs['headers'])
 
+    def test_media_uses_managed_port_but_never_a_configured_remote_host(self):
+        from unittest.mock import AsyncMock
+        import httpx
+        from flinteye_app.orchestrator_api import require_viewer
+        self.client.app.dependency_overrides[require_viewer] = lambda: None
+        self.context.store.patch_runtime({'mediamtx': {'control_mode': 'direct', 'managed': {
+            'enabled': True, 'global': {'webrtcAddress': '127.0.0.1:18889'}}}})
+        upstream = AsyncMock()
+        upstream.request.return_value = httpx.Response(200, content=b'player', request=httpx.Request('GET', 'http://127.0.0.1:18889/test/'))
+        manager = AsyncMock(); manager.__aenter__.return_value = upstream
+        with patch('flinteye_app.flinteye_routes.httpx.AsyncClient', return_value=manager):
+            self.assertEqual(self.client.get('/media/test/').status_code, 200)
+        self.assertEqual(upstream.request.call_args.args[1], 'http://127.0.0.1:18889/test/')
+        self.context.store.patch_runtime({'mediamtx': {'managed': {'global': {'webrtcAddress': 'remote.example:1234'}}}})
+        with patch('flinteye_app.flinteye_routes.httpx.AsyncClient', return_value=manager):
+            self.assertEqual(self.client.get('/media/test/').status_code, 503)
+
     def test_packaged_worker_uses_dispatch_not_python_script(self):
         with patch('sys.frozen', True, create=True):
             self.assertEqual(worker_command('uvc_to_rtsp')[1:], ['--worker', 'uvc_to_rtsp'])
