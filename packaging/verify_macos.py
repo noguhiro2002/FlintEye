@@ -1,10 +1,35 @@
 """Ad-hoc bundle integrity is mandatory; Gatekeeper trust is reported separately."""
 import json
+import hashlib
 import os
 from pathlib import Path
 import plistlib
 import subprocess
 from release_lib import release_identity
+
+THREAT_TERMS = ('malware detected', 'identified as malware', 'known malware', 'malicious software detected',
+                'killing container due to rules engine deny')
+
+
+def confirmed_approval_refusal(evidence: str) -> bool:
+    text = evidence.lower()
+    return not any(term in text for term in THREAT_TERMS) and any(term in text for term in (
+        'adhoc signed or signed by an unknown certificate chain', 'gatekeeper denial breadcrumb', 'gatekeeper rejection'))
+
+
+def validate_policy_control(policy: dict, control: dict, os_version: str) -> None:
+    """An app-specific scanner error must not be excused as ordinary consent."""
+    from macos_ci_policy import CONTROL_SOURCE, CONTROL_ID
+    text = policy.get('system_policy', {}).get('output', '')
+    if 'Internal Xprotect Error' not in text:
+        return
+    if any(term in text.lower() for term in THREAT_TERMS):
+        raise RuntimeError('OS assessment reports a threat; investigate before distribution')
+    if (control.get('os') != os_version or control.get('bundle_id') != CONTROL_ID
+            or control.get('source_sha256') != hashlib.sha256(CONTROL_SOURCE.encode()).hexdigest()
+            or control.get('distribution', {}).get('exit_code') != policy['system_policy'].get('exit_code')
+            or text.strip().replace('FlintEye.app', 'PolicyControl.app') != control.get('distribution', {}).get('output', '').strip()):
+        raise RuntimeError('App-specific or unconfirmed XProtect error; independent control did not reproduce it')
 
 
 def verify_structure(app: Path) -> None:

@@ -14,6 +14,8 @@ Audio starts off for both cameras. The test enables one camera and verifies Stan
 
 Existing synthetic frontend tests still cover errors, slow responses, responsive layout and accessibility alongside these real-backend tests.
 
+Synthetic camera publishers use isolated copies of the media tools outside the application installation. The test must not keep installed executables open or make the uninstaller treat its own test cameras as application processes.
+
 ## Build-time matrix
 
 Every case uses the build's source commit. Installer cases reuse its existing artifacts; they do not compile another application for each method.
@@ -30,11 +32,15 @@ Every case uses the build's source commit. Installer cases reuse its existing ar
 
 There are **32 required cases**. macOS runners are pinned to 15/26 and Intel/Apple Silicon rather than `latest`; see [GitHub's runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners). Windows Server CI does not establish Windows 10 compatibility. A Linux container is not a physical Linux desktop; Docker Engine is not Docker Desktop.
 
+Windows script QA uses the supported `-Silent -NoStart` options, then starts the installed executable. Internet-origin metadata is retained. Interactive shell warnings, SmartScreen and native permission dialogs remain physical-device checks. macOS script QA observes its normal open request asynchronously so an OS approval dialog cannot prevent diagnostic collection.
+
 ## macOS installation, integrity and permission are separate
 
 Both DMG and one-script installs must produce the declared executable, valid internal links, the FlintEye icon and a valid ad-hoc integrity signature. The test then calls Launch Services with `open FlintEye.app`, retaining normal download quarantine. A headless subprocess or successful `codesign --verify` alone is not a normal first launch.
 
 Community previews have no Developer ID/notarization. If macOS explicitly refuses an ad-hoc first launch, the receipt records `os_launch: manual-required`, API/GUI/Quit/reinstall as `not-run`, and still checks removal. This is **not a passed application test**. It may accompany an UNDER DEVELOPMENT preview with that limitation disclosed. Missing executables, damaged signatures, unrecognized launch failures or executed test failures block assembly. The suite never removes quarantine, disables Gatekeeper or simulates approval.
+
+If macOS reports an internal XProtect error, QA assesses a freshly compiled harmless control app on the same runner. The internal-error text must match after substituting the app name; an extra app-specific finding or a threat verdict blocks acceptance. This comparison does not grant execution permission or verify FlintEye operation. A confirmed first-launch denial still leaves API/GUI tests not run.
 
 On the actual Mac, try opening FlintEye, then use **System Settings → Privacy & Security → Open Anyway → Open**, if offered. Managed Macs may need administrator assistance. Record first launch and repeat the API/GUI/removal checks after approval. An `amfid` rejection can produce “The file can't be found” even when the executable exists; do not erase accounts/settings to address it. See [installation and OS confirmation](INSTALL.md#unsigned-packages).
 
@@ -43,6 +49,8 @@ On the actual Mac, try opening FlintEye, then use **System Settings → Privacy 
 Open **Actions → Build release → Artifacts**. Each `lifecycle-*` artifact contains `lifecycle.json`, browser screenshots/video, Playwright traces, real API/build identity, recording decode/audio checks, fixture logs and available app/OS logs. Failure evidence uploads even if the job fails. All credentials and media are synthetic. Never reuse the harness with personal profiles.
 
 Assembly requires the complete matrix and matching commit/release evidence. Missing cases, failed stages, modified artifacts or missing real-browser evidence block `release-bundle`. Attached `QA-RESULTS.json` distinguishes completed CI cases from macOS approval requirements and pending physical acceptance. Existing releases/files are never overwritten.
+
+Diagnose existing installers reuses archived EXE/DMG files while the harness or installer scripts are corrected. It verifies that compiled application and native compiler inputs have not changed and records any diagnostic script overlay. These receipts are explicitly rejected by publication validation. A fresh complete Build release run is still required before publication.
 
 After an authorized public publication, **Published installation lifecycle** runs another **10 cases**. It downloads scripts/packages anonymously from real Release URLs, verifies checksums, tag and commit, and runs scripts without a local package override. It also anonymously pulls both GHCR CPU images, checks their published digest/commit and runs the Compose lifecycle. Recommend new Quick Install URLs only after reviewing these results; successful upload alone is not an online install pass. The workflow can also be dispatched for a published release matching the selected checkout.
 

@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import shutil
 import socket
 import subprocess
 import sys
@@ -104,12 +105,33 @@ def stop_process(process, *, force: bool = False) -> None:
         stop_process(process, force=True)
 
 
+def stage_fixture_tools(directory: Path, media: str, ffmpeg: str, *, prefix=None, app_directory=None):
+    """External cameras must not hold an installed application's binaries open."""
+    from release_lib import digest
+    tools = directory/'external-camera-tools'; tools.mkdir()
+    target = Path(app_directory)/tools.name if prefix else tools
+    names, checksums = [], {}
+    for original in (media, ffmpeg):
+        name = Path(original).name
+        if prefix:
+            subprocess.run([*prefix, 'cp', '-L', original, str(target/name)], check=True, timeout=30)
+        else:
+            shutil.copy2(original, tools/name)
+        names.append(str(target/name))
+        checksums[name] = digest(tools/name)
+    (directory/'external-camera-tools.json').write_text(json.dumps({
+        'purpose': 'Independent synthetic cameras outside the application installation',
+        'sha256': checksums}, indent=2)+'\n')
+    return tuple(names)
+
+
 @contextmanager
 def media_fixture(directory: Path, media: str, ffmpeg: str, *, prefix: list[str] | None = None,
                   app_directory: str | None = None):
     """Two independent RTSP publishers; they are not owned by the application."""
     prefix = prefix or []
     app_directory = app_directory or str(directory)
+    media, ffmpeg = stage_fixture_tools(directory, media, ffmpeg, prefix=prefix, app_directory=app_directory)
     port = free_port()
     config = directory/'fixture.yml'
     config.write_text(f'rtspAddress: 127.0.0.1:{port}\nrtspTransports: [tcp]\n'

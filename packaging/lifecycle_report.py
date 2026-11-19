@@ -143,9 +143,16 @@ def collect(directory: Path, *, release: str, commit: str) -> dict:
                 raise ValueError('Missing per-camera recording audio evidence')
         else:
             evidence = (path.parent/'macos-trust.log').read_text().lower()
-            if not any(term in evidence for term in ('adhoc signed or signed by an unknown certificate chain',
-                                                    'gatekeeper denial breadcrumb', 'gatekeeper rejection')):
+            from verify_macos import validate_policy_control, confirmed_approval_refusal
+            if not confirmed_approval_refusal(evidence):
                 raise ValueError('No explicit macOS approval refusal evidence')
+            policy_path = path.parent/'macos-policy.json'
+            policy = json.loads(policy_path.read_text())
+            control_path = path.parent/'os-control/independent-policy-control.json'
+            control = json.loads(control_path.read_text()) if control_path.is_file() else {}
+            validate_policy_control(policy, control, receipt['os_version'])
+            proofs['macos-policy.json'] = hashlib.sha256(policy_path.read_bytes()).hexdigest()
+            if control_path.is_file(): proofs['independent-policy-control.json'] = hashlib.sha256(control_path.read_bytes()).hexdigest()
         results.append({**receipt, 'proofs': proofs, 'receipt_sha256': hashlib.sha256(path.read_bytes()).hexdigest()})
     if missing := required_matrix()-keys:
         raise ValueError('Missing lifecycle cases: '+', '.join('/'.join(x) for x in sorted(missing)))

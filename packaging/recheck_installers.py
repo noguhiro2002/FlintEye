@@ -14,6 +14,7 @@ from release_lib import ROOT, REPOSITORY, digest, release_identity
 def validate_changes(paths):
     allowed = {'packaging/recheck_installers.py', 'packaging/macos_ci_policy.py',
                'packaging/lifecycle.py', 'packaging/lifecycle_common.py', 'packaging/lifecycle_report.py',
+               'packaging/verify_macos.py',
                'packaging/install.sh', 'packaging/install.ps1', 'frontend/tests/installed.mjs',
                '.github/workflows/recheck-installers.yml', 'tests/test_lifecycle.py',
                'tests/test_recheck_installers.py'}

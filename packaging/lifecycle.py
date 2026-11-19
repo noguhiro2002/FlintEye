@@ -104,6 +104,10 @@ class Adapter:
                 copy = target/relative; copy.parent.mkdir(parents=True, exist_ok=True)
                 # QA profiles contain only synthetic media and credentials.
                 copy.write_text(path.read_text(errors='replace')[-100_000:])
+        for name in ('uninstall-failure.txt', 'uninstall.log', 'last-stop-result.json', 'last-monitoring-stop.json'):
+            path = self.profile/name
+            if path.is_file():
+                (self.report.output/name).write_text(path.read_text(errors='replace')[-100_000:])
 
     def verify(self):
         result = subprocess.run([str(self.executable), '--version'], capture_output=True, text=True, timeout=30)
@@ -264,9 +268,20 @@ class Native(Adapter):
 
     def verify(self):
         if sys.platform == 'darwin':
-            from verify_macos import verify_app, assess_gatekeeper
+            from verify_macos import verify_app, assess_gatekeeper, validate_policy_control
             verify_app(self.app)
-            assess_gatekeeper(self.app, self.report.output/'macos-policy.json')
+            policy_path = self.report.output/'macos-policy.json'
+            assess_gatekeeper(self.app, policy_path)
+            policy = json.loads(policy_path.read_text())
+            if 'Internal Xprotect Error' in policy.get('system_policy', {}).get('output', ''):
+                from macos_ci_policy import assess
+                control_dir = self.report.output/'os-control'
+                control_dir.mkdir(exist_ok=True)
+                previous = self.report.output.parent/'os-control/independent-policy-control.json'
+                if previous.is_file(): shutil.copy2(previous, control_dir/previous.name)
+                else: assess(control_dir)
+                control = json.loads((control_dir/'independent-policy-control.json').read_text())
+                validate_policy_control(policy, control, self.report.data['os_version'])
         else: super().verify()
 
     def start(self):
@@ -279,8 +294,8 @@ class Native(Adapter):
             except (RuntimeError, TimeoutError):
                 evidence = self.macos_diagnostics().lower()
                 # A generic open error or spctl rejection alone cannot excuse a crash.
-                if any(term in evidence for term in ('adhoc signed or signed by an unknown certificate chain',
-                                                    'gatekeeper denial breadcrumb', 'gatekeeper rejection')):
+                from verify_macos import confirmed_approval_refusal
+                if confirmed_approval_refusal(evidence):
                     raise ApprovalRequired('macos-trust.log: OS explicitly denied first launch; API/GUI not run')
                 launcher = self.installer_process or self.open_process
                 raise RuntimeError(f'OS launch did not complete without a confirmed approval refusal (launcher exit {launcher.poll()})')
