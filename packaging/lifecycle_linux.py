@@ -77,6 +77,12 @@ class PackageContainer(Adapter):
         self.run(['sh', '-c', 'test ! -e /opt/flinteye/FlintEye && test ! -e /opt/flinteye/_internal/bin/ffmpeg && test ! -e /opt/flinteye/_internal/bin/mediamtx && test ! -e /usr/share/applications/flinteye.desktop && test ! -e /usr/lib/systemd/system/flinteye.service && test ! -e "$HOME/.config/autostart/flinteye.desktop"'])
         if not (self.profile/'.flinteye-qa-owned').is_file(): raise AssertionError('Package removal erased data')
 
+    def finish(self):
+        if self.ready:
+            self.command(['docker', 'inspect', '--format', '{{json .State}}', self.name], name='container-state.log', check=False)
+            self.run(['ps', '-e', '-o', 'pid,ppid,stat,comm'], name='container-state.log', check=False)
+        super().finish()
+
     def cleanup(self):
         self.command(['docker', 'rm', '-f', self.name], name='cleanup.log', check=False)
         self.command(['docker', 'image', 'rm', self.image], name='cleanup.log', check=False)
