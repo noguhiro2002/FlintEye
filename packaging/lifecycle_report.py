@@ -30,6 +30,8 @@ class Report:
                      'method': method, 'started_at': time.time(),
                      'stages': {name: {'status': 'not-run'} for name in STAGES},
                      'manual': {name: {'status': 'pending'} for name in MANUAL_CASES}}
+        if os.environ.get('FLINTEYE_QA_DIAGNOSTIC') == '1':
+            self.data.update(diagnostic_only=True, validation_commit=os.environ.get('GITHUB_SHA'))
         self.save()
 
     def stage(self, name: str, status: str, evidence: str) -> None:
@@ -55,6 +57,8 @@ class Report:
 
 
 def validate(receipt: dict, *, release: str, commit: str) -> str:
+    if receipt.get('diagnostic_only'):
+        raise ValueError('Diagnostic installer rechecks cannot be used for publication')
     if receipt.get('schema') != 1 or receipt.get('release') != release or receipt.get('commit') != commit:
         raise ValueError('Lifecycle evidence belongs to another build')
     stages = receipt.get('stages', {})

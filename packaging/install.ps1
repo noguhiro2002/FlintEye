@@ -54,7 +54,20 @@ try {
     $arguments = @('/CURRENTUSER')
     if ($Silent) { $arguments += @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') }
     if ($NoStart) { $arguments += '/NOSTART' }
-    $process = Start-Process -FilePath $installer -ArgumentList $arguments -Wait -PassThru
+    if ($Silent) {
+        # Unattended mode must not wait for a shell UI in a noninteractive session.
+        # Internet-origin metadata is kept; Defender/App Control still evaluate
+        # the executable. Interactive installs retain their normal shell prompts.
+        $launch = New-Object System.Diagnostics.ProcessStartInfo
+        $launch.FileName = $installer
+        $launch.Arguments = $arguments -join ' '
+        $launch.UseShellExecute = $false
+        $launch.CreateNoWindow = $true
+        $process = [Diagnostics.Process]::Start($launch)
+        $process.WaitForExit()
+    } else {
+        $process = Start-Process -FilePath $installer -ArgumentList $arguments -Wait -PassThru
+    }
     if ($process.ExitCode -ne 0) { throw "Installer exited with code $($process.ExitCode)." }
     Write-Host "Installed FlintEye $Version. Follow the connection address in the setup window. If closed, open FlintEye from the Start menu."
     Write-Host 'To remove: Windows Settings > Apps > Installed apps > FlintEye > Uninstall. Settings and recordings are kept by default.'

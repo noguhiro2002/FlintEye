@@ -162,6 +162,7 @@ class Source(Adapter):
 class Native(Adapter):
     def __init__(self, *args):
         super().__init__(*args)
+        self.installer_process = self.open_process = None
         if os.environ.get('GITHUB_ACTIONS') != 'true' and not self.args.disposable:
             raise RuntimeError('Native removal tests require a disposable runner or --disposable in a fresh QA account')
         self.inputs = self.args.artifact_directory.resolve()
@@ -224,8 +225,20 @@ class Native(Adapter):
             if script:
                 # Installation itself tests its normal open call, not --no-start.
                 self.prepare_profile()
-                self.install_result = self.command(['bash', self.inputs/'install.sh',
-                    *([] if self.args.online else ['--package-directory', self.inputs])], check=False)
+                log = (self.report.output/'installation.log').open('a', encoding='utf-8'); self.logs.append(log)
+                self.installer_process = subprocess.Popen(['bash', str(self.inputs/'install.sh'),
+                    *([] if self.args.online else ['--package-directory', str(self.inputs)])],
+                    stdout=log, stderr=log, start_new_session=True)
+                end = time.monotonic()+180
+                # The script atomically installs the complete app before asking
+                # Launch Services to open it. That request may await OS consent.
+                while time.monotonic() < end:
+                    installed = (self.report.output/'installation.log').read_text(errors='replace')
+                    if f'files installed at: {self.app}' in installed and self.executable.is_file(): break
+                    if self.installer_process.poll() is not None:
+                        raise RuntimeError(f'Installer did not complete the app copy (exit {self.installer_process.returncode})')
+                    time.sleep(.2)
+                else: raise TimeoutError('Installer did not finish copying the application')
             else:
                 mount = self.directory/'DMG mount'; mount.mkdir(exist_ok=True)
                 self.command(['hdiutil', 'attach', '-readonly', '-nobrowse', '-mountpoint', mount, package])
@@ -259,19 +272,21 @@ class Native(Adapter):
     def start(self):
         if sys.platform == 'darwin':
             # Launch Services is essential: direct --headless misses Gatekeeper.
-            result = self.command(['open', self.app], name='os-launch.log', check=False)
+            if self.installer_process is None:
+                log = (self.report.output/'os-launch.log').open('a', encoding='utf-8'); self.logs.append(log)
+                self.open_process = subprocess.Popen(['open', str(self.app)], stdout=log, stderr=log, start_new_session=True)
             try: wait_http(f'http://127.0.0.1:{self.port}', seconds=45)
             except (RuntimeError, TimeoutError):
-                expression = '(process == "amfid" OR process == "syspolicyd") AND eventMessage CONTAINS[c] "FlintEye"'
-                system = subprocess.run(['/usr/bin/log', 'show', '--last', '2m', '--style', 'compact', '--info', '--predicate', expression],
-                                        capture_output=True, text=True, timeout=30)
-                (self.report.output/'macos-trust.log').write_text(system.stdout+system.stderr)
-                evidence = system.stdout.lower()
+                evidence = self.macos_diagnostics().lower()
                 # A generic open error or spctl rejection alone cannot excuse a crash.
                 if any(term in evidence for term in ('adhoc signed or signed by an unknown certificate chain',
                                                     'gatekeeper denial breadcrumb', 'gatekeeper rejection')):
                     raise ApprovalRequired('macos-trust.log: OS explicitly denied first launch; API/GUI not run')
-                raise RuntimeError(f'OS launch failed without a confirmed approval refusal (open exit {result.returncode})')
+                launcher = self.installer_process or self.open_process
+                raise RuntimeError(f'OS launch did not complete without a confirmed approval refusal (launcher exit {launcher.poll()})')
+            if self.installer_process is not None:
+                if self.installer_process.wait(timeout=15) != 0:
+                    raise RuntimeError('Installer reported a launch failure; inspect installation.log')
         else:
             self.launch([self.executable, '--disable-lan'])
             wait_http(f'http://127.0.0.1:{self.port}', self.process)
@@ -283,11 +298,12 @@ class Native(Adapter):
 
     def uninstall(self):
         if sys.platform == 'darwin':
+            self.stop_launch_helpers()
             if self.app.is_symlink() or not self.app.is_dir(): raise RuntimeError('Unexpected app removal target')
             shutil.rmtree(self.app)
         elif os.name == 'nt':
-            command = "& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $args[0] -InstallDir $args[1] -Silent; exit $LASTEXITCODE"
-            self.command(['powershell.exe', '-NoProfile', '-Command', command, str(self.app/'uninstall_windows.ps1'), str(self.app)])
+            self.command(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass',
+                          '-File', self.app/'uninstall_windows.ps1', '-InstallDir', self.app, '-Silent'])
         else: self.command(['sudo', 'apt-get', 'remove', '-y', 'flinteye'])
         if any(Path(path).exists() for path in (self.executable, self.media, self.ffmpeg)):
             raise RuntimeError('Application or bundled media executable survived uninstall')
@@ -300,6 +316,32 @@ class Native(Adapter):
                     with winreg.OpenKey(winreg.HKEY_CURRENT_USER, path): raise RuntimeError('Uninstall registration survived removal')
                 except FileNotFoundError: pass
         if not (self.profile/'.flinteye-qa-owned').exists(): raise RuntimeError('Uninstall erased retained data')
+
+    def macos_diagnostics(self):
+        expression = '(process == "amfid" OR process == "syspolicyd" OR process CONTAINS[c] "XProtect") AND (eventMessage CONTAINS[c] "/FlintEye.app" OR eventMessage CONTAINS[c] "(id: community.flinteye)" OR eventMessage CONTAINS[c] "(bundle_id: community.flinteye)")'
+        result = subprocess.run(['/usr/bin/log', 'show', '--last', '8m', '--style', 'compact', '--info', '--debug', '--predicate', expression],
+                                capture_output=True, text=True, timeout=45)
+        text = result.stdout+result.stderr
+        (self.report.output/'macos-trust.log').write_text(text[-150_000:])
+        self.command(['ps', '-axo', 'pid,ppid,stat,comm'], name='os-processes.log', check=False)
+        return text
+
+    def stop_launch_helpers(self):
+        for process in (self.installer_process, self.open_process):
+            if process is not None: stop_process(process)
+        self.installer_process = self.open_process = None
+
+    def finish(self):
+        if sys.platform == 'darwin':
+            try:
+                if not (self.report.output/'macos-trust.log').exists(): self.macos_diagnostics()
+            finally:
+                self.stop_launch_helpers()
+        elif os.name == 'nt' and self.report.data['result'] == 'failed':
+            self.command(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command',
+                          "Get-Process | Where-Object { $_.ProcessName -match 'FlintEye|SmartScreen|setup|powershell' } | Select-Object ProcessName,Id,MainWindowTitle | Format-List"],
+                         name='os-processes.log', timeout=30, check=False)
+        super().finish()
 
 
 def exercise(adapter: Adapter, report: Report, args):
