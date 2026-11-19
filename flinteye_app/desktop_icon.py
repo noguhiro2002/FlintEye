@@ -14,10 +14,18 @@ def apply_application_icon(window=None) -> None:
             if icon is not None:
                 AppKit.NSApplication.sharedApplication().setApplicationIconImage_(icon)
         elif window is not None:
-            from PIL import Image, ImageTk
-            image = ImageTk.PhotoImage(Image.open(application_dir() / 'images/icons/flinteye-symbol.png'), master=window)
-            window.iconphoto(True, image)
-            window._flinteye_icon = image
+            # Tk reads PNG natively. Pillow's dynamically imported Tk extension
+            # can be absent from a frozen bundle, preventing the controls opening.
+            import tkinter as tk
+            try:
+                image = tk.PhotoImage(file=str(application_dir() / 'images/icons/flinteye-symbol.png'), master=window)
+                scale = max(1, image.width() // 64)
+                if scale > 1:
+                    image = image.subsample(scale, scale)
+                window.iconphoto(True, image)
+                window._flinteye_icon = image
+            except tk.TclError:
+                logging.getLogger(__name__).exception('Could not set the FlintEye window icon')
     except (ImportError, OSError, RuntimeError):
         logging.getLogger(__name__).exception('Could not set the FlintEye application icon')
 

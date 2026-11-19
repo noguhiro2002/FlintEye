@@ -3,6 +3,8 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import signal
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -16,6 +18,32 @@ from public_install_inputs import validate_manifest
 
 
 class LifecycleTests(unittest.TestCase):
+    @unittest.skipIf(os.name == 'nt', 'POSIX service termination')
+    def test_sigterm_finishes_cli_cleanup_before_exit(self):
+        from lifecycle_common import ROOT, wait_http, wait_closed
+        with tempfile.TemporaryDirectory() as directory:
+            profile = Path(directory)/'qa'; owned_profile(profile)
+            port = seed_runtime(profile, str(profile), 'unused-qa-mediamtx')
+            runtime = profile/'runtime.json'
+            config = json.loads(runtime.read_text())
+            config['mediamtx'].update(control_mode='external', managed={'enabled': False})
+            runtime.write_text(json.dumps(config))
+            with (Path(directory)/'application.log').open('w+') as log:
+                process = subprocess.Popen([sys.executable, str(ROOT/'flinteye.py'), '--headless', '--data-dir', str(profile)],
+                                           cwd=directory, stdout=log, stderr=log)
+                try:
+                    wait_http(f'http://127.0.0.1:{port}', process, seconds=25)
+                    self.assertTrue((profile/'instance-control.json').exists())
+                    process.send_signal(signal.SIGTERM)
+                    code = process.wait(timeout=25)
+                    log.seek(0)
+                    self.assertEqual(code, 0, log.read())
+                    self.assertFalse((profile/'instance-control.json').exists(), 'Normal termination left stale instance ownership')
+                    wait_closed(port, seconds=3)
+                finally:
+                    if process.poll() is None:
+                        process.kill(); process.wait()
+
     def test_complete_report_requires_every_stage_and_matching_build(self):
         with tempfile.TemporaryDirectory() as directory:
             report = Report(Path(directory), method='windows-exe', release='1.2.0-preview.4', commit='a'*40)

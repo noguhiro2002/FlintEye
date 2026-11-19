@@ -632,36 +632,38 @@ def main() -> int:
         _print_connection(root, control.metadata)
 
     server.on_ready = ready
-    thread = None
-    try:
-        if args.headless:
-            server.run()
-            return 0
-        thread = threading.Thread(target=server.run, name='flinteye-api')
-        thread.start()
-        for _ in range(100):
-            if control.metadata.get('ready'): break
-            if not thread.is_alive(): raise RuntimeError('Could not start FlintEye. Check logs or port conflicts.')
-            time.sleep(.1)
-        else: raise RuntimeError('FlintEye did not become ready.')
-        from flinteye_app.flinteye_desktop import run_desktop
-        if not args.background: webbrowser.open(url)
-        setup_dialog(runtime)
-        if args.setup_only: return 0
-        run_desktop(url, server, root, context.monitoring)
-    finally:
-        server.should_exit = True
+    from flinteye_app.server_runtime import termination_signals
+    with termination_signals(server):
+        thread = None
         try:
-            # Stop publishers and MediaMTX even if open clients delay ASGI shutdown.
-            context.shutdown()
+            if args.headless:
+                server.run()
+                return 0
+            thread = threading.Thread(target=server.run, name='flinteye-api')
+            thread.start()
+            for _ in range(100):
+                if control.metadata.get('ready'): break
+                if not thread.is_alive(): raise RuntimeError('Could not start FlintEye. Check logs or port conflicts.')
+                time.sleep(.1)
+            else: raise RuntimeError('FlintEye did not become ready.')
+            from flinteye_app.flinteye_desktop import run_desktop
+            if not args.background: webbrowser.open(url)
+            setup_dialog(runtime)
+            if args.setup_only: return 0
+            run_desktop(url, server, root, context.monitoring)
         finally:
-            from flinteye_app.process_lifetime import stop_background_processes
+            server.should_exit = True
             try:
-                stop_background_processes()
+                # Stop publishers and MediaMTX even if open clients delay ASGI shutdown.
+                context.shutdown()
             finally:
-                if thread is not None:
-                    thread.join()
-                control.close()
+                from flinteye_app.process_lifetime import stop_background_processes
+                try:
+                    stop_background_processes()
+                finally:
+                    if thread is not None:
+                        thread.join()
+                    control.close()
     return 0
 
 

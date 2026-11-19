@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 import logging
+import signal
 import socket
 import ssl
 import threading
@@ -13,6 +14,28 @@ import uvicorn
 from flinteye_app.network_access import ensure_certificates
 
 logger = logging.getLogger(__name__)
+
+
+@contextmanager
+def termination_signals(server):
+    """Let the CLI finish its owner/process cleanup on an OS stop request.
+
+    Uvicorn re-emits captured signals after its lifespan shutdown. A default
+    SIGTERM handler would kill the process before the CLI's finally block.
+    Desktop listeners also run off the main thread, where Uvicorn cannot own
+    signals, so the same handler asks the native event loop to close normally.
+    """
+    previous = {}
+    if threading.current_thread() is threading.main_thread():
+        def stop(signum, frame):
+            server.should_exit = True
+        for signum in (signal.SIGINT, signal.SIGTERM):
+            previous[signum] = signal.signal(signum, stop)
+    try:
+        yield
+    finally:
+        for signum, handler in previous.items():
+            signal.signal(signum, handler)
 
 
 class ListenerGroup:

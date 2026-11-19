@@ -136,7 +136,12 @@ class Systemd(Native):
         if self.unit.exists(): self.command(['sudo', 'rm', '--', self.unit], name='cleanup.log')
         self.command(['sudo', 'systemctl', 'daemon-reload'], name='cleanup.log')
         if (self.empty_default/'.flinteye-qa-owned').is_file(): remove_owned_profile(self.empty_default)
-        super().cleanup()
+        # /var/lib is root-owned even though this unique StateDirectory and its
+        # contents belong to the QA user. Never remove a shared service profile.
+        if (self.profile.parent != Path('/var/lib') or self.profile.name != self.unit_name.removesuffix('.service')
+                or self.profile.is_symlink() or not (self.profile/'.flinteye-qa-owned').is_file()):
+            raise RuntimeError('Refusing removal of an unowned systemd state directory')
+        self.command(['sudo', 'rm', '-rf', '--', self.profile], name='cleanup.log')
 
 
 class Compose(Adapter):

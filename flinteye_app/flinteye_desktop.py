@@ -236,12 +236,8 @@ def _run_control_window(url, server, root, controller, actions):
     window.title('FlintEye')
     window.geometry('440x420')
     window.minsize(360, 340)
-    from flinteye_app.flinteye_runtime import application_dir
-    asset = application_dir()/'images/icons/flinteye-symbol.png'
-    if asset.is_file():
-        from PIL import Image, ImageTk
-        app_icon = ImageTk.PhotoImage(Image.open(asset).resize((64, 64)))
-        window.iconphoto(True, app_icon)
+    from flinteye_app.desktop_icon import apply_application_icon
+    apply_application_icon(window)
     frame = ttk.Frame(window, padding=12)
     frame.pack(fill='both', expand=True)
     state = ttk.Label(frame, font=('', 13, 'bold'), wraplength=430)

@@ -5,7 +5,7 @@ ARG QA_UID=1000
 ARG QA_GID=1000
 RUN if command -v apt-get >/dev/null; then \
       apt-get update && apt-get install -y --no-install-recommends sudo curl ca-certificates procps \
-        xvfb dbus-x11 libgtk-3-bin x11-utils fonts-dejavu-core && rm -rf /var/lib/apt/lists/*; \
+        xvfb dbus-x11 libgtk-3-bin x11-utils fonts-dejavu-core; \
     else \
       dnf install -y sudo curl-minimal ca-certificates procps-ng xorg-x11-server-Xvfb \
         dbus-x11 gtk3 xorg-x11-utils dejavu-sans-fonts && dnf clean all; \

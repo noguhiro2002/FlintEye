@@ -55,7 +55,11 @@ async function patch(data) {
   });
   assert(response.ok(), await response.text());
 }
-async function nav(name) { await page.locator('.sidebar').getByRole('button', { name, exact: true }).click(); }
+async function nav(name) {
+  const button = page.locator('.sidebar').getByRole('button', { name, exact: true });
+  await button.click();
+  await until(() => button.getAttribute('aria-current'), value => value === 'page', 'Navigation to '+name, 30);
+}
 async function category(name) { await page.getByRole('complementary', { name: 'Settings categories' }).getByRole('button', { name, exact: true }).click(); }
 async function login(username, secret) {
   await page.getByLabel('Username', { exact: true }).fill(username);
@@ -113,6 +117,11 @@ try {
       await card.getByLabel('Source URL', { exact: true }).fill(`${values['fixture-url']}/qa-input-${i}`);
     }
     await page.locator('.settings-page-header').getByRole('button', { name: 'Save changes', exact: true }).click();
+    // The API can commit before the UI finishes reloading saved values and USB
+    // discovery. Respect the real UI completion signal before navigating away.
+    await page.locator('.settings-page-header').getByText('All changes saved', { exact: true }).waitFor();
+    await until(() => page.locator('.settings-page-header').getByRole('button', { name: 'Refresh', exact: true }).isEnabled(),
+      value => value, 'Settings save/reload completion');
     await until(() => json('/api/v1/cameras'), value => value.items.filter(c => c.id.startsWith('qa-camera-')).length === 2, 'GUI camera save');
     const effective = await json('/api/v1/config/effective');
     const cameras = effective.cameras;
