@@ -34,6 +34,12 @@ class ReleaseTests(unittest.TestCase):
             self.assertIn('Current preview **' + selected + '**', rendered)
             self.assertIn('--version ' + selected, rendered)
             self.assertIn('inputs in **' + previous + '**', rendered)
+        active_list = ('- Public commands install ' + previous + '.\n'
+                       '- `Capture screen` inputs are excluded; verify Screen Recording permissions.')
+        for name in ('docs/DEVELOPMENT_1_2_0.md', 'docs/DEVELOPMENT_1_2_0.ja.md'):
+            rendered = release.render_installation_documentation(name, active_list, previous, selected)
+            self.assertNotIn(previous, rendered)
+            self.assertIn(selected, rendered)
         historical = 'Previously tested ' + previous
         self.assertEqual(release.render_installation_documentation('docs/DEVICE_QA_FOLLOWUP.md',
                                                                   historical, previous, selected), historical)

@@ -53,7 +53,7 @@ def render_installation_documentation(name: str, text: str, previous: str, selec
     paragraphs = []
     for paragraph in text.split('\n\n'):
         # This paragraph records the version that first fixed screen discovery.
-        if 'Capture screen' in paragraph and 'Screen Recording' in paragraph:
+        if name.startswith('docs/INSTALL.') and 'Capture screen' in paragraph and 'Screen Recording' in paragraph:
             paragraphs.append(paragraph)
             continue
         if name.startswith('docs/RELEASING') and previous in paragraph:
