@@ -6,7 +6,7 @@
 
 ## Source-first public development
 
-The public history begins with a single **1.1.1 source snapshot**. The current development preview is **`v1.2.0-preview.3`**. Public development previews require a successful complete build and reviewed licenses/sources. Stable distribution additionally requires the physical-device acceptance checks below. Keep old private installers and locally emulated builds outside public releases. Clone the public repository into a new directory if you still have a checkout with the old private history.
+The public history begins with a single **1.1.1 source snapshot**. The current development preview is **`v1.2.0-preview.4`**. Public development previews require a successful complete build and reviewed licenses/sources. Stable distribution additionally requires the physical-device acceptance checks below. Keep old private installers and locally emulated builds outside public releases. Clone the public repository into a new directory if you still have a checkout with the old private history.
 
 Normal pushes run **Distribution checks**. A push to `main` that changes `flinteye_app/_version.py`, the frontend dependency manifests, frontend install/audit scripts, the Linux package smoke test, or the build workflow also starts **Build release**, which creates desktop installers, tested container archives, and an assembled `release-bundle` in Actions. Run it manually for other rebuilds of the same version. On a public repository readers can access the logs and download artifacts after signing in to GitHub. Only **Publish tested release** uploads approved assets to Releases and GHCR. Keep camera credentials, recordings and personal profiles out of CI inputs and logs.
 
@@ -128,7 +128,7 @@ Do not put credentials, runtime configuration or recordings in that cache.
 
 ## Publish the tested build
 
-Run **Publish tested release** from the current default branch after the complete build passes. Select the successful complete build run, `public-preview`, and the number from its embedded version (`3` for `1.2.0-preview.3`). Keep the build run ID and publication commit fixed across both phases. License/source review and the matching enable flag are required. Report device acceptance accurately when selecting the checkbox.
+Run **Publish tested release** from the current default branch after the complete build passes. Select the successful complete build run, `public-preview`, and the number from its embedded version (`4` for `1.2.0-preview.4`). Keep the build run ID and publication commit fixed across both phases. License/source review and the matching enable flag are required. Report device acceptance accurately when selecting the checkbox.
 
 The build commit remains the source of truth for installers, container labels and the release tag. A newer publication commit may only change README files, Markdown under `docs/`, Compose, the release-publishing scripts/workflow, or their focused tests. Changes to application code, dependencies, native build inputs, command installer scripts, images or LICENSE require a new complete build. Both commit identities are recorded in the distribution manifest. Updated documentation is packaged reproducibly so the prepare and publish checksums agree. Stable publication also requires a stable embedded identity and a complete build; a preview is not renamed into a stable release.
 

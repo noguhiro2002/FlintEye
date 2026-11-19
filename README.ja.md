@@ -2,7 +2,7 @@
 
 **FlintEyeは現在開発中です。これは安定版ではなく開発プレビューです。テストには開発プレビューをご利用ください。**
 
-現在の開発プレビューは **1.2.0-preview.3** です。以下のクイックインストールコマンドで、macOSのセットアップ、アイコン、カメラの修正を含むこのバージョンをインストールできます。自動パッケージチェックは通過しましたが、物理デバイスでの受け入れ確認は進行中です。
+現在の開発プレビュー版は **1.2.0-preview.4** です。以下のクイックインストールコマンドを使用してインストールしてください。macOSをお使いの場合は、初回起動時の承認手順に従ってください。[検証状況](docs/INSTALLATION_QA.ja.md)では、自動テストの結果と、未完了の実機確認項目を確認できます。
 
 [既知の問題](docs/KNOWN_ISSUES.ja.md) · [バグを報告する](https://github.com/noguhiro2002/FlintEye/issues) · [質問とアイデア](https://github.com/noguhiro2002/FlintEye/discussions)
 
@@ -30,24 +30,24 @@ USBカメラやIPカメラの監視、ライブ映像の視聴、録画の検索
 <a id="quick-install"></a>
 ## クイックインストール
 
-**開発プレビュー：[v1.2.0-preview.3](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.2.0-preview.3)。** 実機での受け入れ確認は現在進行中です。お使いのコンピュータ用のコマンドを実行し、セットアップに従ってください。Python、FFmpeg、FFprobe、MediaMTXが同梱されているため、Gitのチェックアウトやコンパイルは不要です。
+**開発プレビュー：[v1.2.0-preview.4](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.2.0-preview.4)。** 実機での受け入れ確認は現在進行中です。お使いのコンピュータ用のコマンドを実行し、セットアップに従ってください。Python、FFmpeg、FFprobe、MediaMTXが同梱されているため、Gitのチェックアウトやコンパイルは不要です。
 
 **Windows — PowerShell**
 
 ```powershell
-irm https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.3/install.ps1 | iex
+irm https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.4/install.ps1 | iex
 ```
 
 **macOS — ターミナル**
 
 ```sh
-bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.3/install.sh
+bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.4/install.sh
 ```
 
 **Linux — ターミナル**
 
 ```sh
-bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.3/install.sh
+bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.4/install.sh
 ```
 
 また、選択したリリースからスクリプトをダウンロードして内容を確認し、ローカルで実行することもできます。パッケージ版にはPython、FFmpeg、FFprobe、MediaMTXが含まれています。別途インストールする必要はありません。Windows/macOSパッケージは署名なし/公証されていません。[OS確認画面](docs/INSTALL.ja.md#unsigned-packages)をご覧ください。
