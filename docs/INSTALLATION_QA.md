@@ -2,7 +2,7 @@
 
 [日本語](INSTALLATION_QA.ja.md) · [Documentation](README.md)
 
-GitHub Actions tests **install → real API and browser operation → normal quit → uninstall → retained-data reinstall**. Local runs first check the test harness; they do not replace per-OS Actions results. The new suite targets **1.2.0-preview.4**. Results remain pending until that Actions run completes. The currently published preview remains the version linked from [Quick Install](../README.md#quick-install).
+GitHub Actions tests **install → real API and browser operation → normal quit → uninstall → retained-data reinstall**. Local runs first check the test harness; they do not replace per-OS Actions results. For **1.2.0-preview.4**, the [build-time Actions run](https://github.com/noguhiro2002/FlintEye/actions/runs/44454225988) completed **24 of 32 cases through all seven stages**. The other **8 macOS installer cases require OS approval**: installation, integrity and removal passed, while API/GUI, Quit and retained-data reinstall were not run. Physical-device acceptance remains pending. The currently recommended download remains the version linked from [Quick Install](../README.md#quick-install).
 
 ## What the browser checks
 

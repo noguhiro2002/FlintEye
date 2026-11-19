@@ -1,6 +1,6 @@
 {
   "version": "1.2.0",
-  "commit": "abbc4926d793c290c15ce3c075fed93c9e164067",
+  "commit": "6a353d238cbaa45a423c2d1fc0af813a1c0ef96c",
   "cases": {
     "windows-owner-startup": {
       "status": "pending",
@@ -36,7 +36,7 @@
     },
     "all-native-architectures": {
       "status": "passed",
-      "evidence": "https://github.com/noguhiro2002/FlintEye/actions/runs/44322574969; same-commit 1.2.0-preview.3 Windows/macOS/Linux x64+ARM64 builds, installed/frozen setup/authentication, media, synthetic recording/playback, owned quit and Windows uninstall/data-retention checks passed. macOS additionally passed the real local-artifact installer script, embedded preview/icon/signature/quarantine checks and relocated-app recovery. Both containers passed. Physical-device acceptance remains pending."
+      "evidence": "https://github.com/noguhiro2002/FlintEye/actions/runs/44454225988; same-commit 1.2.0-preview.4 complete build: all eight installers and both CPU containers. 24 of 32 required installation/API/Web GUI/quit/uninstall/retained-reinstall cases passed all seven stages. 8 macOS installer cases passed installation, integrity and removal; OS approval required, installed API/GUI/Quit/reinstall NOT RUN. Source-mode macOS tests do not prove installed first launch. All eight physical-device acceptance cases remain pending."
     }
   }
 }

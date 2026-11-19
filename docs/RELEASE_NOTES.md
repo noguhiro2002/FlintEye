@@ -35,7 +35,7 @@ This development preview includes the macOS camera, setup and icon fixes in the 
 
 Other 1.2.0 changes include trusted-LAN HTTPS setup, authenticated RTSPS camera addresses, corrected USB capture modes, optional per-camera audio (off by default), and consistent uninstall instructions. Settings and recordings remain outside the application. Shared monitoring status, Stop versus Quit, recording completion and owned-process cleanup remain included.
 
-All eight installers and both container archives must come from the recorded successful build. `QA-RESULTS.json` records which installation/API/GUI cases passed and which macOS cases require first-launch approval; an approval requirement does not mean the GUI was tested. Public URL/GHCR checks run after publication. Physical-device acceptance remains in progress. See the acceptance record and guides in `documentation.zip`; this preview is UNDER DEVELOPMENT and is not a stable release.
+The [build-time Actions run](https://github.com/noguhiro2002/FlintEye/actions/runs/44454225988) completed 24 of 32 required cases through all seven stages. The 8 macOS installer cases passed installation, integrity and removal but require OS approval; their API/GUI, Quit and retained-data reinstall checks were not run. The source-mode macOS tests do not establish installed-app first-launch permission. `QA-RESULTS.json` contains the per-stage results. Public URL/GHCR checks run after publication. All eight physical-device acceptance gates remain pending; this is an UNDER DEVELOPMENT preview, not a stable release.
 
 ## License
 

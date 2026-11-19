@@ -23,6 +23,25 @@ from validation_install import prepare as prepare_validation_install
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_published_documentation_pins_current_examples_and_preserves_fix_history(self):
+        previous, selected = '1.2.0-preview.3', '1.2.0-preview.4'
+        active = ('Current preview **' + previous + '**.\n\n'
+                  'bash install.sh --version ' + previous + '\n\n'
+                  'FlintEye excludes `Capture screen` inputs in **' + previous + '**; '
+                  'older previews prompted for Screen Recording.\n')
+        for name in ('docs/INSTALL.md', 'docs/INSTALL.ja.md'):
+            rendered = release.render_installation_documentation(name, active, previous, selected)
+            self.assertIn('Current preview **' + selected + '**', rendered)
+            self.assertIn('--version ' + selected, rendered)
+            self.assertIn('inputs in **' + previous + '**', rendered)
+        historical = 'Previously tested ' + previous
+        self.assertEqual(release.render_installation_documentation('docs/DEVICE_QA_FOLLOWUP.md',
+                                                                  historical, previous, selected), historical)
+        for name in ('docs/RELEASING.md', 'docs/RELEASING.ja.md'):
+            example = 'Select `3` for `' + previous + '`.'
+            self.assertEqual(release.render_installation_documentation(name, example, previous, selected),
+                             'Select `4` for `' + selected + '`.')
+
     def test_per_os_validation_download_has_pinned_scripts_and_checksums(self):
         prepare_validation_install(self.inputs, self.commit)
         identity = json.loads((self.inputs/'validation-build.json').read_text())
@@ -195,12 +214,24 @@ class ReleaseTests(unittest.TestCase):
         (source/'packaging/acceptance-1.2.0.json').write_text('{}')
         for name in ('README.md', 'README.ja.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'docs/INSTALL.md'):
             (source/name).write_text('Retained text: '+name)
+        previous, selected = '1.2.0-preview.3', '1.2.0-preview.4'
+        original = 'Current preview **' + previous + '**.\n'
+        for name in ('README.md', 'README.ja.md', 'docs/INSTALL.md'):
+            (source/name).write_text(original)
+        logo = b'\x89PNG binary fixture\0'
+        (source/'images/logo.png').write_bytes(logo)
         with patch('release.ROOT', source):
-            release.write_documentation(self.root/'first.zip')
+            release.write_documentation(self.root/'first.zip', release=selected)
             for path in source.rglob('*.md'):
                 os.utime(path, (1_700_000_000, 1_700_000_000))
-            release.write_documentation(self.root/'second.zip')
+            release.write_documentation(self.root/'second.zip', release=selected)
         self.assertEqual((self.root/'first.zip').read_bytes(), (self.root/'second.zip').read_bytes())
+        self.assertEqual((source/'README.md').read_text(), original)
+        with zipfile.ZipFile(self.root/'first.zip') as archive:
+            for name in ('README.md', 'README.ja.md', 'docs/INSTALL.md'):
+                self.assertEqual(archive.read(name).decode(), original.replace(previous, selected))
+            self.assertEqual(archive.read('LICENSE'), (source/'LICENSE').read_bytes())
+            self.assertEqual(archive.read('images/logo.png'), logo)
 
     def test_stable_requires_every_p1_case_but_preview_discloses_pending_devices(self):
         root = self.root/'acceptance-source'; (root/'packaging').mkdir(parents=True)

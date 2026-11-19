@@ -41,8 +41,39 @@ def check_development_acceptance(commit: str, *, root=ROOT, channel: str = 'stab
     return complete
 
 
-def write_documentation(destination: Path) -> None:
+def render_installation_documentation(name: str, text: str, previous: str, selected: str) -> str:
+    """Pin active guide examples to this preview without renumbering fix history."""
+    guides = {'README.md', 'README.ja.md'} | {
+        'docs/' + base + suffix + '.md'
+        for base in ('INSTALL', 'DOCKER', 'RELEASING', 'DEVELOPMENT_1_2_0')
+        for suffix in ('', '.ja')
+    }
+    if name not in guides or previous == selected:
+        return text
+    paragraphs = []
+    for paragraph in text.split('\n\n'):
+        # This paragraph records the version that first fixed screen discovery.
+        if 'Capture screen' in paragraph and 'Screen Recording' in paragraph:
+            paragraphs.append(paragraph)
+            continue
+        if name.startswith('docs/RELEASING') and previous in paragraph:
+            paragraph = paragraph.replace('`' + previous.rsplit('.', 1)[1] + '`',
+                                          '`' + selected.rsplit('.', 1)[1] + '`')
+        paragraphs.append(paragraph.replace(previous, selected))
+    return '\n\n'.join(paragraphs)
+
+
+def write_documentation(destination: Path, *, release: str | None = None) -> None:
     """Keep publication notes current, with reproducible bytes across both phases."""
+    previous = None
+    if release is not None:
+        if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+-preview\.[1-9][0-9]*', release):
+            raise ValueError('Expected an exact development preview for documentation')
+        match = re.search(r'\b[0-9]+\.[0-9]+\.[0-9]+-preview\.[1-9][0-9]*\b',
+                          (ROOT/'README.md').read_text())
+        if not match:
+            raise ValueError('Cannot identify the README recommended preview for documentation')
+        previous = match[0]
     paths = [ROOT / name for name in ('README.md', 'README.ja.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md')]
     paths += sorted((ROOT / 'docs').rglob('*.md'))
     paths += [ROOT/'packaging/acceptance-1.2.0.json']
@@ -56,7 +87,11 @@ def write_documentation(destination: Path) -> None:
             info.create_system = 3
             info.external_attr = 0o100644 << 16
             info.compress_type = zipfile.ZIP_DEFLATED
-            archive.writestr(info, path.read_bytes(), compresslevel=9)
+            data = path.read_bytes()
+            if release is not None and path.suffix == '.md':
+                data = render_installation_documentation(path.relative_to(ROOT).as_posix(),
+                                                        data.decode('utf-8'), previous, release).encode('utf-8')
+            archive.writestr(info, data, compresslevel=9)
 
 
 def validate_publication_revision(build_commit: str, publication_commit: str, changed_paths: list[str],

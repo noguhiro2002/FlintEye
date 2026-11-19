@@ -61,7 +61,7 @@ After attempting to open the app, macOS may require **System Settings → Privac
 Do not disable Gatekeeper globally or remove quarantine attributes in an installer script.
 Managed computers may require help from their administrator.
 
-If Finder reports **The file can't be found** but `Contents/MacOS/FlintEye` exists, an OS trust rejection is also possible. In the reported M1 case, the executable and bundle signature were valid, while `amfid` rejected the ad-hoc signature and direct execution ended with exit 137. Try the per-app approval above. Missing notarization is not repaired by reinstalling MediaMTX or deleting accounts/settings. Starting with the next **1.2.0-preview.4** installer, file installation, launch requests and first-launch permission are reported separately; that build remains pending until its Actions results and release are available. See [installation lifecycle checks](INSTALLATION_QA.md).
+If Finder reports **The file can't be found** but `Contents/MacOS/FlintEye` exists, an OS trust rejection is also possible. In the reported M1 case, the executable and bundle signature were valid, while `amfid` rejected the ad-hoc signature and direct execution ended with exit 137. Try the per-app approval above. Missing notarization is not repaired by reinstalling MediaMTX or deleting accounts/settings. Starting with **1.2.0-preview.4**, installer messages distinguish file installation, the launch request and first-launch permission. The build-time tests confirm the same OS refusal on macOS CI and leave the installed API/GUI checks not run until approval. See [installation lifecycle checks](INSTALLATION_QA.md).
 
 ## Install a specific version
 

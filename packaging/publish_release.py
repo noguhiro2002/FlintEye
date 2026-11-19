@@ -89,7 +89,8 @@ def prepare(bundle: Path, output: Path, commit: str, run_id: str, channel: str, 
             text = (ROOT / 'packaging' / name).read_text().replace('@RELEASE_VERSION@', image_version)
             (output / name).write_text(text, encoding='utf-8', newline='\n')
     shutil.copy2(bundle / 'build-manifest.json', output / 'build-manifest.json')
-    write_documentation(output / 'documentation.zip')
+    write_documentation(output / 'documentation.zip',
+                        release=image_version if channel == 'public-preview' else None)
     for language in ('', '.ja'):
         name = 'ACCEPTANCE' + language + '.md'
         text = (ROOT / 'docs' / name).read_text()

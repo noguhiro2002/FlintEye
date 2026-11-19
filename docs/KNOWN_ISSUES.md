@@ -26,14 +26,14 @@ The later Windows/Mac/Linux review adds packaging, startup and shutdown findings
 
 ## Validation and remaining limits
 
-The next 1.2.0-preview.4 suite adds [real installed API/browser lifecycle checks](INSTALLATION_QA.md). Its 32-case Actions matrix is not complete until that build finishes. macOS ad-hoc integrity does not establish OS permission: the reported M1 launch refusal came from `amfid`, despite a valid executable/signature. Approved first launch and physical-device gates remain pending. Existing published installers are unchanged.
+The 1.2.0-preview.4 [installed API/browser lifecycle suite](INSTALLATION_QA.md) completed 24 cases through all seven stages in its [32-case Actions run](https://github.com/noguhiro2002/FlintEye/actions/runs/44454225988). The 8 macOS installer cases require first-launch OS approval; their API/GUI checks are not run. macOS ad-hoc integrity does not establish OS permission: the reported M1 launch refusal came from `amfid`, despite a valid executable/signature. Approved first launch and physical-device gates remain pending. Earlier published installers are unchanged.
 
 The regression suite uses a built frontend, Chromium and synthetic API responses. It exercises delayed and failed requests, draft protection, camera switching, keyboard interaction and narrow layouts. It blocks requests to external hosts and does not connect to physical cameras. See [Contributing](../.github/CONTRIBUTING.md) for the test commands.
 
 - **Real-device acceptance remains required:** Windows and macOS desktop behavior, physical USB/IP cameras, PTZ movement/stop, microphone/privacy permissions, sleep/resume, minimum-OS support and actual video decoding must be checked on the intended machines. Linux browser tests do not establish compatibility with every browser or screen reader.
 - **Conflicting settings are not merged automatically:** the draft stays on screen after a conflict. Copy the changes you need before explicitly discarding the draft and reloading the latest settings.
 - **Deployment guidance differs:** closing the browser keeps monitoring running. Desktop users pause cameras through **Stop monitoring** or exit the application through **Quit FlintEye**; Docker/systemd users stop their server service.
-- **Release status:** public installers and GHCR images remain gated on Windows x64, M1 Mac and Linux x64 acceptance plus corresponding source/license review. Existing Actions artifacts are development builds, not stable releases. See the [acceptance checklist](ACCEPTANCE.md).
+- **Release status:** public development previews require a complete successful build and corresponding source/license review, with incomplete macOS first-launch and physical-device checks disclosed. Stable promotion also requires the [physical-device acceptance checklist](ACCEPTANCE.md). CI success does not complete those device checks.
 
 Report new reproducible problems through [Issues](https://github.com/noguhiro2002/FlintEye/issues). Remove credentials, setup tokens, private camera URLs and personal footage from reports. Use the [private security channel](../.github/SECURITY.md) for vulnerabilities.
 
