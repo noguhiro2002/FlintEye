@@ -14,9 +14,11 @@ on:
       - packaging/install.ps1
       - packaging/validation_install.py
       - packaging/lifecycle*.py
+      - packaging/ci_apt.py
       - packaging/LifecycleLinux.Dockerfile
       - frontend/tests/installed.mjs
       - .github/workflows/build-release.yml
+      - .github/workflows/check.yml
   workflow_dispatch:
     inputs:
       desktop_only:
@@ -311,6 +313,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Use the official Ubuntu mirror for CI dependencies
+        run: sudo -n --preserve-env=GITHUB_ACTIONS python3 packaging/ci_apt.py
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Build on the minimum glibc baseline
         run: docker buildx build --build-arg "FLINTEYE_REVISION=$GITHUB_SHA" -f packaging/LinuxBuilder.Dockerfile --target artifacts --output type=local,dest=dist .
@@ -386,6 +390,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Use the official Ubuntu mirror for CI dependencies
+        run: sudo -n --preserve-env=GITHUB_ACTIONS python3 packaging/ci_apt.py
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.13.18'
@@ -508,6 +514,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Use the official Ubuntu mirror for CI dependencies
+        run: sudo -n --preserve-env=GITHUB_ACTIONS python3 packaging/ci_apt.py
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: build-linux-${{ matrix.arch }}

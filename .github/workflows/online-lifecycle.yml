@@ -60,6 +60,7 @@ jobs:
       - name: Prepare independent QA browser and HTTP client
         shell: bash
         run: |
+          if [[ "$RUNNER_OS" == Linux ]]; then sudo -n --preserve-env=GITHUB_ACTIONS python3 packaging/ci_apt.py; fi
           python -m pip install httpx==0.28.1
           npm --prefix frontend ci
           (cd frontend && npx playwright install --with-deps chromium)
@@ -107,6 +108,7 @@ jobs:
           python packaging/public_install_inputs.py --verify-image "$image" --output public-input --release "$QA_RELEASE" --commit "$QA_COMMIT"
       - name: Installed GHCR image real API/GUI lifecycle
         run: |
+          sudo -n --preserve-env=GITHUB_ACTIONS python3 packaging/ci_apt.py
           python -m pip install httpx==0.28.1
           npm --prefix frontend ci
           (cd frontend && npx playwright install --with-deps chromium)

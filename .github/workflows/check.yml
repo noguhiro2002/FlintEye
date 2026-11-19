@@ -31,7 +31,9 @@ jobs:
         run: git diff --exit-code -- frontend
       - name: Install browser engines for synthetic WebApp regressions
         working-directory: frontend
-        run: npx playwright install --with-deps chromium firefox webkit
+        run: |
+          sudo -n --preserve-env=GITHUB_ACTIONS python3 ../packaging/ci_apt.py
+          npx playwright install --with-deps chromium firefox webkit
       - name: WebApp behavior and responsive layout
         working-directory: frontend
         run: npm test
