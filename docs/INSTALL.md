@@ -82,6 +82,7 @@ See [Stop and uninstall FlintEye](STOP_AND_UNINSTALL.md) for complete shutdown, 
 
 Choose **Quit FlintEye** before updating. Back up configuration/inventory and keep the previous installer for rollback.
 Install the replacement package and restart. User data is outside the installation directory.
+If you are moving between Linux previews with the same package version, run the command installer from the new release. It asks the package manager to reinstall from the downloaded archive.
 The macOS command installer retains the previous app as `FlintEye.previous.app`; move that backup aside before a subsequent upgrade.
 
 Normal removal keeps recordings and settings. The Windows uninstaller offers a separate default-No data deletion prompt.

@@ -1,6 +1,6 @@
 {
   "version": "1.2.0",
-  "commit": "6a353d238cbaa45a423c2d1fc0af813a1c0ef96c",
+  "commit": "26421ce87ab9f882d342279a9204efe2942dee94",
   "cases": {
     "windows-owner-startup": {
       "status": "pending",
@@ -36,7 +36,7 @@
     },
     "all-native-architectures": {
       "status": "passed",
-      "evidence": "https://github.com/noguhiro2002/FlintEye/actions/runs/44454225988; same-commit 1.2.0-preview.4 complete build: all eight installers and both CPU containers. 24 of 32 required installation/API/Web GUI/quit/uninstall/retained-reinstall cases passed all seven stages. 8 macOS installer cases passed installation, integrity and removal; OS approval required, installed API/GUI/Quit/reinstall NOT RUN. Source-mode macOS tests do not prove installed first launch. All eight physical-device acceptance cases remain pending."
+      "evidence": "https://github.com/noguhiro2002/FlintEye/actions/runs/44712701442 \u2014 same-commit 1.2.0-preview.5 build for all eight installers and both container architectures. 24 of 32 required lifecycle cases passed all seven stages. Eight macOS installer cases passed install, integrity and removal. OS first-launch approval is required, so installed API/GUI, Quit and retained-data reinstall are untested. The Windows ARM64 EXE lifecycle completed on retry. All eight physical-device checks are pending."
     }
   }
 }

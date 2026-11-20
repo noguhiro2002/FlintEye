@@ -2,7 +2,7 @@
 
 [日本語](INSTALLATION_QA.ja.md) · [Documentation](README.md)
 
-GitHub Actions tests **install → real API and browser operation → normal quit → uninstall → retained-data reinstall**. Local runs first check the test harness; they do not replace per-OS Actions results. For **1.2.0-preview.4**, the [build-time Actions run](https://github.com/noguhiro2002/FlintEye/actions/runs/44454225988) completed **24 of 32 cases through all seven stages**. The other **8 macOS installer cases require OS approval**: installation, integrity and removal passed, while API/GUI, Quit and retained-data reinstall were not run. Physical-device acceptance remains pending. The currently recommended download remains the version linked from [Quick Install](../README.md#quick-install).
+GitHub Actions checks **install → API and browser operation → Quit → uninstall → reinstall with retained data**. For **1.2.0-preview.5**, 24 of 32 build-time cases passed all seven stages. The other eight macOS installer cases passed installation, integrity and removal. First-launch approval is required to test the installed API, browser, Quit and retained-data reinstall. Physical-device checks are pending. [Build results](https://github.com/noguhiro2002/FlintEye/actions/runs/44712701442)
 
 ## What the browser checks
 

@@ -4,15 +4,15 @@
 
 **Stable distribution of 1.2.0 requires all eight device gates below and a passing build for every OS and CPU on the same commit.** A failed or untested gate blocks stable promotion. A public UNDER DEVELOPMENT preview may distribute the passing build for testing while physical cases are pending; it must disclose those pending results and must not become Latest.
 
-The [build-time Actions run](https://github.com/noguhiro2002/FlintEye/actions/runs/44454225988) completed 24 of 32 required cases through all seven stages. The 8 macOS installer cases passed installation, integrity and removal but require OS approval; their API/GUI, Quit and retained-data reinstall checks were not run. The source-mode macOS tests do not establish installed-app first-launch permission. `QA-RESULTS.json` contains the per-stage results. Public URL/GHCR checks run after publication. All eight physical-device acceptance gates remain pending; this is an UNDER DEVELOPMENT preview, not a stable release.
+Of the 32 required build-time cases, 24 passed all seven stages. The eight macOS DMG and script cases passed installation, integrity and removal. macOS required first-launch approval, so the installed API, browser, Quit and retained-data reinstall checks were not run. The per-stage results are in `QA-RESULTS.json`. All eight real-device acceptance checks remain pending. The public download and GHCR checks run after publication. [Build results](https://github.com/noguhiro2002/FlintEye/actions/runs/44712701442)
 
 ## Use the exact QA build
 
 | Field | Required value or record |
 | --- | --- |
-| Release / application | `v1.2.0-preview.4` / `1.2.0` |
-| Tested application commit | `6a353d238cbaa45a423c2d1fc0af813a1c0ef96c` |
-| Build | [Actions run 44454225988](https://github.com/noguhiro2002/FlintEye/actions/runs/44454225988), OS-specific test artifacts or `release-bundle` |
+| Release / application | `v1.2.0-preview.5` / `1.2.0` |
+| Tested application commit | `26421ce87ab9f882d342279a9204efe2942dee94` |
+| Build | [Actions run 44712701442](https://github.com/noguhiro2002/FlintEye/actions/runs/44712701442), OS-specific test artifacts or `release-bundle` |
 | Package identity | Record the package filename and its matching `SHA256SUMS` value; confirm `build-manifest.json` and Information agree |
 | Environment | Date, tester, device, OS/build, CPU, browser/version, install method, install/data paths, actual API address/port, camera model/resolution/fps |
 | Results | For each operation, record expected behavior, observed behavior, Pass / Fail / Not tested, and an evidence reference |
@@ -125,6 +125,6 @@ Record the actual candidate commit and package checksums above before applying t
 - [ ] On Windows, macOS and Linux, compare reported 720p/1080p capture formats and rates with the actual video. Include 29.97 fps where supported and verify that refreshing devices keeps existing settings.
 - [ ] On each OS, test a USB camera with a microphone, a video-only USB camera and an IP camera with an audio track. Verify the audio-off default, unavailable-input feedback, audio-only failure with video continuing, initially muted Live View and audible, synchronized recording playback. Use ffprobe to confirm the actual PCM format and verify playback of a previous video-only recording.
 - [ ] Open a freshly built DMG in Finder and verify the icon there and after running from Applications. Check Windows installer, executable, shortcuts and Linux launcher icons.
-- [ ] For preview.4 on the reporting M1 Mac, compare the downloaded DMG and that same artifact's `install.sh --package-directory .`. Information → System must show `1.2.0-preview.4`. Initial password entry is in the browser; an address/token assistance window may appear, but the old native password form must not. Test retained and unfinished profiles without deleting data.
+- [ ] On the M1 Mac that reported the preview.3 issue, compare the downloaded DMG and that same artifact's `install.sh --package-directory .`. Information → System must show `1.2.0-preview.5`. Initial password entry is in the browser; an address/token assistance window may appear, but the old native password form must not. Test retained and unfinished profiles without deleting data.
 - [ ] Open and refresh camera discovery repeatedly with Screen Recording permission disabled. `Capture screen` must not be offered or opened, no Screen Recording prompt should recur, and the physical camera must still work. Disconnect/reconnect a camera saved by index and confirm the old index never opens a display. Test an OBS virtual camera separately.
 - [ ] Check the running Dock icon as well as the DMG/Finder icon and native setup/connection/folder dialogs. Test removal of the script's `~/Applications/FlintEye.app` separately from `/Applications/FlintEye.app`; retained accounts and recordings survive reinstallation. Confirm camera-table RTSPS addresses use the selected server address, never an internal loopback publishing URL.
