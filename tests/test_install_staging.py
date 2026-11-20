@@ -30,6 +30,7 @@ class StagingTests(unittest.TestCase):
                 'pgrep': '#!/bin/sh\nexit 1\n',
                 'curl': '#!/bin/sh\necho Unexpected network request >&2\nexit 99\n',
                 'sudo': '#!/bin/sh\nprintf "%s\\n" "$@" > "$FLINTEYE_INSTALL_CAPTURE"\n',
+                'rpm': '#!/bin/sh\n[ "$1" = -qp ] || exit 1\nprintf "0:1.2.0-1.x86_64"\n',
             }.items():
                 path = tools/command; path.write_text(script); path.chmod(0o755)
             env = {**os.environ, 'PATH': str(tools)+os.pathsep+os.environ['PATH'],
@@ -41,8 +42,10 @@ class StagingTests(unittest.TestCase):
                     '--package-directory', str(packages), '--no-start'], env=env, capture_output=True, text=True, timeout=20)
                 if valid:
                     self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
-                    self.assertIn(manager+'\ninstall\n-y\n', capture.read_text())
-                    self.assertIn(name, capture.read_text())
+                    command = capture.read_text().splitlines()
+                    expected = [manager, 'install', *(['--reinstall'] if kind == 'deb' else []), '-y']
+                    self.assertEqual(command[:-1], expected)
+                    self.assertEqual(Path(command[-1]).name, name)
                 else:
                     self.assertNotEqual(result.returncode, 0)
                     self.assertIn('Checksum mismatch', result.stderr)
