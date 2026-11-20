@@ -393,6 +393,11 @@ def exercise(adapter: Adapter, report: Report, args):
             retained = {str(path.relative_to(adapter.profile)): digest(path) for path in
                         [adapter.profile/'runtime.json', *(adapter.profile/'recordings').rglob('*')]
                         if path.is_file() and (path.name == 'runtime.json' or path.suffix in {'.mp4', '.ts'})}
+            selection = json.loads((report.output/'browser/download-selection.json').read_text())
+            selected = str(Path('recordings')/selection['relativePath'])
+            downloaded = report.output/'browser'/selection['savedName']
+            if selected not in retained or digest(downloaded) != retained[selected]:
+                raise AssertionError(f'Browser download differs from the selected recording: {selected}')
             phase = 'uninstall'
             adapter.uninstall(); report.stage(phase, 'passed', 'Program removed; accounts/config/recordings retained')
             adapter.sync_profile()

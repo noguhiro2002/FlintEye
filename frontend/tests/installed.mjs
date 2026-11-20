@@ -161,15 +161,30 @@ try {
   stages.push('all-six-main-screens');
   if (!values.retained) {
     await until(() => json('/api/v1/viewer/cameras'), value => value.items.length === 2 && value.items.every(c => c.health?.state === 'healthy'), 'Two receiving camera workers', 120);
-    await nav('Live View'); await videoProgress('Live WebRTC frame progress', true);
+    await nav('Live View');
+    for (const [i, marker] of [[1, 'red'], [2, 'blue']]) {
+      await page.getByRole('button', { name: 'View QA camera '+i, exact: true }).click();
+      await videoProgress('Live camera '+i, i === 1);
+      await until(() => page.frameLocator('iframe.webrtc-frame').locator('video').evaluate(v => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 1; canvas.height = 1;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(v, Math.floor(v.videoWidth/2), Math.floor(v.videoHeight/2), 1, 1, 0, 0, 1, 1);
+        const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+        return r > Math.max(g, b)+80 ? 'red' : b > Math.max(r, g)+80 ? 'blue' : 'unknown';
+      }), value => value === marker, 'Live camera '+i+' marker');
+    }
+    stages.push('both-live-cameras-show-their-own-marker');
     await page.screenshot({ path: join(output, 'Live-View-playing.png') });
     await nav('Multiview'); await videoProgress('Multiview WebRTC frame progress');
     await page.screenshot({ path: join(output, 'Multiview-playing.png') });
     stages.push('live-and-multiview-real-WebRTC-frame-progress');
     await until(() => json('/api/v1/recordings'), value => value.items.some(r => r.is_stable), 'Completed recordings');
     await nav('Recordings');
-    const play = page.getByRole('button', { name: /^Play / }).first();
-    await play.click();
+    const play = page.locator('.recording-card button[aria-label^="Play "]').first();
+    const relativePath = (await play.getAttribute('aria-label')).slice(5);
+    await page.getByRole('button', { name: 'Play '+relativePath, exact: true }).click();
+    assert.equal(await page.locator('.recording-modal-path').getAttribute('title'), relativePath);
     const player = page.getByRole('dialog').locator('video');
     await player.waitFor();
     await player.evaluate(v => { v.muted = true; void v.play().catch(() => {}); });
@@ -177,7 +192,9 @@ try {
     const downloadEvent = page.waitForEvent('download');
     await page.getByRole('dialog').getByRole('link', { name: 'Download', exact: true }).click();
     const download = await downloadEvent;
-    await download.saveAs(join(output, 'recording-download'+(download.suggestedFilename().endsWith('.mp4') ? '.mp4' : '.ts')));
+    const savedName = 'recording-download'+(download.suggestedFilename().endsWith('.mp4') ? '.mp4' : '.ts');
+    await download.saveAs(join(output, savedName));
+    await writeFile(join(output, 'download-selection.json'), JSON.stringify({ relativePath, savedName }));
     await page.getByRole('button', { name: 'Close player', exact: true }).click();
     stages.push('recording-GUI-playback-and-download');
     await nav('Settings'); await category('Runtime & access');

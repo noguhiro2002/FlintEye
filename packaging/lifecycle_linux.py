@@ -50,8 +50,17 @@ class PackageContainer(Adapter):
         suffix = '.rpm' if self.rpm else '.deb'
         package = Native.package(self, suffix)
         if self.args.method.endswith('script'):
-            self.run(['bash', '/artifacts/install.sh',
-                      *([] if self.args.online else ['--package-directory', '/artifacts']), '--no-start'])
+            self.prepare_profile()
+            # Keep the auto-launched desktop process from inheriting docker exec's
+            # output pipe. Preserve the real installer output for troubleshooting.
+            log = self.directory/'auto-install.log'
+            try:
+                self.run(['sh', '-c', 'exec bash "$@" > /qa/auto-install.log 2>&1', 'installer',
+                          '/artifacts/install.sh', *([] if self.args.online else ['--package-directory', '/artifacts'])])
+            finally:
+                if log.is_file():
+                    with (self.report.output/'installation.log').open('ab') as output:
+                        output.write(log.read_bytes())
         else:
             self.run(['sudo', 'dnf' if self.rpm else 'apt-get', 'install', '-y', '/artifacts/'+package.name])
         self.run(['test', '-x', self.executable])
@@ -64,7 +73,8 @@ class PackageContainer(Adapter):
 
     def start(self):
         # Exercise the package's actual desktop entry without --headless.
-        self.run(['gtk-launch', 'flinteye'], name='os-launch.log')
+        if not self.args.method.endswith('script'):
+            self.run(['gtk-launch', 'flinteye'], name='os-launch.log')
         wait_http(f'http://127.0.0.1:{self.port}')
 
     def quit(self):

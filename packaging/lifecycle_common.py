@@ -1,8 +1,10 @@
 """Real media/browser checks shared by native, source and container installers."""
 from __future__ import annotations
 
+from array import array
 from contextlib import contextmanager
 import json
+import math
 import os
 from pathlib import Path
 import signal
@@ -153,7 +155,7 @@ def media_fixture(directory: Path, media: str, ffmpeg: str, *, prefix: list[str]
         else: raise TimeoutError('Synthetic RTSP server did not start')
         for i in (1, 2):
             command = [ffmpeg, '-nostdin', '-hide_banner', '-loglevel', 'error', '-re',
-                       '-f', 'lavfi', '-i', f'testsrc2=size=320x180:rate=10',
+                       '-f', 'lavfi', '-i', f"testsrc2=size=320x180:rate=10,drawbox=x=0:y=ih/3:w=iw:h=ih/3:color={('red', 'blue')[i-1]}:t=fill",
                        '-f', 'lavfi', '-i', f'sine=frequency={i*440}:sample_rate=48000',
                        '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-g', '10',
                        '-c:a', 'aac', '-b:a', '64k', '-ac', '1', '-rtsp_transport', 'tcp',
@@ -195,31 +197,107 @@ def request_quit(profile: Path, process=None) -> None:
         raise AssertionError('Application did not clean its control file')
 
 
+def verify_camera_tone(samples: array, relative: Path) -> bool:
+    """A short or silent boundary is inconclusive. The other fixture's tone fails."""
+    found = False
+    for start in range(0, len(samples)-1599, 1600):
+        window = samples[start:start+1600]
+        energy = sum(v*v for v in window)
+        if energy < len(window)*256**2:
+            continue
+        # Goertzel energy at both known fixture frequencies. Partial windows,
+        # encoder delay and quiet segment edges should not imply swapped audio.
+        powers = []
+        for frequency in (440, 880):
+            coefficient = 2*math.cos(2*math.pi*frequency/16000)
+            previous = older = 0.
+            for sample in window:
+                value = sample + coefficient*previous - older
+                older, previous = previous, value
+            powers.append(previous**2 + older**2 - coefficient*previous*older)
+        if powers[1] > powers[0] and powers[1] > 0.1*len(window)*energy:
+            raise AssertionError(f'Wrong camera audio tone in {relative}: 880 Hz')
+        if powers[0] > 0.25*len(window)*energy:
+            found = True
+    return found
+
+
 def decode_recordings(profile: Path, ffmpeg: str, output: Path, *, prefix: list[str] | None = None,
                       app_profile: str | None = None) -> None:
-    files = [p for p in (profile/'recordings').rglob('*') if p.suffix in {'.mp4', '.ts'}]
-    if not files:
-        raise AssertionError('No real recordings to decode')
-    checked, audio_enabled, audio_disabled = [], [], []
+    streams = {'qa-camera-1': ('red',), 'qa-camera-2': ('blue',), 'multiview_1': ('red', 'blue')}
+    progressing = set()
+    checked, audio_enabled = [], []
+    verified_tone = False
+    ffprobe = str(Path(ffmpeg).with_name('ffprobe.exe' if ffmpeg.endswith('.exe') else 'ffprobe'))
     with (output/'decode.log').open('w') as log:
-        for path in files:
-            target = str(Path(app_profile)/path.relative_to(profile)) if app_profile else str(path)
-            result = subprocess.run((prefix or [])+[ffmpeg, '-nostdin', '-v', 'error', '-xerror', '-i', target, '-f', 'null', '-'],
-                                    capture_output=True, text=True, check=True, timeout=60)
-            log.write(result.stdout+result.stderr)
-            if result.stderr.strip(): raise AssertionError('Recording decode reported errors: '+result.stderr)
+        for path in sorted((profile/'recordings').rglob('*')):
+            if path.suffix not in {'.mp4', '.ts'}:
+                continue
             relative = path.relative_to(profile)
-            ffprobe = str(Path(ffmpeg).with_name('ffprobe.exe' if ffmpeg.endswith('.exe') else 'ffprobe'))
+            stream = relative.parts[1]
+            if stream not in streams:
+                raise AssertionError(f'Unexpected recording source: {relative}')
+            target = str(Path(app_profile)/relative) if app_profile else str(path)
             probe = subprocess.run((prefix or [])+[ffprobe, '-v', 'error', '-show_streams', '-of', 'json', target],
                                    capture_output=True, text=True, timeout=30, check=True)
-            tracks = [s for s in json.loads(probe.stdout)['streams'] if s['codec_type'] == 'audio']
-            if relative.parts[1] == 'qa-camera-1' and tracks:
-                audio_enabled += tracks
-            if relative.parts[1] == 'qa-camera-2': audio_disabled += tracks
-            checked.append(str(relative))
-    if not any(s.get('codec_name', '').startswith('pcm_s16') and str(s.get('sample_rate')) == '16000'
-               and s.get('channels') == 1 for s in audio_enabled):
+            tracks = json.loads(probe.stdout)['streams']
+            if sum(t['codec_type'] == 'video' for t in tracks) != 1:
+                raise AssertionError(f'Expected one video track: {relative}')
+            audio = [t for t in tracks if t['codec_type'] == 'audio']
+            if stream == 'qa-camera-2' and audio:
+                raise AssertionError(f'Audio-off camera recorded audio: {relative}')
+            if stream == 'qa-camera-1' and audio:
+                if len(audio) != 1 or not (audio[0]['codec_name'].startswith('pcm_s16') and
+                                          audio[0]['sample_rate'] == '16000' and audio[0]['channels'] == 1):
+                    raise AssertionError(f'Unexpected Standard recording audio: {relative}')
+                audio_enabled.extend(audio)
+                # The two fixture microphones emit 440 and 880 Hz respectively.
+                # Check complete, audible 100-ms windows; segment edges may be silent.
+                pcm = subprocess.run((prefix or [])+[ffmpeg, '-nostdin', '-v', 'error', '-xerror',
+                                     '-i', target, '-map', '0:a:0', '-t', '1', '-f', 's16le', '-'],
+                                     capture_output=True, check=True, timeout=30)
+                samples = array('h')
+                samples.frombytes(pcm.stdout)
+                if sys.byteorder == 'big':
+                    samples.byteswap()
+                if verify_camera_tone(samples, relative):
+                    verified_tone = True
+
+            # Decode all tracks to completion, and inspect actual video pixels. The center
+            # stripe labels the camera while the moving test pattern around it proves progress.
+            result = subprocess.run((prefix or [])+[ffmpeg, '-nostdin', '-v', 'error', '-xerror', '-i', target,
+                                    '-map', '0:v:0', '-vf', 'scale=32:16', '-pix_fmt', 'rgb24',
+                                    '-threads', '1', '-fps_mode', 'passthrough', '-f', 'rawvideo', 'pipe:1',
+                                    '-map', '0:v', '-map', '0:a?', '-f', 'null', '-'],
+                                    capture_output=True, timeout=60)
+            if result.returncode or result.stderr:
+                raise AssertionError(f'{relative}: {result.stderr.decode(errors="replace")}')
+            size = 32*16*3
+            pixels = result.stdout
+            if not pixels or len(pixels) % size:
+                raise AssertionError(f'No complete video frames: {relative}')
+            first_marked = None
+            for offset in range(0, len(pixels), size):
+                frame = pixels[offset:offset+size]
+                markers = []
+                for x in ([8, 24] if stream == 'multiview_1' else [16]):
+                    i = (8*32+x)*3
+                    r, g, b = frame[i:i+3]
+                    markers.append('red' if r > max(g,b)+80 else 'blue' if b > max(r,g)+80 else None)
+                if tuple(markers) != streams[stream]:
+                    # The compositor draws a placeholder until each camera connects.
+                    if stream == 'multiview_1' and all(m is None or m == want for m, want in zip(markers, streams[stream])):
+                        continue
+                    raise AssertionError(f'Wrong camera marker in {relative}: {markers}')
+                if first_marked is None:
+                    first_marked = frame
+                elif frame != first_marked:
+                    progressing.add(stream)
+            log.write(f'{relative.as_posix()}: {len(pixels)//size} video frames\n')
+            checked.append(relative.as_posix())
+    if missing := streams.keys()-progressing:
+        raise AssertionError(f'Missing moving footage with expected camera markers: {sorted(missing)}')
+    if not audio_enabled or not verified_tone:
         raise AssertionError('No recording with the saved Standard 16-bit/16-kHz/mono audio')
-    if audio_disabled: raise AssertionError('Audio-off camera recorded audio')
-    (output/'recording-audio.json').write_text(json.dumps({'enabled_camera': audio_enabled, 'disabled_camera': audio_disabled}, indent=2)+'\n')
+    (output/'recording-audio.json').write_text(json.dumps({'enabled_camera': audio_enabled, 'disabled_camera': []}, indent=2)+'\n')
     (output/'decoded-recordings.json').write_text(json.dumps(checked, indent=2)+'\n')

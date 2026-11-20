@@ -12,7 +12,7 @@ MANUAL_CASES = ('os-first-launch-approval', 'native-menus-and-permissions', 'phy
 BROWSER_CHECKS = {
     'browser-first-run-setup', 'real-api-build-identity-and-authentication',
     'GUI-register-two-real-synthetic-RTSP-sources-and-save', 'per-camera-audio-default-off-detection-enable-and-save',
-    'all-six-main-screens', 'live-and-multiview-real-WebRTC-frame-progress',
+    'both-live-cameras-show-their-own-marker', 'all-six-main-screens', 'live-and-multiview-real-WebRTC-frame-progress',
     'recording-GUI-playback-and-download', 'viewer-login-and-real-API-write-denial',
     'GUI-stop-keeps-API-and-saved-settings-cannot-restart-monitoring', 'GUI-start-resumes-recording-before-normal-quit',
 }
@@ -137,6 +137,21 @@ def collect(directory: Path, *, release: str, commit: str) -> dict:
                 proofs[name] = hashlib.sha256(proof_path.read_bytes()).hexdigest()
             decoded = json.loads((path.parent/'decoded-recordings.json').read_text())
             if not isinstance(decoded, list) or not decoded: raise ValueError('No decoded recording evidence')
+            sources = {Path(name).parts[:2] for name in decoded}
+            if sources != {('recordings', name) for name in ('qa-camera-1', 'qa-camera-2', 'multiview_1')}:
+                raise ValueError('Missing or unexpected decoded recording sources')
+            selection = json.loads((path.parent/'browser/download-selection.json').read_text())
+            filename = selection.get('savedName')
+            selected = 'recordings/' + selection['relativePath']
+            if filename not in {'recording-download.mp4', 'recording-download.ts'} or selected not in decoded:
+                raise ValueError('Browser selected an unknown recording')
+            retained = json.loads((path.parent/'retained-files.json').read_text())
+            original_hashes = {name.replace(chr(92), '/'): value for name, value in retained.items()}
+            from release_lib import digest
+            download_hash = digest(path.parent/'browser'/filename)
+            if download_hash != original_hashes.get(selected):
+                raise ValueError('Downloaded bytes differ from selected original recording')
+            proofs['browser/'+filename] = download_hash
             if not (path.parent/'decode.log').is_file(): raise ValueError('No full recording decode log')
             audio = json.loads((path.parent/'recording-audio.json').read_text())
             if not audio.get('enabled_camera') or audio.get('disabled_camera') != []:

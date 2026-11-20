@@ -104,9 +104,21 @@ class ReleaseTests(unittest.TestCase):
                 (target/'browser.json').write_text(json.dumps({'result': 'passed', 'apiMocked': False,
                     'stages': sorted(BROWSER_CHECKS if name == 'browser' else RETAINED_CHECKS),
                     'realApiRequests': ['POST /api/v1/setup'], 'identity': {'release': value, 'commit': self.commit, 'dirty': False}}))
-            (report.output/'decoded-recordings.json').write_text('["qa-camera-1/test.mp4"]')
+            (report.output/'decoded-recordings.json').write_text(json.dumps(
+                [f'recordings/{stream}/test.mp4' for stream in ('qa-camera-1', 'qa-camera-2', 'multiview_1')]))
+            selection = {'relativePath': 'qa-camera-1/test.mp4', 'savedName': 'recording-download.mp4'}
+            (report.output/'browser/download-selection.json').write_text(json.dumps(selection))
+            (report.output/'browser/recording-download.mp4').write_bytes(b'qa video')
+            (report.output/'retained-files.json').write_text(json.dumps({
+                'recordings/qa-camera-1/test.mp4': hashlib.sha256(b'qa video').hexdigest()}))
             (report.output/'decode.log').write_text('')
             (report.output/'recording-audio.json').write_text('{"enabled_camera":[{"codec_name":"pcm_s16be"}],"disabled_camera":[]}')
+
+    def test_download_must_match_the_selected_recording(self):
+        download = next(self.lifecycle.rglob('recording-download.mp4'))
+        download.write_bytes(b'different clip')
+        with self.assertRaisesRegex(ValueError, 'Downloaded bytes differ'):
+            release.assemble(self.inputs, self.output, self.commit)
 
     def test_missing_browser_or_platform_evidence_blocks_assembly(self):
         evidence = next(self.lifecycle.rglob('browser/browser.json'))

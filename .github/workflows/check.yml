@@ -22,7 +22,22 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: python -m pip install -c packaging/constraints.txt -r requirements.txt -r tests/requirements.txt
-      - run: python -m unittest discover -s tests -v
+      - name: Backend tests, HTTP access matrix and per-operation evidence
+        run: |
+          if ! command -v ffmpeg || ! command -v ffprobe; then
+            sudo -n --preserve-env=GITHUB_ACTIONS python3 packaging/ci_apt.py
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg
+          fi
+          python -m pip install coverage==7.17.3
+          python tools/audit_api_coverage.py --require-all-operations --output dist/api-coverage-audit
+      - name: Preserve endpoint and branch results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: api-coverage-audit
+          path: dist/api-coverage-audit/*.json
+          if-no-files-found: error
       - run: python packaging/check_docs.py
       - run: bash -n packaging/install.sh packaging/build_vendor.sh packaging/smoke_bundle.sh
       - run: npm ci && npm run build
@@ -37,11 +52,11 @@ jobs:
       - name: WebApp behavior and responsive layout
         working-directory: frontend
         run: npm test
-      - name: Firefox and WebKit monitoring, setup and recording checks
+      - name: Firefox and WebKit operator workflows
         working-directory: frontend
         run: |
           for engine in firefox webkit; do
-            for test in monitoring setup recordings; do
+            for test in monitoring setup recordings config-revision dialog navigation; do
               FLINTEYE_BROWSER=$engine node tests/$test.mjs
             done
           done
@@ -50,5 +65,7 @@ jobs:
       - run: docker build --build-arg "FLINTEYE_REVISION=$GITHUB_SHA" -t flinteye:check .
       - run: docker run --rm -i --network none --tmpfs /data:rw,uid=10001,gid=10001 --entrypoint python flinteye:check - < packaging/smoke_container.py
       - run: docker run --rm -i --network none --entrypoint python flinteye:check - --mediamtx /opt/flinteye/bin/mediamtx < packaging/smoke_private_input.py
-      - name: Compose recreation preserves data and stopped monitoring
-        run: python packaging/smoke_compose.py --image flinteye:check
+      - name: Recording volume exhaustion and recovery
+        run: docker run --rm -i --network none --tmpfs /qa-recordings:rw,size=8m,uid=10001,gid=10001 --entrypoint python flinteye:check - < packaging/smoke_storage_faults.py
+      - name: Compose upgrade from preview.3 and rollback with its stopped-volume backup
+        run: python packaging/smoke_compose.py --image flinteye:check --previous-image ghcr.io/noguhiro2002/flinteye:1.2.0-preview.3@sha256:445d6a85dc9c5129213ddd753b13d467a1bdc4464e307fd726f001e525b832f4
