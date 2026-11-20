@@ -4,7 +4,7 @@
 
 **Stable distribution of 1.2.0 requires all eight device gates below and a passing build for every OS and CPU on the same commit.** A failed or untested gate blocks stable promotion. A public UNDER DEVELOPMENT preview may distribute the passing build for testing while physical cases are pending; it must disclose those pending results and must not become Latest.
 
-Of the 32 required build-time cases, 24 passed all seven stages. The eight macOS DMG and script cases passed installation, integrity and removal. macOS required first-launch approval, so the installed API, browser, Quit and retained-data reinstall checks were not run. The per-stage results are in `QA-RESULTS.json`. All eight real-device acceptance checks remain pending. The public download and GHCR checks run after publication. [Build results](https://github.com/noguhiro2002/FlintEye/actions/runs/44712701442)
+Of the 32 required build-time cases, 24 passed all seven stages. The eight macOS DMG and script cases passed installation, integrity and removal. macOS required first-launch approval, so the installed API, browser, Quit and retained-data reinstall checks were not run. The per-stage results are in `QA-RESULTS.json`. All eight real-device acceptance checks remain pending. [Build results](https://github.com/noguhiro2002/FlintEye/actions/runs/44712701442) · [Public installation results](https://github.com/noguhiro2002/FlintEye/actions/runs/44729094734)
 
 ## Use the exact QA build
 

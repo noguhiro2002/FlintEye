@@ -4,6 +4,8 @@
 
 GitHub Actions checks **install → API and browser operation → Quit → uninstall → reinstall with retained data**. For **1.2.0-preview.5**, 24 of 32 build-time cases passed all seven stages. The other eight macOS installer cases passed installation, integrity and removal. First-launch approval is required to test the installed API, browser, Quit and retained-data reinstall. Physical-device checks are pending. [Build results](https://github.com/noguhiro2002/FlintEye/actions/runs/44712701442)
 
+In the first Windows ARM64 EXE case, recording completion could not be verified during Stop. The repeat with the same installer passed all seven stages. [Windows ARM64 recheck](https://github.com/noguhiro2002/FlintEye/actions/runs/44712701442/job/136250360304)
+
 ## What the browser checks
 
 `frontend/tests/installed.mjs` connects to the installed application's HTTP server without substituting API responses. It creates an administrator through the browser, checks the embedded release/commit, registers two synthetic RTSP cameras and saves settings. It opens Dashboard, Information, Settings, Live View, Multiview and Recordings; checks advancing WebRTC video and incoming audio; plays/downloads an actual recording; and verifies viewer login and denied writes.
@@ -54,9 +56,9 @@ Diagnose existing installers reuses archived EXE/DMG files while the harness or 
 
 After an authorized public publication, **Published installation lifecycle** runs another **10 cases**. It downloads scripts/packages anonymously from real Release URLs, verifies checksums, tag and commit, and runs scripts without a local package override. It also anonymously pulls both GHCR CPU images, checks their published digest/commit and runs the Compose lifecycle. Recommend new Quick Install URLs only after reviewing these results; successful upload alone is not an online install pass. The workflow can also be dispatched for a published release matching the selected checkout.
 
-The [anonymous public-installation Actions run](https://github.com/noguhiro2002/FlintEye/actions/runs/44462843650) checked the published one-script URLs and GHCR images for **1.2.0-preview.4**. 8 of 10 cases completed the full lifecycle. The 2 macOS script cases require OS approval and have API/GUI checks not run. These results concern the exact release and source commit in the receipts; physical-device acceptance remains pending.
+The public-installation recheck used the published one-command scripts and GHCR images for **1.2.0-preview.5**. Eight of ten cases passed the full lifecycle. The macOS Intel and Apple Silicon script cases passed install, integrity and removal. They require OS approval before the installed API, browser, Quit and retained-data reinstall can be tested. [Public installation results](https://github.com/noguhiro2002/FlintEye/actions/runs/44729094734)
 
-The Linux x64 RPM metadata preflight initially hit GitHub's anonymous REST API rate limit (`HTTP 403`) before the installer ran. Re-running that case on a fresh hosted runner passed without changing the published scripts, installers or images.
+The first public run reached a shared GitHub anonymous REST API limit before testing the Linux x64 GHCR and macOS ARM64 script cases. The tag check now uses anonymous Git over HTTPS. The recheck used the same published installers and images. [Initial public run](https://github.com/noguhiro2002/FlintEye/actions/runs/44727482801)
 
 ## Run the harness locally
 

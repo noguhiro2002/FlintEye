@@ -26,7 +26,7 @@ The later Windows/Mac/Linux review adds packaging, startup and shutdown findings
 
 ## Validation and remaining limits
 
-The 1.2.0-preview.4 [installed API/browser lifecycle suite](INSTALLATION_QA.md) completed 24 cases through all seven stages in its [32-case Actions run](https://github.com/noguhiro2002/FlintEye/actions/runs/44454225988). The 8 macOS installer cases require first-launch OS approval; their API/GUI checks are not run. macOS ad-hoc integrity does not establish OS permission: the reported M1 launch refusal came from `amfid`, despite a valid executable/signature. Approved first launch and physical-device gates remain pending. Earlier published installers are unchanged.
+The 1.2.0-preview.5 [installed API/browser lifecycle suite](INSTALLATION_QA.md) completed 24 cases through all seven stages in its [32-case Actions run](https://github.com/noguhiro2002/FlintEye/actions/runs/44712701442). The 8 macOS installer cases require first-launch OS approval; their API/GUI checks are not run. macOS ad-hoc integrity does not establish OS permission: the reported M1 launch refusal came from `amfid`, despite a valid executable/signature. Approved first launch and physical-device gates remain pending. Earlier published installers are unchanged.
 
 The regression suite uses a built frontend, Chromium and synthetic API responses. It exercises delayed and failed requests, draft protection, camera switching, keyboard interaction and narrow layouts. It blocks requests to external hosts and does not connect to physical cameras. See [Contributing](../.github/CONTRIBUTING.md) for the test commands.
 

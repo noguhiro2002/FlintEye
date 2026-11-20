@@ -4,7 +4,7 @@
 
 [Documentation](README.md)
 
-**UNDER DEVELOPMENT.** Install **1.2.0-preview.4** from the [Quick Install commands](../README.md#quick-install) or [the matching release](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.2.0-preview.4). Both routes use the same tested application. Check **Information → System** for the exact preview and source commit. Automated package checks passed; physical-device acceptance is still in progress. Older downloaded 1.1.3 installers and scripts remain pinned to that older version. [Source setup](MANUAL_INSTALL.md), [local M1 DMG builds](LOCAL_MACOS_BUILD.md) and [development Docker](DOCKER.md#build-the-development-image) remain available.
+**UNDER DEVELOPMENT.** Install **1.2.0-preview.5** from the [Quick Install commands](../README.md#quick-install) or [the matching release](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.2.0-preview.5). Both routes use the same tested application. Check **Information → System** for the exact preview and source commit. Automated package checks passed; physical-device acceptance is still in progress. Older downloaded 1.1.3 installers and scripts remain pinned to that older version. [Source setup](MANUAL_INSTALL.md), [local M1 DMG builds](LOCAL_MACOS_BUILD.md) and [development Docker](DOCKER.md#build-the-development-image) remain available.
 
 ## Choose a package
 
@@ -61,14 +61,14 @@ After attempting to open the app, macOS may require **System Settings → Privac
 Do not disable Gatekeeper globally or remove quarantine attributes in an installer script.
 Managed computers may require help from their administrator.
 
-If Finder reports **The file can't be found** but `Contents/MacOS/FlintEye` exists, an OS trust rejection is also possible. In the reported M1 case, the executable and bundle signature were valid, while `amfid` rejected the ad-hoc signature and direct execution ended with exit 137. Try the per-app approval above. Missing notarization is not repaired by reinstalling MediaMTX or deleting accounts/settings. Starting with **1.2.0-preview.4**, installer messages distinguish file installation, the launch request and first-launch permission. The build-time tests confirm the same OS refusal on macOS CI and leave the installed API/GUI checks not run until approval. See [installation lifecycle checks](INSTALLATION_QA.md).
+If Finder reports **The file can't be found** but `Contents/MacOS/FlintEye` exists, an OS trust rejection is also possible. In the reported M1 case, the executable and bundle signature were valid, while `amfid` rejected the ad-hoc signature and direct execution ended with exit 137. Try the per-app approval above. Missing notarization is not repaired by reinstalling MediaMTX or deleting accounts/settings. Installer messages distinguish file installation, the launch request and first-launch permission. The build-time tests confirm the same OS refusal on macOS CI and leave the installed API/GUI checks not run until approval. See [installation lifecycle checks](INSTALLATION_QA.md).
 
 ## Install a specific version
 
 Download the installer or command script directly from the exact preview release. Preview releases are not returned by GitHub’s `releases/latest` URL.
 
 Download `install.sh` or `install.ps1` from that release and run it locally.
-Each generated script pins its own release version. Optional `--version 1.2.0-preview.4` (shell) or `-Version 1.2.0-preview.4` (PowerShell) selects that exact development release; `X.Y.Z` selects a stable release when available. The tag includes the preview suffix, while installer filenames use the numeric application version (`1.2.0`). `--no-start` / `-NoStart` installs without launching the application.
+Each generated script pins its own release version. Optional `--version 1.2.0-preview.5` (shell) or `-Version 1.2.0-preview.5` (PowerShell) selects that exact development release; `X.Y.Z` selects a stable release when available. The tag includes the preview suffix, while installer filenames use the numeric application version (`1.2.0`). `--no-start` / `-NoStart` installs without launching the application.
 
 Packages include the application runtime and media tools. Linux desktop packages also ask the system package manager to install any required desktop libraries.
 
@@ -91,4 +91,4 @@ See [data locations](DISTRIBUTION.md#recording-lifecycle) before manually removi
 
 ## 1.2.0 development installer checks
 
-The 1.2.0-preview.4 build uses the browser for the administrator password form. On first launch, choose a trusted network. The setup window shows the local address and one-use code after startup. When LAN HTTPS is available, it also shows the address for other devices and the certificate guide. It does not reset an existing account after reinstalling. Compare one-command and standalone installers using clean, retained and unfinished profiles. Linux automatic installation checks sudo and the package manager before downloading. Windows removal first finishes recordings and checks the uninstall-data lock; a reported lock is not permission to delete unins000.dat. See [1.2.0 acceptance](DEVELOPMENT_1_2_0.md) and [LAN setup](LAN_ACCESS.md). The published 1.1.3 installers remain unchanged.
+The 1.2.0-preview.5 build uses the browser for the administrator password form. On first launch, choose a trusted network. The setup window shows the local address and one-use code after startup. When LAN HTTPS is available, it also shows the address for other devices and the certificate guide. It does not reset an existing account after reinstalling. Compare one-command and standalone installers using clean, retained and unfinished profiles. Linux automatic installation checks sudo and the package manager before downloading. Windows removal first finishes recordings and checks the uninstall-data lock; a reported lock is not permission to delete unins000.dat. See [1.2.0 acceptance](DEVELOPMENT_1_2_0.md) and [LAN setup](LAN_ACCESS.md). The published 1.1.3 installers remain unchanged.

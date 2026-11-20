@@ -2,7 +2,7 @@
 
 **FlintEye is under active development. This is a development preview, not a stable release. Use development previews for testing.**
 
-The current development preview is **1.2.0-preview.4**. Install it with the Quick Install commands below. On macOS, follow the first-launch approval instructions. [Installation checks](docs/INSTALLATION_QA.md) show the completed automated checks and remaining real-device tests.
+The current development preview is **1.2.0-preview.5**. Install it with the Quick Install commands below. On macOS, follow the first-launch approval instructions. [Installation checks](docs/INSTALLATION_QA.md) show the completed automated checks and remaining real-device tests.
 
 [Known issues](docs/KNOWN_ISSUES.md) · [Report a bug](https://github.com/noguhiro2002/FlintEye/issues) · [Questions and ideas](https://github.com/noguhiro2002/FlintEye/discussions)
 
@@ -29,24 +29,24 @@ Monitor USB and IP cameras, watch live video, and find recordings in your browse
 
 ## Quick Install
 
-**Development preview: [v1.2.0-preview.4](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.2.0-preview.4).** Real-device acceptance is still in progress. Run the command for your computer and follow setup. Python, FFmpeg, FFprobe and MediaMTX are included; no Git checkout or compilation is needed.
+**Development preview: [v1.2.0-preview.5](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.2.0-preview.5).** Real-device acceptance is still in progress. Run the command for your computer and follow setup. Python, FFmpeg, FFprobe and MediaMTX are included; no Git checkout or compilation is needed.
 
 **Windows — PowerShell**
 
 ```powershell
-irm https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.4/install.ps1 | iex
+irm https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.5/install.ps1 | iex
 ```
 
 **macOS — Terminal**
 
 ```sh
-bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.4/install.sh
+bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.5/install.sh
 ```
 
 **Linux — Terminal**
 
 ```sh
-bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.4/install.sh
+bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.5/install.sh
 ```
 
 You can also download the script from the selected release, inspect it, and run it locally. Packaged builds include Python, FFmpeg, FFprobe and MediaMTX. No separate copies are required. Windows/macOS packages are unsigned/not notarized; see [OS confirmation screens](docs/INSTALL.md#unsigned-packages).
