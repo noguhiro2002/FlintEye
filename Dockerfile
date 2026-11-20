@@ -9,7 +9,7 @@ WORKDIR /src
 COPY packaging/collect_frontend_licenses.mjs ./packaging/
 RUN node packaging/collect_frontend_licenses.mjs /licenses/frontend
 
-FROM golang:1.27.0-bookworm@sha256:ded31c68586d2e49e760acc2e65a884b23d032e9bbbed0ae0c55abd3fcaf4452 AS gotoolchain
+FROM golang:1.27.4-bookworm@sha256:4fa7c968ba93f1635670522dbb01a2c78150443e1385746924566079f36570ea AS gotoolchain
 FROM scratch AS vendor-downloads
 COPY packaging/empty-cache/ /
 FROM python:3.13-slim-trixie@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90 AS media
@@ -28,11 +28,15 @@ FROM scratch AS media-sources
 COPY --from=media /media-source.tar.gz /
 
 FROM python:3.13-slim-trixie@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core alsa-utils && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core alsa-utils zlib1g && rm -rf /var/lib/apt/lists/*
 WORKDIR /opt/flinteye
 COPY requirements.txt ./
 COPY packaging/constraints.txt ./packaging/
-RUN pip install --no-cache-dir -c packaging/constraints.txt -r requirements.txt
+# Keep the runtime free of pip's bundled build-time libraries, including the
+# copy inside the ensurepip bootstrap wheel. Install dependencies at build time.
+RUN python -m pip install --no-cache-dir -c packaging/constraints.txt -r requirements.txt \
+    && python -c "import ensurepip, pathlib, shutil; shutil.rmtree(pathlib.Path(ensurepip.__file__).parent)" \
+    && python -m pip uninstall --yes pip
 COPY flinteye.py ./
 COPY flinteye_app/ ./flinteye_app/
 COPY LICENSE THIRD_PARTY_NOTICES.md ./

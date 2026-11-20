@@ -67,21 +67,46 @@ async function login(username, secret) {
   await page.getByRole('button', { name: 'Sign In', exact: true }).click();
   await page.locator('.sidebar').waitFor();
 }
-async function videoProgress(label, audio = false) {
+async function videoProgress(label, { audio = false, marker } = {}) {
   const frame = page.frameLocator('iframe.webrtc-frame');
   const video = frame.locator('video');
-  await video.waitFor();
-  await video.evaluate(v => { v.muted = true; void v.play().catch(() => {}); });
-  await until(() => video.evaluate(v => ({ ready: v.readyState, width: v.videoWidth, time: v.currentTime })), v => v.ready >= 2 && v.width > 0 && v.time > .2, label);
-  const before = await video.evaluate(v => v.currentTime);
-  await until(() => video.evaluate(v => v.currentTime), time => time > before+.25, label+' frozen');
-  if (audio) {
-    await until(() => frame.locator('body').evaluate(async () => {
-      const stats = await Promise.all((globalThis.__flinteyeQaPeers || []).map(p => p.getStats()));
-      return stats.flatMap(s => [...s.values()]).filter(s => s.type === 'inbound-rtp' && s.kind === 'audio')
-        .reduce((total, s) => total+(s.bytesReceived || 0), 0);
-    }), bytes => bytes > 0, 'Actual WebRTC audio reception');
-  }
+  await until(async () => {
+    try {
+      return await video.evaluate(async (v, { audio, marker }) => {
+        v.muted = true;
+        if (v.paused) void v.play().catch(() => {});
+        if (v.readyState < 2 || !v.videoWidth) return { ready: v.readyState, width: v.videoWidth };
+        // Measure progression within a single player. A timestamp read from
+        // the previous iframe would be meaningless after navigation.
+        const before = v.currentTime;
+        await new Promise(resolve => setTimeout(resolve, 750));
+        if (!v.isConnected || !v.videoWidth) return { state: 'player reloading' };
+        const sample = { elapsed: v.currentTime - before, width: v.videoWidth };
+        if (marker) {
+          const canvas = document.createElement('canvas');
+          canvas.width = 1;
+          canvas.height = 1;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(v, Math.floor(v.videoWidth / 2), Math.floor(v.videoHeight / 2), 1, 1, 0, 0, 1, 1);
+          const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+          sample.marker = r > Math.max(g, b) + 80 ? 'red' : b > Math.max(r, g) + 80 ? 'blue' : 'unknown';
+        }
+        if (audio) {
+          const stats = await Promise.all((globalThis.__flinteyeQaPeers || []).map(peer => peer.getStats()));
+          sample.audioBytes = stats.flatMap(report => [...report.values()])
+            .filter(item => item.type === 'inbound-rtp' && item.kind === 'audio')
+            .reduce((total, item) => total + (item.bytesReceived || 0), 0);
+        }
+        return sample;
+      }, { audio, marker }, { timeout: 2000 });
+    } catch (error) {
+      if (error.name === 'TimeoutError' || /Execution context was destroyed|frame was detached/i.test(error.message)) {
+        return { state: 'waiting for current player' };
+      }
+      throw error;
+    }
+  }, sample => sample.elapsed > .25 && (!marker || sample.marker === marker) &&
+    (!audio || sample.audioBytes > 0), label);
 }
 try {
   await page.goto(origin.href);
@@ -164,15 +189,7 @@ try {
     await nav('Live View');
     for (const [i, marker] of [[1, 'red'], [2, 'blue']]) {
       await page.getByRole('button', { name: 'View QA camera '+i, exact: true }).click();
-      await videoProgress('Live camera '+i, i === 1);
-      await until(() => page.frameLocator('iframe.webrtc-frame').locator('video').evaluate(v => {
-        const canvas = document.createElement('canvas');
-        canvas.width = 1; canvas.height = 1;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(v, Math.floor(v.videoWidth/2), Math.floor(v.videoHeight/2), 1, 1, 0, 0, 1, 1);
-        const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
-        return r > Math.max(g, b)+80 ? 'red' : b > Math.max(r, g)+80 ? 'blue' : 'unknown';
-      }), value => value === marker, 'Live camera '+i+' marker');
+      await videoProgress('Live camera '+i, { audio: i === 1, marker });
     }
     stages.push('both-live-cameras-show-their-own-marker');
     await page.screenshot({ path: join(output, 'Live-View-playing.png') });

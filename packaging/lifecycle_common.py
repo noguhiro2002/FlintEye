@@ -142,7 +142,8 @@ def media_fixture(directory: Path, media: str, ffmpeg: str, *, prefix: list[str]
     children, logs = [], []
     def start(command, name):
         log = (directory/name).open('w', encoding='utf-8'); logs.append(log)
-        process = subprocess.Popen(prefix+command, stdout=log, stderr=log, start_new_session=os.name != 'nt')
+        process = subprocess.Popen(prefix+command, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+                                   start_new_session=os.name != 'nt')
         children.append(process)
         return process
     try:
@@ -153,18 +154,26 @@ def media_fixture(directory: Path, media: str, ffmpeg: str, *, prefix: list[str]
                 if probe.connect_ex(('127.0.0.1', port)) == 0: break
             time.sleep(.1)
         else: raise TimeoutError('Synthetic RTSP server did not start')
-        for i in (1, 2):
-            command = [ffmpeg, '-nostdin', '-hide_banner', '-loglevel', 'error', '-re',
-                       '-f', 'lavfi', '-i', f"testsrc2=size=320x180:rate=10,drawbox=x=0:y=ih/3:w=iw:h=ih/3:color={('red', 'blue')[i-1]}:t=fill",
-                       '-f', 'lavfi', '-i', f'sine=frequency={i*440}:sample_rate=48000',
-                       '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-g', '10',
-                       '-c:a', 'aac', '-b:a', '64k', '-ac', '1', '-rtsp_transport', 'tcp',
-                       '-f', 'rtsp', f'rtsp://127.0.0.1:{port}/qa-input-{i}']
-            start(command, f'fixture-publisher-{i}.log')
+        # Pre-encode both signals so the independent fixture publishers can
+        # keep up on runners that are also decoding, recording and compositing.
+        for i, color in enumerate(('red', 'blue'), start=1):
+            clip = str(Path(app_directory)/f'qa-input-{i}.mp4')
+            pattern = f'testsrc2=size=320x180:rate=10,drawbox=x=0:y=ih/3:w=iw:h=ih/3:color={color}:t=fill'
+            with (directory/f'fixture-encode-{i}.log').open('w', encoding='utf-8') as log:
+                subprocess.run(prefix+[ffmpeg, '-nostdin', '-hide_banner', '-loglevel', 'error',
+                    '-f', 'lavfi', '-i', pattern, '-f', 'lavfi', '-i', f'sine=frequency={i*440}:sample_rate=48000',
+                    '-t', '4', '-c:v', 'libx264', '-threads', '1', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p',
+                    '-g', '10', '-c:a', 'aac', '-b:a', '64k', '-ac', '1', clip],
+                    stdin=subprocess.DEVNULL, stdout=log, stderr=log, check=True, timeout=30)
+            start([ffmpeg, '-nostdin', '-hide_banner', '-loglevel', 'warning', '-stream_loop', '-1', '-re',
+                   '-i', clip, '-c', 'copy', '-rtsp_transport', 'tcp', '-f', 'rtsp',
+                   f'rtsp://127.0.0.1:{port}/qa-input-{i}'], f'fixture-publisher-{i}.log')
         time.sleep(2)
         if any(p.poll() is not None for p in children):
             raise RuntimeError('Synthetic media publisher failed; inspect fixture logs')
         yield f'rtsp://127.0.0.1:{port}'
+        if any(p.poll() is not None for p in children):
+            raise RuntimeError('Synthetic media publisher stopped during validation; inspect fixture logs')
     finally:
         for process in reversed(children): stop_process(process)
         for log in logs: log.close()
@@ -177,8 +186,12 @@ def browser_check(url: str, profile: Path, output: Path, release: str, commit: s
                '--output', str(output), '--release', release, '--fixture-url', fixture_url]
     if commit: command += ['--commit', commit]
     if retained: command += ['--retained']
-    with (output/'browser.log').open('w', encoding='utf-8') as log:
-        subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=420)
+    log_path = output/'browser.log'
+    with log_path.open('w', encoding='utf-8') as log:
+        completed = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, timeout=420)
+    if completed.returncode:
+        raise AssertionError(f'Installed browser checks failed (exit {completed.returncode}):\n'
+                             + log_path.read_text(encoding='utf-8', errors='replace')[-2500:])
     receipt = json.loads((output/'browser.json').read_text())
     if receipt.get('result') != 'passed' or receipt.get('apiMocked') is not False:
         raise AssertionError('Browser did not validate the installed API')

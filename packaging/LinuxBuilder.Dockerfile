@@ -2,7 +2,7 @@
 # and 64-bit Raspberry Pi OS Bookworm. Build natively for each target CPU.
 # nfpm declares the GLIBC_2.35 symbols backported by updated Rocky 9.
 FROM node:22-bookworm-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee AS node
-FROM golang:1.27.0-bookworm@sha256:ded31c68586d2e49e760acc2e65a884b23d032e9bbbed0ae0c55abd3fcaf4452 AS go
+FROM golang:1.27.4-bookworm@sha256:4fa7c968ba93f1635670522dbb01a2c78150443e1385746924566079f36570ea AS go
 FROM scratch AS vendor-downloads
 COPY packaging/empty-cache/ /
 FROM rockylinux:9@sha256:d7be1c094cc5845ee815d4632fe377514ee6ebcf8efaed6892889657e5ddaaa6 AS builder

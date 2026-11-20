@@ -26,10 +26,10 @@
       "sha256": "0fc7c565443a5f4be7da65ac5ee5bd737d9b158dc908708b7689a0a5796b0c8d"
     },
     "mediamtx": {
-      "version": "1.21.2",
-      "url": "https://codeload.github.com/bluenviron/mediamtx/tar.gz/refs/tags/v1.21.2",
-      "filename": "mediamtx-1.21.2.tar.gz",
-      "sha256": "46677eed3c31fbfd58b1092356f3160125fbd75d3cb7a413fef16c2aa3c13499"
+      "version": "1.21.4",
+      "url": "https://codeload.github.com/bluenviron/mediamtx/tar.gz/refs/tags/v1.21.4",
+      "filename": "mediamtx-1.21.4.tar.gz",
+      "sha256": "114572bf663a9eaa8a274dd84b66f79c25f179e13f85da7d73e31535e7ef44cb"
     },
     "python": {
       "version": "3.13.18",
@@ -46,9 +46,9 @@
   },
   "assets": {
     "hls_license": {
-      "version": "v1.7.3",
-      "url": "https://raw.githubusercontent.com/video-dev/hls.js/v1.7.3/LICENSE",
-      "filename": "hls-v1.7.3-LICENSE.txt",
+      "version": "v1.7.4",
+      "url": "https://raw.githubusercontent.com/video-dev/hls.js/v1.7.4/LICENSE",
+      "filename": "hls-v1.7.4-LICENSE.txt",
       "sha256": "ca8773cf798c7ed997d4dd7c8e23c348699f8d5b7462636694cc14de6cda12db"
     }
   }

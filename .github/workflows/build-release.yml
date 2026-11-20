@@ -189,7 +189,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.27.0'
+          go-version: '1.27.4'
           cache: false
       - name: Build native ARM64 cryptography against verified static OpenSSL
         if: matrix.os == 'windows' && matrix.arch == 'arm64'
@@ -405,6 +405,7 @@ jobs:
           python-version: '3.13.18'
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Build and test without publishing
+        id: export_image
         run: |
           version=$(python packaging/release.py version)
           image="flinteye:release-$TARGET_ARCH"
@@ -439,11 +440,14 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
       - name: Scan the candidate container archive for known vulnerabilities
+        if: ${{ !cancelled() && steps.export_image.outcome == 'success' }}
         run: |
           docker run --rm --mount "type=bind,src=$PWD/artifacts,dst=/inputs,readonly" \
             ghcr.io/aquasecurity/trivy:0.76.2@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb \
             image --input "/inputs/container-$TARGET_ARCH.tar.gz" --scanners vuln \
             --severity HIGH,CRITICAL --format json > container-advisories.json
+          jq -r '.Results[] | .Vulnerabilities[]? | select((.FixedVersion // "") != "") |
+            [.Severity, .VulnerabilityID, .PkgName, .InstalledVersion, .FixedVersion] | @tsv' container-advisories.json
           jq -e '[.Results[] | .Vulnerabilities[]? | select((.FixedVersion // "") != "")] | length == 0' container-advisories.json
       - name: Preserve container advisory findings
         if: always()
