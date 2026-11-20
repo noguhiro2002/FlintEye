@@ -145,7 +145,19 @@ if [ "$os" = Darwin ]; then
   fi
   printf 'On first launch, choose a trusted network and follow the setup address shown by FlintEye.\n'
 else
-  if [ "$kind" = deb ]; then sudo apt-get install -y "$work/$asset"; else sudo dnf install -y "$work/$asset"; fi
+  if [ "$kind" = deb ]; then
+    # Multiple previews share the numeric package version. Apply the selected
+    # archive even when apt already has a package with that version installed.
+    sudo apt-get install --reinstall -y "$work/$asset"
+  else
+    rpm_identity='%{EPOCHNUM}:%{VERSION}-%{RELEASE}.%{ARCH}'
+    selected=$(rpm -qp --qf "$rpm_identity" "$work/$asset")
+    if installed=$(rpm -q --qf "$rpm_identity" flinteye) && [ "$installed" = "$selected" ]; then
+      sudo dnf reinstall -y "$work/$asset"
+    else
+      sudo dnf install -y "$work/$asset"
+    fi
+  fi
   printf 'Installed FlintEye %s. Open FlintEye from your application menu.\n' "$version"
   printf 'To remove after quitting: sudo %s remove flinteye. Settings and recordings are kept.\n' "$manager"
   if [ "$start_app" = 1 ] && [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
