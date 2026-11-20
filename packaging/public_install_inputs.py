@@ -3,11 +3,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import platform
 import re
-import sys
 import subprocess
+import sys
 from urllib.request import Request, urlopen
 
 from release_lib import REPOSITORY, digest, release_identity, version
@@ -32,6 +33,25 @@ def validate_manifest(manifest: dict, *, release: str, commit: str) -> None:
         raise ValueError('Unexpected public image')
 
 
+def verify_public_tag(release: str, commit: str) -> None:
+    # Check the public Git ref without depending on a runner's shared REST API quota.
+    ref = f'refs/tags/v{release}'
+    peeled = ref + '^{}'
+    output = subprocess.check_output(
+        ['git', '-c', 'credential.helper=', '-c', 'http.extraHeader=', '-c', 'http.https://github.com/.extraHeader=',
+         'ls-remote', '--exit-code', f'https://github.com/{REPOSITORY}.git', ref, peeled],
+        text=True, timeout=60, env={**os.environ, 'GIT_TERMINAL_PROMPT': '0'})
+    refs = {}
+    for line in output.splitlines():
+        revision, separator, name = line.partition('\t')
+        if (not separator or name not in (ref, peeled) or name in refs
+                or not re.fullmatch('[0-9a-f]{40}', revision)):
+            raise ValueError('Invalid public Git tag response')
+        refs[name] = revision
+    if ref not in refs or refs.get(peeled, refs[ref]) != commit:
+        raise ValueError('Public tag points to another commit')
+
+
 def prepare(directory: Path, *, release: str, commit: str, rpm: bool = False, container: bool = False) -> None:
     if release != release_identity()[0] or not re.fullmatch('[0-9a-f]{40}', commit):
         raise ValueError('Select this checkout\'s exact release and full build commit')
@@ -50,16 +70,7 @@ def prepare(directory: Path, *, release: str, commit: str, rpm: bool = False, co
         raise ValueError('Public distribution manifest checksum mismatch')
     manifest = json.loads((directory/'distribution-manifest.json').read_text())
     validate_manifest(manifest, release=release, commit=commit)
-    # A release target may be a branch; the tag itself must resolve to this commit.
-    tag_file = directory/'tag.json'
-    download(f'https://api.github.com/repos/{REPOSITORY}/git/ref/tags/v{release}', tag_file)
-    obj = json.loads(tag_file.read_text())['object']
-    for _ in range(5):
-        if obj['type'] == 'commit': break
-        if obj['type'] != 'tag' or not re.fullmatch('[0-9a-f]{40}', obj['sha']): raise ValueError('Invalid public tag')
-        download(f'https://api.github.com/repos/{REPOSITORY}/git/tags/{obj["sha"]}', tag_file)
-        obj = json.loads(tag_file.read_text())['object']
-    if obj.get('type') != 'commit' or obj.get('sha') != commit: raise ValueError('Public tag points to another commit')
+    verify_public_tag(release, commit)
     if not re.fullmatch('sha256:[0-9a-f]{64}', manifest.get('container_digest', '')):
         raise ValueError('Missing published multi-architecture digest')
     arch = 'arm64' if platform.machine().lower() in {'arm64', 'aarch64'} else 'amd64'

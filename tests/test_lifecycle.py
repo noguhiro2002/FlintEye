@@ -8,13 +8,14 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'packaging'))
 from lifecycle import owned_profile, remove_owned_profile
 from lifecycle_common import seed_runtime
 from lifecycle_report import Report, STAGES, validate, collect, required_matrix
 from verify_macos import verify_structure
-from public_install_inputs import validate_manifest
+from public_install_inputs import validate_manifest, verify_public_tag
 
 
 class LifecycleTests(unittest.TestCase):
@@ -67,6 +68,32 @@ class LifecycleTests(unittest.TestCase):
         validate_manifest(value, release='1.2.0-preview.4', commit='a'*40)
         for changed in ({'commit': 'b'*40}, {'tag': 'v1.2.0-preview.3'}, {'image': 'other/image:latest'}):
             with self.assertRaises(ValueError): validate_manifest({**value, **changed}, release='1.2.0-preview.4', commit='a'*40)
+
+    def test_public_tag_accepts_lightweight_and_peeled_annotated_refs(self):
+        release = '1.2.0-preview.5'
+        ref = f'refs/tags/v{release}'
+        commit = 'a'*40
+        lightweight = f'{commit}\t{ref}\n'
+        annotated = f'{"b"*40}\t{ref}\n{commit}\t{ref}^{{}}\n'
+        with patch('public_install_inputs.subprocess.check_output') as git:
+            for response in (lightweight, annotated):
+                git.return_value = response
+                verify_public_tag(release, commit)
+                command = git.call_args.args[0]
+                self.assertIn('credential.helper=', command)
+                self.assertIn('https://github.com/noguhiro2002/FlintEye.git', command)
+                self.assertEqual(command[-2:], [ref, ref+'^{}'])
+                self.assertEqual(git.call_args.kwargs['env']['GIT_TERMINAL_PROMPT'], '0')
+
+            git.return_value = annotated
+            with self.assertRaisesRegex(ValueError, 'another commit'):
+                verify_public_tag(release, 'b'*40)
+            git.return_value = f'{commit}\t{ref}^{{}}\n'
+            with self.assertRaisesRegex(ValueError, 'another commit'):
+                verify_public_tag(release, commit)
+            git.return_value = lightweight + lightweight
+            with self.assertRaisesRegex(ValueError, 'Invalid public Git tag response'):
+                verify_public_tag(release, commit)
 
     def test_macos_approval_cannot_claim_gui_or_normal_quit(self):
         with tempfile.TemporaryDirectory() as directory:
