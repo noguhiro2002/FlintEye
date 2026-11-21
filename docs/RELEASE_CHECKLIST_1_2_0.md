@@ -4,15 +4,15 @@
 
 **Stable distribution of 1.2.0 requires all eight device gates below and a passing build for every OS and CPU on the same commit.** A failed or untested gate blocks stable promotion. A public UNDER DEVELOPMENT preview may distribute the passing build for testing while physical cases are pending; it must disclose those pending results and must not become Latest.
 
-Use preview 6 artifacts for the checks below. See `QA-RESULTS.json` for the automated cases and any macOS first-launch approvals that still need a person. All eight real-device gates are pending.
+Of the 32 preview 6 lifecycle cases, 24 passed all seven stages. The eight macOS DMG and script cases passed install, integrity and removal. First-launch OS approval, installed API and browser behavior, Quit and retained-data reinstall still need a person on macOS. See `QA-RESULTS.json`. All eight real-device gates are pending.
 
 ## Use the exact QA build
 
 | Field | Required value or record |
 | --- | --- |
 | Release / application | `v1.2.0-preview.6` / `1.2.0` |
-| Tested application commit | The commit in the candidate's `build-manifest.json` |
-| Build | Successful preview 6 [Build release run](https://github.com/noguhiro2002/FlintEye/actions/workflows/build-release.yml), OS-specific test artifacts or `release-bundle` |
+| Tested application commit | `6894bf3dc1eac12b19d988c9ca593c7258fcb2b8` |
+| Build | [Build release run 44934063230](https://github.com/noguhiro2002/FlintEye/actions/runs/44934063230) · [release-bundle](https://github.com/noguhiro2002/FlintEye/actions/runs/44934063230/artifacts/14720893580) |
 | Package identity | Record the package filename and its matching `SHA256SUMS` value; confirm `build-manifest.json` and Information agree |
 | Environment | Date, tester, device, OS/build, CPU, browser/version, install method, install/data paths, actual API address/port, camera model/resolution/fps |
 | Results | For each operation, record expected behavior, observed behavior, Pass / Fail / Not tested, and an evidence reference |
@@ -26,6 +26,8 @@ Test both the standalone package and the one-command installer using these same 
 ## Preview 6 on Windows and M1 Mac
 
 Extract `release-bundle` and verify the checksums in its `public` folder. Use `FlintEye-1.2.0-windows-amd64-setup.exe` on Windows x64 and `FlintEye-1.2.0-macos-arm64.dmg` on the M1 Mac. Confirm **Information → System** shows `1.2.0-preview.6` and the manifest commit. To test the supplied scripts, use the directory containing `public`.
+
+Each smaller OS-specific artifact includes its installer, script and `SHA256SUMS`. In its extracted directory, use `.\install.ps1 -PackageDirectory .` on Windows or `bash ./install.sh --package-directory .` on macOS. [Windows x64 artifact](https://github.com/noguhiro2002/FlintEye/actions/runs/44934063230/artifacts/14720561579) · [M1 Mac artifact](https://github.com/noguhiro2002/FlintEye/actions/runs/44934063230/artifacts/14720070590)
 
 - Windows PowerShell · `.\public\install.ps1 -Version 1.2.0-preview.6 -PackageDirectory .\public`
 - macOS Terminal · `bash public/install.sh --version 1.2.0-preview.6 --package-directory public`

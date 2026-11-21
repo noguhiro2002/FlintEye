@@ -4,15 +4,15 @@
 
 **1.2.0 の安定版公開には、以下の実機確認8項目と、同じコミットの全 OS・両 CPU 向け自動検証が必要です。** いずれかが未実施または不合格の場合は安定版への昇格をブロックします。開発中のパブリックプレビュー版では、実機確認が未完了であることを開示した上で合格済みのビルドをテスト用に配布できますが、その場合でも Latest タグを付けてはなりません。
 
-今回の実機検証にはプレビュー6の成果物を使います。自動検証の実施結果と、macOSで初回起動の承認が必要だった項目は `QA-RESULTS.json` で確認してください。実機確認は8項目とも未完了です。
+プレビュー6の自動検証は32件中24件が全段階に合格しました。macOSのDMG・スクリプト8件はインストール、整合性、削除まで確認済みです。初回起動にOSの承認が必要なため、パッケージ導入後のAPI・GUI、終了、データを保持した再インストールは実機で確認します。各段階の結果は `QA-RESULTS.json` にあります。実機確認は8項目とも未完了です。
 
 ## 正確なQAビルドを使用すること
 
 | 項目 | 必要な値または記録 |
 | --- | --- |
 | リリース / アプリケーション | `v1.2.0-preview.6` / `1.2.0` |
-| テスト対象のコミット | 候補ビルドの `build-manifest.json` に記載されたコミット |
-| ビルド | プレビュー6の成功した [Build release](https://github.com/noguhiro2002/FlintEye/actions/workflows/build-release.yml) のOS別成果物または `release-bundle` |
+| テスト対象のコミット | `6894bf3dc1eac12b19d988c9ca593c7258fcb2b8` |
+| ビルド | [Build release 44934063230](https://github.com/noguhiro2002/FlintEye/actions/runs/44934063230) · [release-bundle](https://github.com/noguhiro2002/FlintEye/actions/runs/44934063230/artifacts/14720893580) |
 | パッケージの同一性 | パッケージファイル名と一致する`SHA256SUMS`値を記録し、`build-manifest.json`とアプリのInformation画面の情報が一致していることを確認する |
 | 環境 | 日付、テスター、デバイス、OS/ビルド、CPU、ブラウザ/バージョン、インストール方法、インストール/データパス、実際のAPIアドレス/ポート、カメラモデル/解像度/fps |
 | 結果 | 各操作について、期待される動作、観察された動作、合格／不合格／未実施、および証拠リファレンスを記録する |
@@ -26,6 +26,8 @@
 ## WindowsとM1 Macでプレビュー6を試す
 
 `release-bundle` を展開し、`public` 内の `SHA256SUMS` を照合します。Windows x64では `FlintEye-1.2.0-windows-amd64-setup.exe`、M1 Macでは `FlintEye-1.2.0-macos-arm64.dmg` を使います。起動後、**Information → System** の版が `1.2.0-preview.6` で、コミットがビルドと一致することを確認します。
+
+OS別の成果物にもインストーラー、スクリプト、`SHA256SUMS` が入っています。展開先で、Windowsは `.\install.ps1 -PackageDirectory .`、Macは `bash ./install.sh --package-directory .` を実行できます。[Windows x64の成果物](https://github.com/noguhiro2002/FlintEye/actions/runs/44934063230/artifacts/14720561579) · [M1 Macの成果物](https://github.com/noguhiro2002/FlintEye/actions/runs/44934063230/artifacts/14720070590)
 
 `public` が入っているディレクトリで、付属のインストールスクリプトも確認します。
 
