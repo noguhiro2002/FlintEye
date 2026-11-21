@@ -9,6 +9,7 @@ import tempfile
 import re
 import shlex
 import threading
+import time
 from pathlib import Path
 from typing import Any, Iterator
 from urllib.parse import urlparse
@@ -531,7 +532,17 @@ def write_private_runtime_json(
             stream.write("\n")
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(temporary, path)
+        deadline = time.monotonic() + 2.0
+        while True:
+            try:
+                os.replace(temporary, path)
+                break
+            except PermissionError as error:
+                # On Windows a recording hook can be reading runtime.json without
+                # delete sharing. Keep the old file intact until that reader closes.
+                if getattr(error, "winerror", None) not in {5, 32, 33} or time.monotonic() >= deadline:
+                    raise
+                time.sleep(.025)
     finally:
         temporary.unlink(missing_ok=True)
 

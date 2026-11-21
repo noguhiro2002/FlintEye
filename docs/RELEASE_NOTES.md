@@ -32,6 +32,7 @@ Use `ghcr.io/noguhiro2002/flinteye:@IMAGE_VERSION@` for `linux/amd64` or `linux/
 - USB camera startup probes FFmpeg encoders separately from capture on Windows. The supervisor logs worker failures. Camera settings show USB audio alongside the selected managed USB camera, and IP camera controls fit a narrower browser window.
 - LAN administrators can add or remove IP cameras. Changes to MediaMTX server settings still require local administration.
 - On macOS, Quit can finish after the operating system reports a signal error for a process group whose members have already exited. A still-running worker remains available for a shutdown retry.
+- On Windows, saving settings retries a brief file-sharing conflict with the recording service. A failed save preserves the previous settings.
 - Installer QA registers two synthetic cameras, checks advancing frames in Live View and both camera images in Multiview, and verifies camera removal, re-addition and retained recordings. The Linux source check drives the USB worker with a synthetic input alongside a synthetic IP camera. See `QA-RESULTS.json` for the results of each build case. [Real-device checklist](RELEASE_CHECKLIST_1_2_0.md)
 
 ## License

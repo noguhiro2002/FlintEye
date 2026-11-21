@@ -119,6 +119,40 @@ stop_background_processes()
                 control.close()
             self.assertFalse(request_local_browser(root))
 
+    def test_runtime_save_retries_windows_sharing_failure_without_losing_settings(self):
+        from flinteye_app.orchestrator_store import write_private_runtime_json
+        replace = os.replace
+        locked = PermissionError('Runtime is open in a recording hook')
+        locked.winerror = 5
+        original = {'ui': {'app_title': 'Original'}}
+        changed = {'ui': {'app_title': 'Changed'}}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'runtime.json'
+            write_private_runtime_json(path, original)
+            attempts = 0
+
+            def temporarily_locked(source, target):
+                nonlocal attempts
+                attempts += 1
+                self.assertEqual(json.loads(path.read_text()), original)
+                if attempts == 1:
+                    raise locked
+                replace(source, target)
+
+            with patch('flinteye_app.orchestrator_store.os.replace', side_effect=temporarily_locked):
+                write_private_runtime_json(path, changed)
+            self.assertEqual(attempts, 2)
+            self.assertEqual(json.loads(path.read_text()), changed)
+
+            with (
+                patch('flinteye_app.orchestrator_store.os.replace', side_effect=locked),
+                patch('flinteye_app.orchestrator_store.time.monotonic', side_effect=[0.0, 2.1]),
+                self.assertRaises(PermissionError),
+            ):
+                write_private_runtime_json(path, original)
+            self.assertEqual(json.loads(path.read_text()), changed)
+            self.assertEqual(list(path.parent.iterdir()), [path])
+
     @unittest.skipIf(os.name == 'nt', 'POSIX process groups')
     def test_macos_stop_ignores_zombie_only_group_and_keeps_live_group_for_retry(self):
         from flinteye_app.orchestrator_supervisor import ManagedProcess, OrchestratorSupervisor

@@ -317,9 +317,16 @@ try {
     assert.equal((await json('/api/v1/status/mediamtx')).running, false);
     assert((await json('/api/v1/status/processes')).items?.every(p => p.status !== 'running' && p.pid === null) ?? false, 'Owned publishers survived Stop');
     stages.push('GUI-stop-keeps-API-and-saved-settings-cannot-restart-monitoring');
+    const resumedAfter = Date.now() / 1000;
     await page.getByRole('button', { name: 'Start monitoring', exact: true }).click();
-    await until(() => json('/api/v1/status/monitoring'), value => value.desired_running && !value.busy && value.counts.recording === 2,
-      'Active recording before normal Quit', 120);
+    const expectedStreams = ['qa-camera-1', 'qa-camera-2', 'multiview_1'];
+    await until(async () => {
+      const recordings = await json(`/api/v1/recordings?status=stable&recorded_from=${resumedAfter}`);
+      const monitoring = await json('/api/v1/status/monitoring');
+      return { streams: [...new Set(recordings.items.map(clip => clip.stream_id))], monitoring };
+    }, ({ streams, monitoring }) => expectedStreams.every(stream => streams.includes(stream)) &&
+      monitoring.desired_running && !monitoring.busy && monitoring.counts.receiving === 2 &&
+      monitoring.counts.recording > 0, 'New recordings from both cameras and Multiview before normal Quit', 120);
     stages.push('GUI-start-resumes-recording-before-normal-quit');
   }
   assert.deepEqual(errors, [], 'Uncaught browser errors');
