@@ -2,12 +2,14 @@
 import json
 import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import Mock, call, patch
 
 from flinteye_app.instance_control import InstanceControl, request_local_browser
 
@@ -116,6 +118,35 @@ stop_background_processes()
             finally:
                 control.close()
             self.assertFalse(request_local_browser(root))
+
+    @unittest.skipIf(os.name == 'nt', 'POSIX process groups')
+    def test_macos_stop_ignores_zombie_only_group_and_keeps_live_group_for_retry(self):
+        from flinteye_app.orchestrator_supervisor import ManagedProcess, OrchestratorSupervisor
+        supervisor = OrchestratorSupervisor.__new__(OrchestratorSupervisor)
+        group_id = 1234
+        for state in ('Z', 'S'):
+            with self.subTest(state=state):
+                process = Mock(pid=group_id)
+                process.wait.return_value = -signal.SIGTERM
+                process.poll.return_value = -signal.SIGTERM
+                managed = ManagedProcess('camera:qa', 'camera', process=process, desired=True)
+                snapshot = subprocess.CompletedProcess([], 0, stdout=f' 1234 {state}\n 2345 R\n')
+                with (
+                    patch('flinteye_app.orchestrator_supervisor.sys.platform', 'darwin'),
+                    patch('flinteye_app.orchestrator_supervisor.os.killpg',
+                          side_effect=[None, PermissionError(1, 'Operation not permitted')]) as kill,
+                    patch('flinteye_app.orchestrator_supervisor.subprocess.run', return_value=snapshot),
+                ):
+                    if state == 'Z':
+                        supervisor._stop_process(managed)
+                        self.assertIsNone(managed.process)
+                    else:
+                        with self.assertRaises(PermissionError):
+                            supervisor._stop_process(managed)
+                        self.assertIs(managed.process, process)
+                    self.assertFalse(managed.desired)
+                    self.assertEqual(kill.call_args_list,
+                                     [call(group_id, signal.SIGTERM), call(group_id, signal.SIGKILL)])
 
     @unittest.skipIf(os.name == 'nt', 'Requires the full API test environment')
     def test_desktop_quit_stops_children_even_with_open_stream_client(self):

@@ -29,6 +29,28 @@ from flinteye_app.orchestrator_snapshot import SnapshotError, capture_snapshot_j
 logger = logging.getLogger("orchestrator.supervisor")
 
 
+def _signal_process_group(group_id: int, sig: int) -> None:
+    try:
+        os.killpg(group_id, sig)
+    except ProcessLookupError:
+        return
+    except PermissionError as signal_error:
+        if sys.platform != "darwin":
+            raise
+        # Darwin can return EPERM when the group contains only exited processes
+        # that have yet to be reaped. Check for a live member before accepting it.
+        try:
+            snapshot = subprocess.run(
+                ["/bin/ps", "-ax", "-o", "pgid=", "-o", "stat="],
+                capture_output=True, text=True, check=True, timeout=2,
+            ).stdout
+        except (OSError, subprocess.SubprocessError) as inspection_error:
+            raise signal_error from inspection_error
+        for group, state in (line.split() for line in snapshot.splitlines() if line.strip()):
+            if group == str(group_id) and not state.startswith("Z"):
+                raise
+
+
 @dataclass
 class ManagedProcess:
     key: str
@@ -634,10 +656,7 @@ class OrchestratorSupervisor:
         try:
             if os.name != "nt":
                 # terminate process group so child ffmpeg processes are not orphaned
-                try:
-                    os.killpg(proc.process.pid, signal.SIGTERM)
-                except ProcessLookupError:
-                    pass
+                _signal_process_group(proc.process.pid, signal.SIGTERM)
                 proc.process.wait(timeout=5 if deadline is None else max(0, min(5, deadline - time.monotonic())))
             elif proc.process.poll() is None:
                 if not _kill_process_tree_windows(proc.process.pid, timeout=10 if deadline is None else max(.1, min(10, deadline - time.monotonic()))):
@@ -646,7 +665,7 @@ class OrchestratorSupervisor:
         except Exception:  # noqa: BLE001
             try:
                 if proc.process and proc.process.poll() is None and os.name != "nt":
-                    os.killpg(proc.process.pid, signal.SIGKILL)
+                    _signal_process_group(proc.process.pid, signal.SIGKILL)
                 elif proc.process and not _kill_process_tree_windows(proc.process.pid, timeout=1 if deadline is not None else 10):
                     proc.process.kill()
             except Exception:  # noqa: BLE001
@@ -655,10 +674,7 @@ class OrchestratorSupervisor:
             if proc.process is not None and os.name != "nt":
                 # The leader exiting does not prove its process group is empty.
                 # Escalate for descendants that ignored TERM or outlived it.
-                try:
-                    os.killpg(proc.process.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
+                _signal_process_group(proc.process.pid, signal.SIGKILL)
                 try:
                     proc.process.wait(timeout=5 if deadline is None else max(.1, min(5, deadline - time.monotonic())))
                 except subprocess.TimeoutExpired:
