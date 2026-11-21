@@ -17,6 +17,7 @@ const info = { api: { swagger_url: 'http://example.test/docs', redoc_url: 'http:
 async function context(scenario, width = 1440, height = 900, colorScheme = 'light') {
     const ctx = await browser.newContext({ viewport: { width, height }, colorScheme });
     let errors = [];
+    let created = false;
     ctx.on('page', p => p.on('pageerror', e => errors.push(String(e))));
     await ctx.route('**/*', async (route) => {
         const req = route.request(), u = new URL(req.url());
@@ -44,7 +45,11 @@ async function context(scenario, width = 1440, height = 900, colorScheme = 'ligh
                 v = { version: '1.1.1', release: '1.1.1', channel: 'stable', commit: null, dirty: false };
                 break;
             case '/api/v1/auth/me':
-                v = { authenticated: scenario === 'admin', role: scenario === 'admin' ? 'admin' : null, username: 'admin', viewer_auth_required: true, setup_required: scenario === 'setup', provider: 'local', local: { viewer_username: 'viewer', admin_username: 'admin' } };
+                v = { authenticated: scenario === 'admin' || created, role: scenario === 'admin' || created ? 'admin' : null, username: 'admin', viewer_auth_required: true, setup_required: scenario !== 'admin' && !created, setup_mode: scenario.startsWith('desktop') ? 'desktop' : 'server', setup_handoff_ready: ['desktop-handoff', 'desktop-expired'].includes(scenario) && !created, provider: 'local', local: { viewer_username: 'viewer', admin_username: 'admin' } };
+                break;
+            case '/api/v1/setup':
+                if (scenario === 'desktop-expired') { status = 403; v = { detail: 'Setup expired' }; }
+                else { created = true; v = { ok: true }; }
                 break;
             case '/api/v1/cameras':
                 v = { items: syntheticCameras };
@@ -109,8 +114,8 @@ async function context(scenario, width = 1440, height = 900, colorScheme = 'ligh
                 v = { available: false, current: '1.1.1' };
                 break;
             case '/api/v1/auth/login':
-                v = { detail: 'Incorrect username or password' };
-                status = 401;
+                if (created) v = { ok: true, role: 'admin' };
+                else { v = { detail: 'Incorrect username or password' }; status = 401; }
                 break;
         }
         return route.fulfill({ status, contentType: 'application/json', headers: { ETag: '"1"' }, body: JSON.stringify(v) });
@@ -144,6 +149,30 @@ try {
         await ctx.close();
         console.log('PASS 9 setup', width);
     }
+    for (const scenario of ['desktop-handoff', 'desktop-manual', 'desktop-expired']) {
+        const { ctx, p } = await context(scenario, 390);
+        try {
+            const token = p.getByLabel('Setup token', { exact: true });
+            await p.getByRole('heading', { name: 'Welcome to FlintEye' }).waitFor();
+            if (scenario === 'desktop-manual') {
+                await token.waitFor();
+                await p.getByText('Address and setup assistance', { exact: false }).waitFor();
+                assert.equal(await token.getAttribute('type'), 'password');
+                continue;
+            }
+            assert.equal(await token.count(), 0);
+            await p.getByLabel('Password', { exact: true }).fill('synthetic-setup-password');
+            await p.getByLabel('Confirm password', { exact: true }).fill('synthetic-setup-password');
+            const request = p.waitForRequest(r => r.method() === 'POST' && r.url().endsWith('/api/v1/setup'));
+            await p.getByRole('button', { name: 'Create administrator account' }).click();
+            assert.deepEqual((await request).postDataJSON(), { password: 'synthetic-setup-password' });
+            if (scenario === 'desktop-expired') {
+                await p.getByText(/Setup access expired/).waitFor();
+                await token.waitFor();
+            } else await p.locator('.sidebar').waitFor();
+        } finally { await ctx.close(); }
+    }
+    console.log('PASS desktop setup handoff, expiration, and manual fallback');
     for (const width of [320, 1440]) {
         const { ctx, p } = await context('admin', width, 900);
         await ctx.route('**/api/v1/network', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ saved: { enabled: true, address: '192.168.1.10', allowed_subnets: ['192.168.1.0/24'] }, restart_required: false, local_url: 'http://127.0.0.1:18080', lan_url: 'https://192.168.1.10:18080', fingerprint: '0123456789abcdef'.repeat(4), ca_expires: '2031-11-16T00:00:00Z', guide_url: 'https://example.test/guide', error: '' }) }));

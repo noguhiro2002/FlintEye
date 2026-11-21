@@ -1,10 +1,11 @@
-# 1.2.0-preview.5 開発およびQAフォローアップ
+# 1.2.0の開発と実機検証
 
 [English](DEVELOPMENT_1_2_0.md) · [Acceptance](ACCEPTANCE.ja.md) · [Required device checklist](RELEASE_CHECKLIST_1_2_0.ja.md) · [LAN access](LAN_ACCESS.ja.md)
 
 **UNDER DEVELOPMENT。公開版 1.1.3-preview.1 に変更はありません。本ソースは、報告されているWindowsでの障害が所有者のマシンで回復したことを主張するものではありません。**
 
-ベースライン：アプリケーションビルド `25718ed3f06833a1f291992753b4f0538d7dc939`、公開タグ `v1.1.3-preview.1`。実装は main `8e13378` から開始。入力：2026年11月15日付の所有者によるQA rev11、およびmacOSインストーラーのフォローアップ。アプリケーション 1.2.0 およびリリース v1.2.0-preview.5 は、安定版チャネルではなく、現在のテストターゲットです。
+ベースライン：アプリケーションビルド `25718ed3f06833a1f291992753b4f0538d7dc939`、公開タグ `v1.1.3-preview.1`。実装は main `8e13378` から開始。入力：2026年11月15日付の所有者によるQA rev11、およびmacOSインストーラーのフォローアップ。
+今回の修正は1.2.0-preview.6の成果物で確認し、使ったコミットと結果を実機チェックリストに記録してください。[実機チェックリスト](RELEASE_CHECKLIST_1_2_0.ja.md)
 
 ## Preview.3: macOSインストールフォローアップ
 
@@ -52,13 +53,13 @@ Pythonスイート、フロントエンドビルド/ブラウザスイート、�
 Windows PowerShell（展開したバンドルディレクトリから実行）:
 
 ```powershell
-.\public\install.ps1 -Version 1.2.0-preview.5 -PackageDirectory .\public
+.\public\install.ps1 -Version 1.2.0-preview.6 -PackageDirectory .\public
 ```
 
 macOS または Linux（展開したバンドルディレクトリから実行）:
 
 ```sh
-bash public/install.sh --version 1.2.0-preview.5 --package-directory public
+bash public/install.sh --version 1.2.0-preview.6 --package-directory public
 ```
 
 このインストールを同じフォルダ内のスタンドアロンインストーラーと比較し、両方の SHA-256 値が一致することを確認してください。バージョンとソースコミットは固定してください。パブリックダウンロードコマンドは、1.2.0-preview.5 開発リリースに固定されます。安定版へのプロモーションは物理的な承認を待つ必要があります。GHCR 公開前にコンテナをテストするには、対応する `containers/container-amd64.tar.gz` または `container-arm64.tar.gz` を読み込み、Compose を使用する前に `FLINTEYE_IMAGE=flinteye:release-amd64` または `flinteye:release-arm64` を設定してください。ダウンロードした Compose ファイルにある将来の GHCR タグを、すでに公開されているイメージと見間違えないように注意してください。

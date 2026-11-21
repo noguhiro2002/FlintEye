@@ -143,8 +143,9 @@ try {
         try {
             await p.locator('.sidebar').getByRole('button', { name: 'Settings', exact: true }).click();
             await p.getByRole('complementary', { name: 'Settings categories' }).getByRole('button', { name: 'Cameras', exact: true }).click();
-            await p.getByText('Front USB Camera · Camera audio', {exact: true}).click();
-            const usb = p.locator('details').filter({hasText: 'Front USB Camera · Camera audio'}).last();
+            const discovery = p.getByRole('heading', {name: 'UVC Camera Discovery', exact: true}).locator('..');
+            await discovery.getByText('Front USB Camera · Camera audio', {exact: true}).click();
+            const usb = discovery.locator('details').filter({hasText: 'Front USB Camera · Camera audio'}).last();
             await usb.getByRole('button', {name: 'Check audio input'}).click();
             await usb.getByText('This camera has no detected audio input.').waitFor();
             assert.equal(await usb.getByRole('checkbox', {name: 'Enable camera audio'}).isDisabled(), true);

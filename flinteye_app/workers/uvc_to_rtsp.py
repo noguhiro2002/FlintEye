@@ -122,12 +122,12 @@ def parse_env_bool(value: str, key: str) -> bool:
     raise ValueError(f"{key} must be one of {sorted(TRUTHY_VALUES | FALSY_VALUES)}: '{value}'")
 
 
-def run_capture(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+def run_ffmpeg_probe(cmd: list[str]) -> subprocess.CompletedProcess[str]:
     return run_background(cmd, **background_process_options(), capture_output=True, text=True, check=False)
 
 
 def get_available_encoders(ffmpeg_bin: str) -> set[str]:
-    result = run_capture([ffmpeg_bin, "-hide_banner", "-encoders"])
+    result = run_ffmpeg_probe([ffmpeg_bin, "-hide_banner", "-encoders"])
     text = (result.stdout or "") + "\n" + (result.stderr or "")
     encoders: set[str] = set()
     for line in text.splitlines():
@@ -141,7 +141,7 @@ def get_available_encoders(ffmpeg_bin: str) -> set[str]:
 
 
 def has_drawtext_filter(ffmpeg_bin: str) -> bool:
-    result = run_capture([ffmpeg_bin, "-hide_banner", "-filters"])
+    result = run_ffmpeg_probe([ffmpeg_bin, "-hide_banner", "-filters"])
     text = (result.stdout or "") + "\n" + (result.stderr or "")
     return re.search(r"\bdrawtext\b", text) is not None
 

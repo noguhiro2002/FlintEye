@@ -8,7 +8,7 @@ import { chromium } from 'playwright';
 const { values } = parseArgs({ options: {
   url: { type: 'string' }, profile: { type: 'string' }, output: { type: 'string' },
   release: { type: 'string' }, commit: { type: 'string' }, retained: { type: 'boolean', default: false },
-  'fixture-url': { type: 'string' },
+  'fixture-url': { type: 'string' }, 'synthetic-uvc': { type: 'boolean', default: false },
 }});
 assert(values.url && values.profile && values.output && values.release);
 const origin = new URL(values.url);
@@ -67,12 +67,45 @@ async function login(username, secret) {
   await page.getByRole('button', { name: 'Sign In', exact: true }).click();
   await page.locator('.sidebar').waitFor();
 }
-async function videoProgress(label, { audio = false, marker } = {}) {
+const header = page.locator('.settings-page-header');
+const settingsReady = () => until(() => header.getByRole('button', { name: 'Refresh', exact: true }).isEnabled(),
+  value => value, 'Settings save/reload completion');
+
+async function saveCameraForm() {
+  await header.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await header.getByText('All changes saved', { exact: true }).waitFor();
+  await settingsReady();
+}
+
+async function addIpCamera(index) {
+  await page.getByRole('button', { name: 'Add IP Camera', exact: true }).click();
+  const card = page.locator('.ip-camera-card').last();
+  await card.getByLabel('Display Name', { exact: true }).fill(`QA camera ${index}`);
+  await card.getByLabel('MediaMTX Path', { exact: true }).fill(`qa-camera-${index}`);
+  await card.getByRole('combobox', { name: /^ONVIF discovery/ }).selectOption('disabled');
+  await card.getByLabel('Source URL', { exact: true }).fill(`${values['fixture-url']}/qa-input-${index}`);
+}
+
+function usbDiscovery() {
+  return page.getByRole('heading', { name: 'UVC Camera Discovery', exact: true }).locator('..');
+}
+
+async function applyUvcCamera() {
+  const usb = usbDiscovery();
+  await usb.getByRole('button', { name: /^FlintEye QA USB camera/ }).click();
+  await usb.getByLabel('Path', { exact: true }).fill('qa-camera-2');
+  await usb.getByLabel('Camera Name', { exact: true }).fill('QA camera 2');
+  await usb.getByRole('button', { name: 'Apply Device', exact: true }).click();
+  await page.getByText('UVC device applied.', { exact: true }).waitFor();
+  await settingsReady();
+}
+
+async function videoProgress(label, { audio = false, markers = [] } = {}) {
   const frame = page.frameLocator('iframe.webrtc-frame');
   const video = frame.locator('video');
   await until(async () => {
     try {
-      return await video.evaluate(async (v, { audio, marker }) => {
+      return await video.evaluate(async (v, { audio, markers }) => {
         v.muted = true;
         if (v.paused) void v.play().catch(() => {});
         if (v.readyState < 2 || !v.videoWidth) return { ready: v.readyState, width: v.videoWidth };
@@ -82,14 +115,17 @@ async function videoProgress(label, { audio = false, marker } = {}) {
         await new Promise(resolve => setTimeout(resolve, 750));
         if (!v.isConnected || !v.videoWidth) return { state: 'player reloading' };
         const sample = { elapsed: v.currentTime - before, width: v.videoWidth };
-        if (marker) {
+        if (markers.length) {
           const canvas = document.createElement('canvas');
           canvas.width = 1;
           canvas.height = 1;
           const ctx = canvas.getContext('2d');
-          ctx.drawImage(v, Math.floor(v.videoWidth / 2), Math.floor(v.videoHeight / 2), 1, 1, 0, 0, 1, 1);
-          const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
-          sample.marker = r > Math.max(g, b) + 80 ? 'red' : b > Math.max(r, g) + 80 ? 'blue' : 'unknown';
+          sample.markers = markers.map((_, index) => {
+            const x = Math.floor(v.videoWidth * (index + .5) / markers.length);
+            ctx.drawImage(v, x, Math.floor(v.videoHeight / 2), 1, 1, 0, 0, 1, 1);
+            const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+            return r > Math.max(g, b) + 80 ? 'red' : b > Math.max(r, g) + 80 ? 'blue' : 'unknown';
+          });
         }
         if (audio) {
           const stats = await Promise.all((globalThis.__flinteyeQaPeers || []).map(peer => peer.getStats()));
@@ -98,21 +134,40 @@ async function videoProgress(label, { audio = false, marker } = {}) {
             .reduce((total, item) => total + (item.bytesReceived || 0), 0);
         }
         return sample;
-      }, { audio, marker }, { timeout: 2000 });
+      }, { audio, markers }, { timeout: 2000 });
     } catch (error) {
       if (error.name === 'TimeoutError' || /Execution context was destroyed|frame was detached/i.test(error.message)) {
         return { state: 'waiting for current player' };
       }
       throw error;
     }
-  }, sample => sample.elapsed > .25 && (!marker || sample.marker === marker) &&
+  }, sample => sample.elapsed > .25 && markers.every((marker, index) => sample.markers?.[index] === marker) &&
     (!audio || sample.audioBytes > 0), label);
 }
 try {
-  await page.goto(origin.href);
+  const desktopHandoff = values['synthetic-uvc'] && !values.retained;
+  if (desktopHandoff) {
+    const launch = join(values.profile, 'qa-browser-url.txt');
+    const localSetup = await until(() => readFile(launch, 'utf8').catch(error => {
+      if (error.code === 'ENOENT') return '';
+      throw error;
+    }), value => value.startsWith('file:'), 'Desktop launcher delivered a local setup page', 30);
+    const handoff = page.waitForResponse(response => response.url() === new URL('/api/v1/setup/handoff', origin).href);
+    await page.goto(localSetup);
+    assert.equal((await handoff).status(), 303, 'Local setup page must exchange its one-use code');
+    await page.waitForURL(origin.href);
+  } else {
+    await page.goto(origin.href);
+  }
   if (!values.retained) {
     await page.getByRole('heading', { name: 'Welcome to FlintEye' }).waitFor();
-    await page.getByLabel('Server setup token', { exact: true }).fill((await readFile(join(values.profile, 'setup-token'), 'utf8')).trim());
+    const setupToken = page.getByLabel(/^(Server )?Setup token$/i);
+    if (desktopHandoff) {
+      assert.equal(await setupToken.count(), 0, 'Desktop setup must only ask for a password');
+      stages.push('desktop-browser-one-use-setup-handoff');
+    } else {
+      await setupToken.fill((await readFile(join(values.profile, 'setup-token'), 'utf8')).trim());
+    }
     await page.getByLabel('Password', { exact: true }).fill(password);
     await page.getByLabel('Confirm password', { exact: true }).fill(password);
     await page.getByRole('button', { name: 'Create administrator account', exact: true }).click();
@@ -131,33 +186,26 @@ try {
   await unauth.close();
   stages.push('real-api-build-identity-and-authentication');
   if (!values.retained) {
-    await patch({ recording: { enabled: true, record_all_cameras: true, record_segment_duration: '2s', record_part_duration: '200ms', include_multiview: true },
+    // Pin recording policy so camera removal can be checked without a
+    // separate recording configuration change that requires a media restart.
+    await patch({ recording: { enabled: true, record_all_cameras: false, record_paths: ['qa-camera-1', 'qa-camera-2'], record_segment_duration: '2s', record_part_duration: '200ms', include_multiview: true },
       snapshot: { thumbnail_refresh_interval_sec: 2 }, multiview: { enabled: false } });
     await nav('Settings'); await category('Cameras');
-    for (let i = 1; i <= 2; i++) {
-      await page.getByRole('button', { name: 'Add IP Camera', exact: true }).click();
-      const card = page.locator('.ip-camera-card').last();
-      await card.getByLabel('Display Name', { exact: true }).fill(`QA camera ${i}`);
-      await card.getByLabel('MediaMTX Path', { exact: true }).fill(`qa-camera-${i}`);
-      await card.getByLabel('Source URL', { exact: true }).fill(`${values['fixture-url']}/qa-input-${i}`);
-    }
-    await page.locator('.settings-page-header').getByRole('button', { name: 'Save changes', exact: true }).click();
-    // The API can commit before the UI finishes reloading saved values and USB
-    // discovery. Respect the real UI completion signal before navigating away.
-    await page.locator('.settings-page-header').getByText('All changes saved', { exact: true }).waitFor();
-    await until(() => page.locator('.settings-page-header').getByRole('button', { name: 'Refresh', exact: true }).isEnabled(),
-      value => value, 'Settings save/reload completion');
+    await addIpCamera(1);
+    if (!values['synthetic-uvc']) await addIpCamera(2);
+    await saveCameraForm();
+    if (values['synthetic-uvc']) await applyUvcCamera();
     await until(() => json('/api/v1/cameras'), value => value.items.filter(c => c.id.startsWith('qa-camera-')).length === 2, 'GUI camera save');
     const effective = await json('/api/v1/config/effective');
     const cameras = effective.cameras;
+    assert.equal(cameras.find(c => c.id === 'qa-camera-2').type, values['synthetic-uvc'] ? 'uvc' : 'ip');
     assert(cameras.every(c => c.audio?.enabled !== true), 'Camera audio must default off');
-    await patch({ cameras: cameras.map(c => ({ ...c, ip: { ...c.ip, onvif_mode: 'disabled' } })),
-      multiview: { enabled: true, source_mode: 'env', source_paths: ['qa-camera-1', 'qa-camera-2'], tile_count: 2,
+    await patch({ multiview: { enabled: true, source_mode: 'env', source_paths: ['qa-camera-1', 'qa-camera-2'], tile_count: 2,
         input_rtsp_base_url: effective.mediamtx.internal_rtsp_base_url || effective.mediamtx.rtsp_base_url,
         output_rtsp_base_url: effective.mediamtx.internal_rtsp_base_url || effective.mediamtx.rtsp_base_url,
         mtx_api_url: effective.multiview.mtx_api_url,
-        quality: { fps: 5, encoder: 'libx264', gop: 5, quality_preset: 'low' }, layout: { canvas_width: 640, canvas_height: 360 } } });
-    stages.push('GUI-register-two-real-synthetic-RTSP-sources-and-save');
+        quality: { fps: 5, encoder: 'libx264', gop: 5, quality_preset: 'low' }, layout: { canvas_width: 640, canvas_height: 360, grid_columns: 2 } } });
+    stages.push('GUI-register-two-cameras-and-save');
     await nav('Information'); await nav('Settings'); await category('Cameras');
     const audioCard = page.locator('.ip-camera-card').first();
     await audioCard.getByRole('button', { name: 'Check audio input', exact: true }).click();
@@ -189,13 +237,13 @@ try {
     await nav('Live View');
     for (const [i, marker] of [[1, 'red'], [2, 'blue']]) {
       await page.getByRole('button', { name: 'View QA camera '+i, exact: true }).click();
-      await videoProgress('Live camera '+i, { audio: i === 1, marker });
+      await videoProgress('Live camera '+i, { audio: i === 1, markers: [marker] });
     }
     stages.push('both-live-cameras-show-their-own-marker');
     await page.screenshot({ path: join(output, 'Live-View-playing.png') });
-    await nav('Multiview'); await videoProgress('Multiview WebRTC frame progress');
+    await nav('Multiview'); await videoProgress('Both camera tiles in one advancing Multiview frame', { markers: ['red', 'blue'] });
     await page.screenshot({ path: join(output, 'Multiview-playing.png') });
-    stages.push('live-and-multiview-real-WebRTC-frame-progress');
+    stages.push('live-and-multiview-real-WebRTC-frame-progress', 'multiview-shows-both-camera-markers');
     await until(() => json('/api/v1/recordings'), value => value.items.some(r => r.is_stable), 'Completed recordings');
     await nav('Recordings');
     const play = page.locator('.recording-card button[aria-label^="Play "]').first();
@@ -214,6 +262,41 @@ try {
     await writeFile(join(output, 'download-selection.json'), JSON.stringify({ relativePath, savedName }));
     await page.getByRole('button', { name: 'Close player', exact: true }).click();
     stages.push('recording-GUI-playback-and-download');
+
+    const redBefore = (await json('/api/v1/status/processes')).items.find(stream => stream.id === 'camera:qa-camera-1');
+    assert.equal(redBefore.status, 'running');
+    await nav('Settings'); await category('Cameras'); await settingsReady();
+    if (values['synthetic-uvc']) {
+      await usbDiscovery().getByRole('row', { name: /QA camera 2/ }).getByRole('button', { name: 'Ignore / Remove', exact: true }).click();
+      await settingsReady();
+    } else {
+      await page.locator('.ip-camera-card').filter({ hasText: 'QA camera 2' }).getByRole('button', { name: 'Remove', exact: true }).click();
+      await saveCameraForm();
+    }
+    await until(() => json('/api/v1/viewer/cameras'), value => value.items.length === 1 && value.items[0].id === 'qa-camera-1' && value.items[0].health?.state === 'healthy', 'Remaining camera receiving after removal');
+    const afterRemoval = (await json('/api/v1/status/processes')).items;
+    assert(afterRemoval.every(stream => stream.id !== 'camera:qa-camera-2' || stream.status !== 'running'), 'Removed publisher is still running');
+    assert.equal(afterRemoval.find(stream => stream.id === 'camera:qa-camera-1').pid, redBefore.pid, 'Removing a camera restarted the other publisher');
+    await nav('Live View');
+    await page.getByRole('button', { name: 'View QA camera 1', exact: true }).click();
+    await videoProgress('Remaining camera after removal', { markers: ['red'] });
+    assert.equal(await page.getByRole('button', { name: 'View QA camera 2', exact: true }).count(), 0);
+    await nav('Settings'); await category('Cameras'); await settingsReady();
+    if (values['synthetic-uvc']) {
+      await usbDiscovery().getByRole('button', { name: /^FlintEye QA USB camera/ }).click();
+      await usbDiscovery().getByRole('button', { name: 'Restore to Discovery', exact: true }).click();
+      await settingsReady();
+      await applyUvcCamera();
+    } else {
+      await addIpCamera(2);
+      await saveCameraForm();
+    }
+    await until(() => json('/api/v1/viewer/cameras'), value => value.items.length === 2 && value.items.every(c => c.health?.state === 'healthy'), 'Re-added camera receives video', 120);
+    await nav('Multiview');
+    await videoProgress('Both camera tiles after re-adding the second camera', { markers: ['red', 'blue'] });
+    stages.push('GUI-remove-and-readd-camera-keeps-other-publisher');
+    if (values['synthetic-uvc']) stages.push('synthetic-USB-and-IP-live-multiview-and-removal');
+
     await nav('Settings'); await category('Runtime & access');
     await page.getByLabel('New viewer password', { exact: true }).fill(viewerPassword);
     await page.getByRole('button', { name: 'Set viewer password and sign in again', exact: true }).click();

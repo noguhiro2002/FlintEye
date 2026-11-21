@@ -22,6 +22,7 @@ on:
       - packaging/install.ps1
       - packaging/validation_install.py
       - packaging/lifecycle*.py
+      - packaging/qa_uvc_source.py
       - packaging/ci_apt.py
       - packaging/LifecycleLinux.Dockerfile
       - frontend/tests/installed.mjs
@@ -203,6 +204,7 @@ jobs:
           python -m unittest discover -s tests -p test_macos_lifecycle.py -v
           python -m unittest discover -s tests -p test_network_access.py -v
           python -m unittest discover -s tests -p test_windows_maintenance.py -v
+          python -m unittest tests.test_package_layout.LayoutTests.test_uvc_worker_probes_ffmpeg_and_launches_directshow_mjpeg tests.test_package_layout.LayoutTests.test_failed_worker_writes_traceback_without_desktop_startup_dialog -v
       - name: macOS build tools
         if: matrix.os == 'macos'
         run: brew install cmake pkg-config nasm ninja
@@ -358,7 +360,7 @@ jobs:
           (cd frontend && npx playwright install --with-deps chromium)
           version=$(python packaging/release.py version)
           dpkg-deb -x "dist/FlintEye-$version-linux-$TARGET_ARCH.deb" qa-extract
-          python packaging/lifecycle.py --method source --media-directory qa-extract/opt/flinteye/_internal/bin --output lifecycle-results/source
+          python packaging/lifecycle.py --method source --synthetic-uvc --media-directory qa-extract/opt/flinteye/_internal/bin --output lifecycle-results/source
       - name: Preserve source lifecycle evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

@@ -11,9 +11,10 @@ STAGES = ('install', 'integrity', 'os_launch', 'api_gui', 'quit', 'uninstall', '
 MANUAL_CASES = ('os-first-launch-approval', 'native-menus-and-permissions', 'physical-usb-and-lan')
 BROWSER_CHECKS = {
     'browser-first-run-setup', 'real-api-build-identity-and-authentication',
-    'GUI-register-two-real-synthetic-RTSP-sources-and-save', 'per-camera-audio-default-off-detection-enable-and-save',
+    'GUI-register-two-cameras-and-save', 'per-camera-audio-default-off-detection-enable-and-save',
     'both-live-cameras-show-their-own-marker', 'all-six-main-screens', 'live-and-multiview-real-WebRTC-frame-progress',
     'recording-GUI-playback-and-download', 'viewer-login-and-real-API-write-denial',
+    'multiview-shows-both-camera-markers', 'GUI-remove-and-readd-camera-keeps-other-publisher',
     'GUI-stop-keeps-API-and-saved-settings-cannot-restart-monitoring', 'GUI-start-resumes-recording-before-normal-quit',
 }
 RETAINED_CHECKS = {'retained-administrator-login', 'real-api-build-identity-and-authentication',
@@ -132,6 +133,9 @@ def collect(directory: Path, *, release: str, commit: str) -> dict:
                 if proof.get('identity', {}).get('release') != release or proof['identity'].get('commit') != commit:
                     raise ValueError('Browser tested another application build')
                 expected_checks = BROWSER_CHECKS if name.startswith('browser/') else RETAINED_CHECKS
+                if name.startswith('browser/') and key[0] == 'source' and expected_os == 'linux':
+                    expected_checks = expected_checks | {'synthetic-USB-and-IP-live-multiview-and-removal',
+                                                        'desktop-browser-one-use-setup-handoff'}
                 if not expected_checks.issubset(proof.get('stages', [])) or proof['identity'].get('dirty') is not False:
                     raise ValueError('Incomplete browser checks or dirty application build')
                 proofs[name] = hashlib.sha256(proof_path.read_bytes()).hexdigest()

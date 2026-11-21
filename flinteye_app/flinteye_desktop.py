@@ -147,7 +147,7 @@ def _confirm_force_quit():
     return messagebox.askyesno('Force quit FlintEye?', text, default='no')
 
 
-def _run_tray(url, server, root, controller, actions):
+def _run_tray(server, root, controller, actions, open_browser):
     import pystray
     from flinteye_app.desktop_icon import apply_application_icon
     apply_application_icon()
@@ -156,8 +156,6 @@ def _run_tray(url, server, root, controller, actions):
     startup = autostart_status()
     last = None
     done = threading.Event()
-    def open_web():
-        webbrowser.open(url)
     def connection_info():
         from flinteye_app.flinteye_runtime import launch_command
         from flinteye_app.process_lifetime import popen_background
@@ -170,7 +168,7 @@ def _run_tray(url, server, root, controller, actions):
         pystray.MenuItem(lambda item: status_text(snapshot), None, enabled=False),
         pystray.MenuItem(lambda item: (actions.message or snapshot['message'])[:140], None, enabled=False),
         pystray.Menu.SEPARATOR,
-        pystray.MenuItem('Open FlintEye', open_web, default=True),
+        pystray.MenuItem('Open FlintEye', lambda: open_browser(), default=True),
         pystray.MenuItem('Address and setup assistance', connection_info),
         pystray.MenuItem('Start monitoring', lambda: actions.submit('start'),
                          enabled=lambda item: not actions.busy and not snapshot['desired_running'] and snapshot['phase'] != 'finalizing'),
@@ -228,7 +226,7 @@ def _run_tray(url, server, root, controller, actions):
         done.set()
 
 
-def _run_control_window(url, server, root, controller, actions):
+def _run_control_window(url, server, root, controller, actions, open_browser):
     import tkinter as tk
     from tkinter import ttk, messagebox
     from flinteye_app.cli import autostart_status
@@ -248,8 +246,14 @@ def _run_control_window(url, server, root, controller, actions):
     def copy_url():
         window.clipboard_clear(); window.clipboard_append(url); window.update()
     row = ttk.Frame(frame); row.pack(fill='x')
-    ttk.Button(row, text='Open FlintEye', command=lambda: webbrowser.open(url)).pack(side='left', pady=3)
+    ttk.Button(row, text='Open FlintEye', command=open_browser).pack(side='left', pady=3)
     ttk.Button(row, text='Copy address', command=copy_url).pack(side='left', padx=6)
+    def connection_info():
+        from flinteye_app.flinteye_runtime import launch_command
+        from flinteye_app.process_lifetime import popen_background
+        from flinteye_app.subprocess_utils import background_process_options
+        popen_background(launch_command() + ['--connection-info', '--data-dir', str(root)], **background_process_options())
+    ttk.Button(frame, text='Address and setup assistance', command=connection_info).pack(anchor='w', pady=3)
     controls = ttk.Frame(frame); controls.pack(fill='x')
     buttons = {}
     for action in ('start', 'stop', 'restart'):
@@ -321,16 +325,16 @@ def _run_control_window(url, server, root, controller, actions):
             icon.stop()
 
 
-def run_desktop(url, server, root: Path, controller):
+def run_desktop(url, server, root: Path, controller, open_browser):
     actions = DesktopActions(controller, server)
     done = threading.Event()
     sleeper = threading.Thread(target=_sleep_watcher, args=(controller, done), name='desktop-sleep', daemon=True)
     sleeper.start()
     try:
         if sys.platform.startswith('linux'):
-            _run_control_window(url, server, root, controller, actions)
+            _run_control_window(url, server, root, controller, actions, open_browser)
         else:
-            _run_tray(url, server, root, controller, actions)
+            _run_tray(server, root, controller, actions, open_browser)
     finally:
         done.set()
         sleeper.join(timeout=5)

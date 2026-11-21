@@ -47,7 +47,8 @@ export function LoginPage({ api, auth, onLoggedIn, onCancel }: LoginPageProps): 
         ) : provider !== "local" ? (
           <div className="panel-error">Login UI is not implemented for this auth provider yet.</div>
         ) : setupRequired ? (
-          <SetupAccount api={api} onDone={() => void onLoggedIn()} />
+          <SetupAccount api={api} onDone={() => void onLoggedIn()}
+            desktop={auth?.setup_mode === "desktop"} handoffReady={auth?.setup_handoff_ready === true} />
         ) : null}
         {(provider === "legacy_token" || (provider === "local" && !setupRequired)) && (
           <form className="login-form" onSubmit={(e) => void onSubmit(e)}>

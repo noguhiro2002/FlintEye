@@ -39,17 +39,36 @@ def active_listener_port(root: Path, fallback: int) -> int:
     return fallback
 
 
+def request_local_browser(root: Path) -> bool:
+    """Ask the already running desktop to open its browser on behalf of this profile."""
+    from flinteye_app.orchestrator_store import write_private_runtime_json
+
+    try:
+        owner = json.loads((root / 'instance-control.json').read_text(encoding='utf-8'))
+        if owner.get('browser_requests') is not True or not isinstance(owner.get('token'), str):
+            return False
+        write_private_runtime_json(root / 'open-browser-request.json', {'token': owner['token']})
+        return True
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
 class InstanceControl:
-    def __init__(self, root: Path, stop, *, port: int | None = None, renew_setup=None, url: str | None = None):
+    def __init__(self, root: Path, stop, *, port: int | None = None, renew_setup=None,
+                 open_browser=None, url: str | None = None):
         self.renew_setup = renew_setup
+        self.open_browser = open_browser
         self.path = root / 'instance-control.json'
         self.request = root / 'stop-request.json'
+        self.browser_request = root / 'open-browser-request.json'
         self.token = secrets.token_hex(32)
         self.stop = stop
         self.closed = threading.Event()
         self.request.unlink(missing_ok=True)
+        self.browser_request.unlink(missing_ok=True)
         self.metadata = {'token': self.token, 'pid': os.getpid(),
-                         'executable': str(Path(sys.executable).resolve()), 'port': port, 'url': url}
+                         'executable': str(Path(sys.executable).resolve()), 'port': port, 'url': url,
+                         'browser_requests': open_browser is not None}
         self.write_connection()
         self.index = None
         if sys.platform == 'win32' and getattr(sys, 'frozen', False):
@@ -73,15 +92,23 @@ class InstanceControl:
         self.metadata.update(values)
         private_write(self.path, json.dumps(self.metadata).encode())
 
+    def _take_request(self, path: Path) -> dict | None:
+        try:
+            if path.stat().st_size <= 1024:
+                data = json.loads(path.read_text(encoding='utf-8-sig'))
+                token = data.get('token')
+                if isinstance(token, str) and token.isascii() and secrets.compare_digest(token, self.token):
+                    path.unlink(missing_ok=True)
+                    return data
+        except (OSError, ValueError, AttributeError):
+            pass
+        return None
+
     def _watch(self):
         while not self.closed.wait(.2):
             try:
-                if self.request.stat().st_size > 1024:
-                    continue
-                data = json.loads(self.request.read_text(encoding='utf-8-sig'))
-                token = data.get('token')
-                if isinstance(token, str) and secrets.compare_digest(token, self.token):
-                    self.request.unlink(missing_ok=True)
+                data = self._take_request(self.request)
+                if data is not None:
                     if data.get('action') == 'renew-setup':
                         if self.renew_setup is not None: self.renew_setup()
                         continue
@@ -89,6 +116,8 @@ class InstanceControl:
                     if self.stop() is False:
                         continue  # A failed normal finalization stays available for retry.
                     return
+                if self.open_browser is not None and self.metadata.get('ready') and self._take_request(self.browser_request) is not None:
+                    self.open_browser()
             except (OSError, ValueError, AttributeError):
                 continue
 
@@ -99,6 +128,7 @@ class InstanceControl:
             if json.loads(self.path.read_text(encoding='utf-8')).get('token') == self.token:
                 self.path.unlink(missing_ok=True)
                 self.request.unlink(missing_ok=True)
+                self.browser_request.unlink(missing_ok=True)
                 if self.index is not None:
                     self.index.unlink(missing_ok=True)
         except (OSError, ValueError, AttributeError):

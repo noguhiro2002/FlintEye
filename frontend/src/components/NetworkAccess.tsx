@@ -14,10 +14,16 @@ export function NetworkAccess({api, blocked, onDirtyChange, onSaved}: {api: ApiC
   const [open, setOpen] = useState(false);
   const dirty = Boolean(status && (enabled !== status.saved.enabled || rtspEnabled !== Boolean(status.saved.rtsp_enabled) || address !== status.saved.address || sources !== status.saved.allowed_subnets.join(', ')));
   useEffect(() => { onDirtyChange(dirty); return () => onDirtyChange(false); }, [dirty, onDirtyChange]);
-  const refresh = async () => {
+  const refresh = async (resetForm = true) => {
     const next = await api.getNetwork();
     if (!next.saved) throw new Error('LAN settings unavailable');
-    setStatus(next); setEnabled(next.saved.enabled); setRtspEnabled(Boolean(next.saved.rtsp_enabled)); setAddress(next.saved.address); setSources(next.saved.allowed_subnets.join(', '));
+    setStatus(next);
+    if (resetForm) {
+      setEnabled(next.saved.enabled);
+      setRtspEnabled(Boolean(next.saved.rtsp_enabled));
+      setAddress(next.saved.address);
+      setSources(next.saved.allowed_subnets.join(', '));
+    }
   };
   useEffect(() => { if (open) void refresh().catch(() => setError('Connection settings can be changed on the server computer. Open FlintEye there to configure LAN access.')); }, [open]);
   const act = async (action: () => Promise<unknown>, reload = false) => {
@@ -36,24 +42,25 @@ export function NetworkAccess({api, blocked, onDirtyChange, onSaved}: {api: ApiC
     finally { setBusy(false); }
   };
   return <details className="runtime-advanced network-access form-span-3" onToggle={e => setOpen(e.currentTarget.open)}>
-    <summary><span><strong>LAN connection and certificate trust</strong><small>Optional access from other computers and mobile devices.</small></span></summary>
+    <summary><span><strong>LAN connection and certificate trust</strong><small>Optional access from other devices on a LAN or VPN.</small></span></summary>
     <div className="network-access-body">
-    <p className="field-help">Use this PC only by default. Optional LAN access uses HTTPS on port 18080 (or your configured API port). Each viewing PC, iPhone, iPad or Android device must first trust this installation’s certificate.</p>
+    <p className="field-help">To connect from another device over LAN or VPN, allow access below, save, and restart FlintEye. Use the active HTTPS address and trust this installation’s certificate on each viewing device.</p>
     {error && <p className="panel-error" role="alert">{error}</p>}
     {status && <>
       <dl className="network-addresses">
-        <div><dt>This computer</dt><dd>{status.local_url || 'Unavailable'}</dd></div>
-        {status.lan_url && <div><dt>Other devices</dt><dd>{status.lan_url}</dd></div>}
+        <div><dt>This computer (HTTP)</dt><dd>{status.local_url || 'Unavailable'}</dd></div>
+        <div><dt>Active address for other devices (HTTPS)</dt><dd>{status.lan_url || (status.lan_state === 'unavailable' ? 'Listener unavailable' : 'Off')}</dd></div>
       </dl>
       {status.error && <p className="panel-error" role="alert">{status.error}</p>}
-      {status.restart_required && <p className="panel-note" role="status">Connection changes take effect after restarting FlintEye.</p>}
+      {status.restart_required && <p className="panel-note" role="status">Connection changes are saved. Restart FlintEye to apply them.</p>}
       {status.fingerprint && <div className="network-certificate"><strong>CA SHA-256 fingerprint</strong><code>{status.fingerprint}</code><span>Expires: {status.ca_expires}</span></div>}
       <form aria-busy={busy} onSubmit={e => {e.preventDefault(); void act(() => api.networkAction('', {enabled, address, rtsp_enabled: enabled && rtspEnabled, allowed_subnets: sources.split(',').map(s => s.trim()).filter(Boolean)}, 'PUT'), true);}}>
         <fieldset className="settings-fields" disabled={busy || blocked}>
           <div className="form-grid">
-          <label className="check form-span-3"><input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} /><span>Enable LAN HTTPS</span></label>
+          <label className="check form-span-3"><input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} /><span>Allow access from other devices on LAN or VPN (HTTPS)</span></label>
           <label>Server IPv4 address<input value={address} onChange={e => setAddress(e.target.value)} placeholder="192.168.1.10" required={enabled} aria-describedby="network-address-help"/></label>
-          <label className="form-span-2">Permitted source networks (comma separated)<input value={sources} onChange={e => setSources(e.target.value)} placeholder="192.168.1.0/24" required={enabled}/></label>
+          <label className="form-span-2">Permitted source networks (comma separated)<input value={sources} onChange={e => setSources(e.target.value)} placeholder="192.168.1.0/24" required={enabled} aria-describedby="network-source-help"/></label>
+          <p id="network-source-help" className="field-help form-span-3">Enter client networks as seen by FlintEye. A VPN can give the client a different IP range from the server. Use the narrow range approved for that network.</p>
           <label className="check form-span-3"><input type="checkbox" disabled={!enabled} checked={enabled && rtspEnabled} onChange={e => setRtspEnabled(e.target.checked)} /><span>Allow external players (RTSPS, TCP 8322)</span></label>
           <p id="network-address-help" className="field-help form-span-3">Choose an IP assigned to this server. Reserve it in your router to keep the same address after reboot. Saving does not change the current connection.</p>
           </div>
@@ -64,11 +71,13 @@ export function NetworkAccess({api, blocked, onDirtyChange, onSaved}: {api: ApiC
         </fieldset>
       </form>
       <div className="button-row">
+        <button type="button" disabled={busy} onClick={() => void refresh(false).catch(() => setError('Could not read the active connection status.'))}>Refresh connection status</button>
         <button disabled={busy || blocked || !status.saved.enabled} onClick={() => void act(() => api.networkAction('/guide', {}))}>Save public certificate and connection guide</button>
         <button disabled={busy || blocked || !status.saved.enabled} onClick={() => { if (window.confirm('Allow HTTPS TCP 18080 (or your configured API port) and WebRTC UDP 8189 (plus RTSPS TCP 8322 if enabled) for the selected IP and source ranges, on Private networks only? Windows will request administrator approval.')) void act(() => api.networkAction('/firewall', {action:'apply'})); }}>Windows: allow selected LAN access…</button>
         <button disabled={busy || blocked} onClick={() => void act(() => api.networkAction('/firewall', {action:'remove'}))}>Windows: remove this installation’s rules…</button>
         <button disabled={busy || blocked || !status.saved.enabled} onClick={() => {if (window.confirm('Replace the trust certificate? Every viewing device will need to trust the new certificate.')) void act(() => api.networkAction('/renew-trust', {confirm:true}));}}>Renew trust certificate…</button>
       </div>
+      {status.last_denied_source && <p className="panel-note" role="status">Last source outside the permitted ranges <code>{status.last_denied_source}</code>. Compare this address with the permitted source networks above.</p>}
       {status.saved.rtsp_enabled && <div>
         <button type="button" disabled={busy || blocked || dirty} onClick={() => {
           if (!window.confirm('Create a new RTSPS reader password? Existing players will need the new password.')) return;

@@ -135,6 +135,8 @@ class Source(Adapter):
         shutil.copytree(ROOT/'flinteye_app', self.source/'flinteye_app', ignore=shutil.ignore_patterns('__pycache__'))
         shutil.copytree(ROOT/'frontend/dist', self.source/'frontend/dist')
         shutil.copytree(ROOT/'images/icons', self.source/'images/icons')
+        if self.args.synthetic_uvc:
+            shutil.copy2(ROOT/'packaging/qa_uvc_source.py', self.source/'qa_uvc_source.py')
         (self.source/'build-info.json').write_text(json.dumps({'commit': self.args.commit or None, 'dirty': False}))
         if not self.python:
             venv.EnvBuilder(with_pip=True).create(self.environment)
@@ -152,7 +154,9 @@ class Source(Adapter):
         env = {**os.environ, 'PATH': str(Path(self.ffmpeg).parent)+os.pathsep+os.environ.get('PATH', '')}
         for name in ('FLINTEYE_LAN_ADDRESS', 'FLINTEYE_LAN_SOURCES', 'FLINTEYE_CONTAINER_BRIDGE'):
             env.pop(name, None)
-        self.launch([self.python, self.executable, '--headless', '--data-dir', self.profile], env=env)
+        script = self.source/'qa_uvc_source.py' if self.args.synthetic_uvc else self.executable
+        mode = '--disable-lan' if self.args.synthetic_uvc else '--headless'
+        self.launch([self.python, script, mode, '--data-dir', self.profile], env=env)
         wait_http(f'http://127.0.0.1:{self.port}', self.process)
 
     def uninstall(self):
@@ -379,7 +383,8 @@ def exercise(adapter: Adapter, report: Report, args):
         with media_fixture(fixture_dir, adapter.media, adapter.ffmpeg,
                            prefix=adapter.fixture_prefix, app_directory=adapter.fixture_app_directory) as fixture:
             adapter.sync_profile()
-            browser_check(url, adapter.profile, report.output/'browser', args.release, args.commit, fixture)
+            browser_check(url, adapter.profile, report.output/'browser', args.release, args.commit, fixture,
+                          synthetic_uvc=args.synthetic_uvc)
             report.stage(phase, 'passed', 'browser/browser.json; real API; browser video/trace/screenshots')
             phase = 'quit'
             adapter.quit()
@@ -412,7 +417,8 @@ def exercise(adapter: Adapter, report: Report, args):
                 if name == 'runtime.json': continue  # Launch may normalize saved settings; GUI compares their values.
                 if not (adapter.profile/name).is_file() or digest(adapter.profile/name) != expected:
                     raise AssertionError('Reinstall changed a finalized recording: '+name)
-            browser_check(url, adapter.profile, report.output/'retained', args.release, args.commit, fixture, retained=True)
+            browser_check(url, adapter.profile, report.output/'retained', args.release, args.commit, fixture,
+                          retained=True, synthetic_uvc=args.synthetic_uvc)
             adapter.quit(); adapter.uninstall()
             report.stage(phase, 'passed', 'retained/browser.json; existing credentials, config and recordings reused')
     except BaseException as exc:
@@ -433,12 +439,15 @@ def main():
     parser.add_argument('--artifact-directory', type=Path)
     parser.add_argument('--media-directory', type=Path)
     parser.add_argument('--python', help='An existing dedicated QA Python environment (source checks only)')
+    parser.add_argument('--synthetic-uvc', action='store_true', help='Use a generated UVC capture input in a Linux source check')
     parser.add_argument('--release', default=release_identity()[0])
     parser.add_argument('--commit', default=os.environ.get('GITHUB_SHA', ''))
     parser.add_argument('--disposable', action='store_true', help='Assert this is a disposable QA user/VM; existing target locations are still refused')
     parser.add_argument('--image', help='Already-built exact-commit image for Compose lifecycle tests')
     parser.add_argument('--online', action='store_true', help='Scripts fetch the real public release URLs (no local package override)')
     args = parser.parse_args()
+    if args.synthetic_uvc and (args.method != 'source' or not sys.platform.startswith('linux')):
+        parser.error('--synthetic-uvc requires the Linux source method')
     args.output = args.output.resolve()
     report = Report(args.output, method=args.method, release=args.release, commit=args.commit)
     if args.method == 'source' and not args.media_directory: parser.error('Source checks require --media-directory')

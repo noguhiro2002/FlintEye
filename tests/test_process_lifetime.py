@@ -9,7 +9,7 @@ import threading
 import time
 import unittest
 
-from flinteye_app.instance_control import InstanceControl
+from flinteye_app.instance_control import InstanceControl, request_local_browser
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -98,6 +98,25 @@ stop_background_processes()
             self.assertFalse((root/'instance-control.json').exists())
             self.assertFalse(request.exists())
 
+    def test_duplicate_launch_opens_the_ready_owner_browser_without_stopping_it(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            opened = threading.Event()
+            stopped = threading.Event()
+            control = InstanceControl(root, stopped.set, open_browser=opened.set)
+            try:
+                request = root / 'open-browser-request.json'
+                request.write_text(json.dumps({'token': 'wrong'}))
+                control.write_connection(ready=True)
+                self.assertFalse(opened.wait(.4))
+                self.assertTrue(request_local_browser(root))
+                self.assertTrue(opened.wait(3))
+                self.assertFalse(stopped.is_set())
+                self.assertFalse(request.exists())
+            finally:
+                control.close()
+            self.assertFalse(request_local_browser(root))
+
     @unittest.skipIf(os.name == 'nt', 'Requires the full API test environment')
     def test_desktop_quit_stops_children_even_with_open_stream_client(self):
         self.isolated('''
@@ -116,12 +135,11 @@ async def stream():
 with socket.socket() as sock:
     sock.bind(('127.0.0.1',0)); port=sock.getsockname()[1]
 children=[]; connections=[]
-def desktop(url,server,root,monitoring):
+def desktop(url,server,root,monitoring,open_browser):
     children.append(popen_background([sys.executable,'-c','import time;time.sleep(60)']))
     connections.append(urllib.request.urlopen(url+'/test-long-stream',timeout=10))
     assert connections[0].readline()==b'ready\\n'
     server.should_exit=True
-cli.setup_dialog=lambda path: None
 cli.desktop_available=lambda: True
 cli.enable_autostart=lambda: None
 flinteye_desktop.run_desktop=desktop

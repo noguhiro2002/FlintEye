@@ -492,6 +492,7 @@ function multiviewHealthClass(state: string | undefined): string {
 }
 
 function withDefaults(runtime: RuntimeConfigResponse): RuntimeConfigResponse {
+  const { global_: apiMediaGlobals, ...managedMedia } = runtime.mediamtx?.managed ?? {};
   const mergedRecording = { ...DEFAULT_RUNTIME.recording, ...(runtime.recording ?? {}) };
   const recordAllCameras =
     runtime.recording?.record_all_cameras ?? (mergedRecording.record_paths?.length ?? 0) === 0;
@@ -528,7 +529,8 @@ function withDefaults(runtime: RuntimeConfigResponse): RuntimeConfigResponse {
       },
       managed: {
         ...DEFAULT_RUNTIME.mediamtx?.managed,
-        ...(runtime.mediamtx?.managed ?? {}),
+        ...managedMedia,
+        global: managedMedia.global ?? apiMediaGlobals ?? DEFAULT_RUNTIME.mediamtx?.managed?.global,
       },
     },
     device_discovery: {
@@ -1348,6 +1350,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
         }
       }
       const nonIpCameras = cameras.filter((camera) => camera.type !== "ip").map((camera) => serializeCamera(camera));
+      const mediamtxChanged = JSON.stringify(runtime.mediamtx) !== JSON.stringify(savedRuntimeSnapshot?.mediamtx);
 
       const payload = {
         api: runtime.api,
@@ -1364,7 +1367,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
         ui: runtime.ui,
         logging: runtime.logging,
         snapshot: runtime.snapshot,
-        mediamtx: runtime.mediamtx,
+        ...(mediamtxChanged ? { mediamtx: runtime.mediamtx } : {}),
         device_discovery: runtime.device_discovery,
         recording,
         multiview: runtime.multiview,
@@ -3322,6 +3325,13 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
               ) : (
                 <div className="panel-empty">No managed UVC cameras are configured yet.</div>
               )}
+              {managedUvcCameras.map((camera) => (
+                <details className="runtime-advanced" key={camera.id}>
+                  <summary>{getCameraLabel(camera)} · Camera audio</summary>
+                  <CameraAudioSettings api={api} cameraId={camera.id} current={camera.audio}
+                    blocked={loading || formDirty || jsonDirty} saved={loadAll} />
+                </details>
+              ))}
             </div>
             <div className="uvc-layout">
               <div className="uvc-device-groups">
@@ -3531,14 +3541,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
           </div>
 
           <div className="section settings-section settings-section-cameras">
-            {cameras.filter((camera) => camera.type === "uvc").map((camera) => (
-              <details className="runtime-advanced" key={camera.id}>
-                <summary>{getCameraLabel(camera)} · Camera audio</summary>
-                <CameraAudioSettings api={api} cameraId={camera.id} current={camera.audio}
-                  blocked={loading || formDirty || jsonDirty} saved={loadAll} />
-              </details>
-            ))}
-          <div className="section-head">
+            <div className="section-head">
               <div>
                 <h3>IP Cameras</h3>
                 <p className="form-help">Inspect ONVIF capabilities and measured RTSP timing before publishing each camera.</p>
@@ -3665,7 +3668,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
                               <input
                                 value={draft.ip.onvif_username}
                                 onChange={(e) => onUpdateIpDraft(idx, { ip: { onvif_username: e.target.value } })}
-                                placeholder="Use Source URL credentials"
+                                placeholder="From Source URL"
                                 autoComplete="off"
                               />
                             </label>
@@ -3675,7 +3678,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
                                 type="password"
                                 value={draft.ip.onvif_password}
                                 onChange={(e) => onUpdateIpDraft(idx, { ip: { onvif_password: e.target.value } })}
-                                placeholder="Use Source URL credentials"
+                                placeholder="From Source URL"
                                 autoComplete="new-password"
                               />
                             </label>

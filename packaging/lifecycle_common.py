@@ -180,12 +180,13 @@ def media_fixture(directory: Path, media: str, ffmpeg: str, *, prefix: list[str]
 
 
 def browser_check(url: str, profile: Path, output: Path, release: str, commit: str,
-                  fixture_url: str, *, retained: bool = False) -> None:
+                  fixture_url: str, *, retained: bool = False, synthetic_uvc: bool = False) -> None:
     output.mkdir(parents=True, exist_ok=True)
     command = ['node', str(ROOT/'frontend/tests/installed.mjs'), '--url', url, '--profile', str(profile),
                '--output', str(output), '--release', release, '--fixture-url', fixture_url]
     if commit: command += ['--commit', commit]
     if retained: command += ['--retained']
+    if synthetic_uvc: command += ['--synthetic-uvc']
     log_path = output/'browser.log'
     with log_path.open('w', encoding='utf-8') as log:
         completed = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, timeout=420)

@@ -115,13 +115,18 @@ export class ApiClient {
     }
   }
 
-  setup(token: string, password: string, network?: {enabled: boolean; address: string; allowed_subnets: string[]}): Promise<{ ok: boolean }> {
+  setup(token: string | undefined, password: string, network?: {enabled: boolean; address: string; allowed_subnets: string[]}): Promise<{ ok: boolean }> {
     return this.request('/api/v1/setup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, password, ...(network ? {network} : {})}) });
   }
   desktopCapabilities(): Promise<{ folder_picker: boolean; startup_settings?: boolean }> { return this.request('/api/v1/desktop'); }
   getMonitoringStatus(): Promise<MonitoringStatusResponse> { return this.request('/api/v1/status/monitoring'); }
   useBundledMedia(): Promise<{ok: boolean}> { return this.request('/api/v1/media/use-bundled', {method: 'POST'}); }
-  getNetwork(): Promise<{ saved: {enabled: boolean; address: string; allowed_subnets: string[]; rtsp_enabled?: boolean}; rtsp_status?: string; restart_required: boolean; local_url: string; lan_url: string | null; error: string; fingerprint?: string; ca_expires?: string; guide_url: string }> { return this.request('/api/v1/network'); }
+  getNetwork(): Promise<{
+    saved: {enabled: boolean; address: string; allowed_subnets: string[]; rtsp_enabled?: boolean};
+    rtsp_status?: string; restart_required: boolean; local_url: string; lan_url: string | null;
+    lan_state?: 'listening' | 'unavailable' | 'disabled'; last_denied_source?: string | null;
+    error: string; fingerprint?: string; ca_expires?: string; guide_url: string;
+  }> { return this.request('/api/v1/network'); }
   networkAction(action: string, body: unknown, method = 'POST'): Promise<{message?: string; path?: string}> {
     return this.request('/api/v1/network' + action, {method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
   }

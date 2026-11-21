@@ -13,6 +13,10 @@ const config = { auth: { provider: 'local', viewer_auth_required: true, local: {
 const syntheticCameras = [{ id: 'usb1', type: 'uvc', enabled: true, path: 'usb1', display_name: 'Front USB Camera', uvc: { profile: 'usb1', env: { DEVICE: '/dev/video99' }, extra_args: [] }, ip: null, addresses: { rtsp_url: 'rtsp://example.test/usb1', webrtc_url: 'http://example.test/usb1' }, process: null }, { id: 'ipcam1', type: 'ip', enabled: true, path: 'ipcam1', display_name: 'Lobby IP Camera', uvc: null, ip: { source_url: 'rtsp://example.test/stream1' }, addresses: { rtsp_url: 'rtsp://example.test/ipcam1', webrtc_url: 'http://example.test/ipcam1' }, process: null }, { id: 'ipcam2', type: 'ip', enabled: true, path: 'ipcam2', display_name: 'Yard IP Camera', uvc: null, ip: { source_url: 'rtsp://example.test/stream2' }, addresses: { rtsp_url: 'rtsp://example.test/ipcam2', webrtc_url: 'http://example.test/ipcam2' }, process: null }];
 config.cameras = syntheticCameras.map(({ id, type, enabled, path, display_name, uvc, ip }) => ({ id, type, enabled, path, display_name, uvc, ip }));
 const device = { device_id: '/dev/video99', driver: 'v4l2', display_name: 'Front USB Camera', index: '99', ffmpeg_device: '/dev/video99', ffmpeg_device_index: '99', modes: [{ width: 1280, height: 720, fps: 30 }, { width: 640, height: 480, fps: 15 }], recommended: { width: 1280, height: 720, fps: 30 } };
+const onvifProfile = {
+    token: 'qa-main', name: 'Main stream', media_service: 'Media2', encoding: 'h264',
+    width: 1280, height: 720, fps: 30, stream_uri: 'rtsp://example.test/' + 'longstream'.repeat(30),
+};
 const info = { api: { swagger_url: 'http://example.test/docs', redoc_url: 'http://example.test/redoc', openapi_url: 'http://example.test/openapi.json' }, rtsp_base_url: 'rtsp://example.test:8554', webrtc_base_url: 'http://example.test:8889', generated_at: 1700000000, snapshot: { timeout_sec: 5, thumbnail_refresh_interval_sec: 10 }, cameras: [], multiview: { enabled: false, output_prefix: 'multi', tile_count: 4, canvas_width: 1920, canvas_height: 1080, fps: 30, bitrate: '4M', encoder: 'h264', quality_preset: 'balanced' } };
 async function context(scenario, width = 1440, height = 900, colorScheme = 'light') {
     const ctx = await browser.newContext({ viewport: { width, height }, colorScheme });
@@ -59,7 +63,7 @@ async function context(scenario, width = 1440, height = 900, colorScheme = 'ligh
                     status = 403;
                 }
                 else {
-                    v = { ok: true, source: 'rtsp://example.test/stream1', inspected_at: 1700000000, elapsed_sec: 1.5, rtsp: { available: true, codec: 'h264', width: 1280, height: 720, observed_fps: 30, timestamp_healthy: true, frame_count: 30 }, onvif: { status: 'ok', supported: true, message: 'Synthetic ONVIF', profiles: [], ptz: { supported: false, service_available: false, message: 'PTZ unavailable' } }, recommendation: { timestamp_mode: 'source', cfr_fps: 30 } };
+                    v = { ok: true, source: 'rtsp://example.test/stream1', inspected_at: 1700000000, elapsed_sec: 1.5, rtsp: { available: true, codec: 'h264', width: 1280, height: 720, observed_fps: 30, timestamp_healthy: true, frame_count: 30 }, onvif: { status: 'ok', supported: true, message: 'Synthetic ONVIF', profiles: [onvifProfile], ptz: { supported: false, service_available: false, message: 'PTZ unavailable' } }, recommendation: { timestamp_mode: 'source', cfr_fps: 30 } };
                 }
                 break;
             case '/api/v1/storage/pick-folder':
@@ -122,17 +126,53 @@ async function context(scenario, width = 1440, height = 900, colorScheme = 'ligh
     ctx.close = async () => { await closeContext(); assert.deepEqual(errors, [], 'unexpected page errors'); };
     return { ctx, p, errors };
 }
+
+async function assertIpCameraLayout(card, label) {
+    const issues = await card.evaluate(element => {
+        const checked = [element, ...element.querySelectorAll(
+            '.ip-camera-panel, .ip-camera-identity-grid, .ip-camera-control-grid, .ip-detail-grid, .ip-onvif-grid, ' +
+            '.ip-ptz-panel, .ip-ptz-settings-grid, .ip-probe-metrics, .ip-profile-list > div',
+        )];
+        const issues = checked.filter(node => node.clientWidth > 0 && node.scrollWidth > node.clientWidth + 1)
+            .map(node => `${node.className || node.tagName} overflows (${node.scrollWidth} > ${node.clientWidth})`);
+        for (const label of element.querySelectorAll('.ip-camera-enable, .settings-fields > .check')) {
+            const checkbox = label.querySelector('input').getBoundingClientRect();
+            const caption = label.querySelector('span').getBoundingClientRect();
+            if (checkbox.right > caption.left + 1 || checkbox.bottom <= caption.top || checkbox.top >= caption.bottom) {
+                issues.push(`${label.className} checkbox should sit beside its caption`);
+            }
+        }
+        const removeLabel = document.createRange();
+        removeLabel.selectNodeContents(element.querySelector('.ip-camera-card-head > button').lastChild);
+        if (removeLabel.getClientRects().length > 1) issues.push('Remove button label wraps');
+        return issues;
+    });
+    assert.deepEqual(issues, [], label);
+}
+
 try {
-    for (const width of [320, 390, 768]) {
+    for (const width of [1280, 1024, 1201, 1440, 320, 390, 768]) {
         const { ctx, p } = await context('admin', width, 844);
         await p.locator('.sidebar').getByRole('button', { name: 'Settings', exact: true }).click();
-        let nav = p.getByRole('complementary', { name: 'Settings categories' });
-        for (const category of ['General', 'MediaMTX', 'Multiview', 'Cameras']) {
+        const nav = p.getByRole('complementary', { name: 'Settings categories' });
+        const categories = width <= 768 ? ['General', 'MediaMTX', 'Multiview', 'Cameras'] : ['Cameras'];
+        for (const category of categories) {
             await nav.getByRole('button', { name: category, exact: true }).click();
             if (category === 'Cameras') {
-                let first = p.locator('.ip-camera-card').first();
+                const first = p.locator('.ip-camera-card').first();
                 await first.getByRole('textbox', { name: /^Display Name/ }).fill('LongCameraNameWithoutAnyBreaks'.repeat(8));
                 await first.getByRole('textbox', { name: /^Source URL/ }).fill('rtsp://example.test/' + 'pathsegment'.repeat(30));
+                await assertIpCameraLayout(first, `IP camera at ${width}px with automatic ONVIF discovery`);
+                await first.getByRole('combobox', { name: /^ONVIF discovery/ }).selectOption('manual');
+                await first.getByRole('textbox', { name: /^ONVIF device service address/ }).fill('http://example.test/onvif/device_service');
+                await assertIpCameraLayout(first, `IP camera at ${width}px with a manual ONVIF address`);
+                if (width === 1024 || width === 1280) {
+                    await first.getByRole('button', { name: 'Inspect camera', exact: true }).click();
+                    await first.getByText('RTSP timing is healthy.', { exact: true }).waitFor();
+                    await first.getByText(onvifProfile.name, { exact: true }).waitFor();
+                    for (const summary of await first.locator('.ip-camera-details > summary').all()) await summary.click();
+                    await assertIpCameraLayout(first, `IP camera at ${width}px after inspection`);
+                }
             }
             const widths = await p.evaluate(() => [document.documentElement.scrollWidth, innerWidth]);
             console.log('WIDTH', width, category, JSON.stringify(widths));

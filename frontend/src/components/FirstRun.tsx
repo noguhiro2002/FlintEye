@@ -1,8 +1,12 @@
 import { useState } from 'react';
-import { ApiClient } from '../api/client';
+import { ApiClient, ApiError } from '../api/client';
 import type { PageKey } from './Sidebar';
 
-export function SetupAccount({ api, onDone }: { api: ApiClient; onDone: () => void }) {
+export function SetupAccount({api, onDone, desktop, handoffReady}: {
+  api: ApiClient; onDone: () => void; desktop: boolean; handoffReady: boolean;
+}) {
+  const [handoffExpired, setHandoffExpired] = useState(false);
+  const useHandoff = handoffReady && !handoffExpired;
   const [token, setToken] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -15,19 +19,35 @@ export function SetupAccount({ api, onDone }: { api: ApiClient; onDone: () => vo
     e.preventDefault(); setError('');
     if (password !== confirm) { setError('Passwords do not match.'); return; }
     setBusy(true);
-    try { await api.setup(token, password, lan ? {enabled:true, address, allowed_subnets:sources.split(',').map(s=>s.trim()).filter(Boolean)} : undefined); await api.login('admin', password); onDone(); }
-    catch (err) { setError(String(err)); } finally { setBusy(false); }
+    try {
+      await api.setup(useHandoff ? undefined : token, password, lan ? {
+        enabled: true, address, allowed_subnets: sources.split(',').map(s => s.trim()).filter(Boolean),
+      } : undefined);
+      await api.login('admin', password);
+      onDone();
+    } catch (err) {
+      if (useHandoff && err instanceof ApiError && err.status === 403) {
+        setHandoffExpired(true);
+        setError('Setup access expired. Reopen FlintEye from the app or enter the current token below.');
+      } else {
+        setError(err instanceof Error ? err.message : 'Could not complete setup.');
+      }
+    } finally { setBusy(false); }
   }}>
     <h2>Welcome to FlintEye</h2>
     <p>Create your administrator account. The username is <strong>admin</strong>.</p>
     <p id="setup-password-help">Use a password of at least 12 characters.</p>
-    <label>Server setup token<input required value={token} onChange={e => setToken(e.target.value)} autoComplete="off" /></label>
-    <p>For Docker or systemd, read the setup-token file in the server data directory.</p>
+    {!useHandoff && <>
+      <p id="setup-token-help">{desktop
+        ? 'On the computer running FlintEye, choose Open FlintEye from the app to continue automatically. To continue here, use the current token from Address and setup assistance.'
+        : 'For Docker or systemd, read the setup-token file in the server data directory.'}</p>
+      <label>{desktop ? 'Setup token' : 'Server setup token'}<input type="password" required value={token} onChange={e => setToken(e.target.value)} autoComplete="off" aria-describedby="setup-token-help" /></label>
+    </>}
     <label>Password<input type="password" required minLength={12} maxLength={1024} value={password} onChange={e => setPassword(e.target.value)} autoComplete="new-password" aria-describedby="setup-password-help" /></label>
     <label>Confirm password<input type="password" required minLength={12} value={confirm} onChange={e => setConfirm(e.target.value)} autoComplete="new-password" /></label>
     {['127.0.0.1', 'localhost', '[::1]'].includes(window.location.hostname) && <details>
-      <summary>Optional LAN access for other computers and phones</summary>
-      <label className="check"><input type="checkbox" checked={lan} onChange={e => setLan(e.target.checked)}/>Enable HTTPS on my LAN</label>
+      <summary>Optional LAN or VPN access for other devices</summary>
+      <label className="check"><input type="checkbox" checked={lan} onChange={e => setLan(e.target.checked)}/>Allow access from other devices on LAN or VPN (HTTPS)</label>
       {lan && <>
         <label>Server IPv4 address<input required value={address} onChange={e=>setAddress(e.target.value)} placeholder="192.168.1.10"/></label>
         <label>Permitted source networks<input required value={sources} onChange={e=>setSources(e.target.value)} placeholder="192.168.1.0/24"/></label>

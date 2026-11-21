@@ -4,6 +4,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import tempfile
 import time
 import unittest
@@ -84,8 +85,94 @@ class NetworkTests(unittest.TestCase):
                 outside = TestClient(app, base_url='https://192.168.1.10', client=('192.168.2.25', 123))
                 self.assertEqual(outside.get('/').status_code, 403)
                 local = TestClient(app, client=('127.0.0.1', 123))
-                self.assertEqual(local.get('/api/v1/network', headers={'host': '127.0.0.1'}).status_code, 200)
+                status = local.get('/api/v1/network', headers={'host': '127.0.0.1'})
+                self.assertEqual(status.status_code, 200)
+                self.assertEqual(status.json()['last_denied_source'], '192.168.2.25')
+                self.assertEqual(status.json()['lan_state'], 'unavailable')
+                self.assertIsNone(status.json()['lan_url'])
             finally: context.shutdown()
+
+    def test_bind_error_distinguishes_occupied_port_and_unassigned_address(self):
+        import errno
+        from flinteye_app.server_runtime import listener_bind_error
+        for code in (10048, errno.EADDRINUSE):
+            self.assertIn('192.168.1.10:18080 is already in use', listener_bind_error('192.168.1.10', 18080, OSError(code, 'occupied')))
+        for code in (10049, errno.EADDRNOTAVAIL):
+            self.assertIn('address 192.168.1.10 is unavailable', listener_bind_error('192.168.1.10', 18080, OSError(code, 'unassigned')))
+
+    def test_desktop_browser_handoff_can_only_finish_setup_once_on_the_loopback_origin(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from flinteye_app.desktop_setup import DesktopSetupBrowser, HANDOFF_COOKIE, HANDOFF_PATH
+        from flinteye_app.flinteye_routes import install_routes
+        from flinteye_app.orchestrator_api import AppContext, get_auth_me
+
+        origin = 'http://127.0.0.1:18765'
+        with tempfile.TemporaryDirectory() as directory, patch('flinteye_app.orchestrator_logging.LogManager.configure'):
+            root = Path(directory)
+            runtime = initialize(root)
+            (root / 'setup-token').write_text('synthetic-owner-token')
+            context = AppContext(env_file='', runtime_file=str(runtime), no_env=True)
+            context.listener = {'url': origin}
+            app = FastAPI()
+            app.state.context = context
+            app.get('/api/v1/auth/me')(get_auth_me)
+            install_routes(app, context, setup_token='synthetic-owner-token', desktop=True)
+            browser = DesktopSetupBrowser(context, origin)
+            try:
+                with patch('flinteye_app.desktop_setup.webbrowser.open', return_value=True) as opened:
+                    self.assertTrue(browser.open())
+                page = Path(browser.page_directory.name) / 'setup.html'
+                opened.assert_called_once_with(page.as_uri())
+                self.assertNotIn('synthetic-owner-token', page.read_text())
+                code = re.search(r'name="code" value="([A-Za-z0-9_-]+)"', page.read_text()).group(1)
+                headers = {'Origin': 'null', 'Content-Type': 'application/x-www-form-urlencoded', 'Sec-Fetch-Site': 'cross-site'}
+                with TestClient(app, base_url=origin, client=('127.0.0.1', 123)) as local:
+                    self.assertFalse(local.get('/api/v1/auth/me').json()['setup_handoff_ready'])
+                    wrong_peer = TestClient(app, base_url=origin, client=('192.168.1.25', 123))
+                    with wrong_peer:
+                        self.assertEqual(wrong_peer.post(HANDOFF_PATH, content='code='+code, headers=headers).status_code, 403)
+                    self.assertEqual(local.post(HANDOFF_PATH, content='code='+code,
+                        headers={**headers, 'Host': 'localhost:18765'}).status_code, 403)
+                    self.assertEqual(local.post(HANDOFF_PATH, content='code='+code,
+                        headers={**headers, 'Origin': origin}).status_code, 403)
+                    exchanged = local.post(HANDOFF_PATH, content='code='+code, headers=headers, follow_redirects=False)
+                    self.assertEqual(exchanged.status_code, 303)
+                    self.assertEqual(exchanged.headers['location'], '/')
+                    self.assertIn('HttpOnly', exchanged.headers['set-cookie'])
+                    self.assertIn('SameSite=strict', exchanged.headers['set-cookie'])
+                    self.assertIn(HANDOFF_COOKIE, local.cookies)
+                    self.assertTrue(local.get('/api/v1/auth/me').json()['setup_handoff_ready'])
+                    self.assertEqual(local.post(HANDOFF_PATH, content='code='+code, headers=headers).status_code, 403)
+                    with patch('flinteye_app.orchestrator_api._on_startup'):
+                        created = local.post('/api/v1/setup', json={'password': 'fixture-long-password'}, headers={'Origin': origin})
+                    self.assertEqual(created.status_code, 200)
+                    self.assertFalse(local.get('/api/v1/auth/me').json()['setup_required'])
+                    self.assertNotIn(HANDOFF_COOKIE, local.cookies)
+                    self.assertFalse((root / 'setup-token').exists())
+                    self.assertEqual(local.post('/api/v1/setup', json={'password': 'fixture-long-password'}).status_code, 409)
+            finally:
+                browser.close()
+                context.shutdown()
+            self.assertFalse(page.exists())
+
+    def test_desktop_code_and_grant_expire_and_renewal_invalidates_both(self):
+        with tempfile.TemporaryDirectory() as directory:
+            bootstrap = Bootstrap(Path(directory), 'synthetic-owner-token')
+            expired = bootstrap.issue_desktop_code()
+            bootstrap.desktop_code_expires = 0
+            with self.assertRaises(HTTPException):
+                bootstrap.exchange_desktop_code(expired, '127.0.0.1')
+            grant, _ = bootstrap.exchange_desktop_code(bootstrap.issue_desktop_code(), '127.0.0.1')
+            self.assertTrue(bootstrap.desktop_ready(grant))
+            bootstrap.desktop_grant_expires = 0
+            self.assertFalse(bootstrap.desktop_ready(grant))
+            grant, _ = bootstrap.exchange_desktop_code(bootstrap.issue_desktop_code(), '127.0.0.1')
+            pending = bootstrap.issue_desktop_code()
+            bootstrap.renew()
+            self.assertFalse(bootstrap.desktop_ready(grant))
+            with self.assertRaises(HTTPException):
+                bootstrap.exchange_desktop_code(pending, '127.0.0.1')
 
     def test_lan_is_opt_in_and_rejects_public_auth_and_wildcards(self):
         self.assertFalse(RuntimeConfig().network.enabled)

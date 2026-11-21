@@ -1435,13 +1435,23 @@ def _build_auth_me_payload(request: Request) -> dict[str, Any]:
     config = context.store.get_effective()
     auth = config.auth
     identity = _get_session_identity(request, context)
+    setup_required = auth.provider == "local" and not local_auth_is_configured(auth)
+    setup = {}
+    if setup_required:
+        from flinteye_app.desktop_setup import HANDOFF_COOKIE, local_setup_request
+        setup = {
+            "setup_mode": "desktop" if getattr(context, 'desktop_setup', False) else "server",
+            "setup_handoff_ready": local_setup_request(request, context)
+                and context.bootstrap.desktop_ready(request.cookies.get(HANDOFF_COOKIE)),
+        }
     return {
         "authenticated": identity is not None,
         "provider": auth.provider,
         "role": identity.role if identity else None,
         "username": identity.username if identity else None,
         "viewer_auth_required": auth.viewer_auth_required if auth.provider == "local" else config.api.viewer_auth_required,
-        "setup_required": auth.provider == "local" and not local_auth_is_configured(auth),
+        "setup_required": setup_required,
+        **setup,
         "local": {
             "admin_username": auth.local.admin.username,
             "viewer_username": auth.local.viewer.username,
@@ -1453,7 +1463,8 @@ def _build_auth_me_payload(request: Request) -> dict[str, Any]:
 
 
 @app.get("/api/v1/auth/me")
-def get_auth_me(request: Request) -> dict[str, Any]:
+def get_auth_me(request: Request, response: Response) -> dict[str, Any]:
+    response.headers['Cache-Control'] = 'no-store'
     return _build_auth_me_payload(request)
 
 

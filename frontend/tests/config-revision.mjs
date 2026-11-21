@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { chromium } from './browser.mjs';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
@@ -11,9 +12,17 @@ const browser = await chromium.launch({
   args: ['--no-sandbox'],
 });
 
-async function scenario({ conflict = false, timeout = false } = {}) {
+const media = {
+  control_mode: 'direct', service_name: 'mediamtx', autostart_on_api_start: true,
+  rtsp_base_url: 'rtsp://127.0.0.1:8554', internal_rtsp_base_url: null, webrtc_base_url: '/media',
+  direct: { source: 'bundled', command: [], working_dir: null },
+  managed: { enabled: true, global: { webrtcAddress: '127.0.0.1:8889', rtspTransports: ['tcp'] }, paths: {} },
+};
+
+async function scenario({ conflict = false, timeout = false, lan = false } = {}) {
   const context = await browser.newContext();
   const page = await context.newPage();
+  const origin = lan ? 'https://flinteye.test:18080' : 'http://127.0.0.1:12345';
   const errors = [];
   page.on('pageerror', error => errors.push(String(error)));
   let revision = 2;
@@ -23,6 +32,7 @@ async function scenario({ conflict = false, timeout = false } = {}) {
   const patches = [];
   let config = {
     ui: { app_title: 'FlintEye', sidebar_title: 'FlintEye', onboarding_done: !conflict },
+    mediamtx: { ...media, managed: { enabled: true, global_: media.managed.global, paths: {} } },
     cameras: ['first', 'second'].map(id => ({
       id, path: id, type: 'ip', enabled: true, display_name: id,
       ip: { source_url: `rtsp://example.test/${id}`, cfr_fps: 20 },
@@ -32,7 +42,7 @@ async function scenario({ conflict = false, timeout = false } = {}) {
   await context.route('**/*', async route => {
     const request = route.request();
     const url = new URL(request.url());
-    if (url.hostname !== '127.0.0.1') return route.abort();
+    if (url.origin !== origin) return route.abort();
     if (!url.pathname.startsWith('/api/')) {
       const path = resolve(root, 'frontend/dist', '.' + (url.pathname === '/' ? '/index.html' : url.pathname));
       return route.fulfill({
@@ -62,12 +72,17 @@ async function scenario({ conflict = false, timeout = false } = {}) {
         // Older list deliberately disagrees with the configuration snapshot.
         body = { items: config.cameras.slice(0, 1) };
         break;
+      case '/api/v1/ip-cameras/probe':
+        body = { ok: true, rtsp: { available: true, timestamp_healthy: true }, onvif: { status: 'skipped' }, recommendation: {} };
+        break;
       case '/api/v1/config/runtime': {
         const payload = request.postDataJSON();
         const expected = request.headers()['if-match'];
         patches.push({ payload, expected });
         if (expected !== `"${revision}"`) {
           status = 409; body = { detail: 'Configuration changed' };
+        } else if (lan && 'mediamtx' in payload && !isDeepStrictEqual(payload.mediamtx, media)) {
+          status = 403; body = { detail: 'Change media server settings on the server itself' };
         } else {
           config = { ...config, ...payload, ui: { ...config.ui, ...payload.ui } };
           revision++;
@@ -88,7 +103,7 @@ async function scenario({ conflict = false, timeout = false } = {}) {
     return route.fulfill({ status, contentType: 'application/json', headers: { ETag: `"${revision}"` }, body: JSON.stringify(body) });
   });
   if (timeout) await page.clock.install();
-  await page.goto('http://127.0.0.1:12345');
+  await page.goto(origin);
   return { page, patches, started, retry: () => { hangAuth = false; }, close: async () => {
     await context.close();
     assert.deepEqual(errors, [], 'Unexpected page errors');
@@ -117,9 +132,40 @@ try {
       await page.getByText('All changes saved', { exact: true }).waitFor();
       assert.deepEqual(test.patches.at(-1).payload.cameras.map(camera => camera.path), ['first', 'second']);
       assert.equal(await title.inputValue(), 'Protected edit');
+      await page.getByRole('complementary', { name: 'Settings categories' }).getByRole('button', { name: 'MediaMTX', exact: true }).click();
+      await page.getByRole('textbox', { name: /^Service Name/ }).fill('QA media server');
+      await page.getByRole('button', { name: 'Save changes', exact: true }).first().click();
+      await page.getByText('All changes saved', { exact: true }).waitFor();
+      assert.deepEqual(test.patches.at(-1).payload.mediamtx, { ...media, service_name: 'QA media server' });
     }
     await test.close();
     console.log('PASS', conflict ? 'editor revision isolated from onboarding' : 'camera draft and configuration share one snapshot');
+  }
+  {
+    const test = await scenario({ lan: true });
+    const { page } = test;
+    await page.locator('.sidebar').getByRole('button', { name: 'Settings', exact: true }).click();
+    const categories = page.getByRole('complementary', { name: 'Settings categories' });
+    await categories.getByRole('button', { name: 'Cameras', exact: true }).click();
+    await page.getByRole('button', { name: 'Add IP Camera' }).click();
+    const source = page.locator('.ip-camera-card').last().getByRole('textbox', { name: /^Source URL/ });
+    await source.fill('rtsp://example.test/lan-camera');
+    const saveResponse = page.waitForResponse(response =>
+      response.request().method() === 'PATCH' && new URL(response.url()).pathname === '/api/v1/config/runtime');
+    await page.getByRole('button', { name: 'Save changes', exact: true }).first().click();
+    const response = await saveResponse;
+    assert.equal(response.status(), 200, await response.text());
+    await page.getByText('All changes saved', { exact: true }).waitFor();
+    assert.equal(await source.inputValue(), 'rtsp://example.test/lan-camera');
+    const { payload, expected } = test.patches.at(-1);
+    assert.equal(expected, '"2"');
+    assert.equal(payload.cameras.at(-1).ip.source_url, 'rtsp://example.test/lan-camera');
+    assert.ok(!('mediamtx' in payload), 'Camera edits should omit unchanged MediaMTX settings');
+    await categories.getByRole('button', { name: 'Advanced', exact: true }).click();
+    const runtime = JSON.parse(await page.getByRole('textbox', { name: 'Full runtime JSON' }).inputValue());
+    assert.deepEqual(runtime.mediamtx, media, 'Advanced JSON should use the server-compatible MediaMTX keys');
+    await test.close();
+    console.log('PASS LAN camera save leaves MediaMTX settings intact');
   }
   const test = await scenario({ timeout: true });
   await test.started;

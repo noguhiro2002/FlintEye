@@ -53,6 +53,8 @@ export interface AuthMeResponse {
   username: string | null;
   viewer_auth_required: boolean;
   setup_required: boolean;
+  setup_mode?: "desktop" | "server";
+  setup_handoff_ready?: boolean;
   local: {
     admin_username: string;
     viewer_username: string;
@@ -376,6 +378,9 @@ export interface MultiviewStatus {
   }>;
 }
 
+type MediamtxScalar = string | number | boolean;
+type MediamtxOptions = Record<string, MediamtxScalar | MediamtxScalar[]>;
+
 export interface RuntimeConfigResponse {
   api?: {
     host?: string;
@@ -435,8 +440,9 @@ export interface RuntimeConfigResponse {
     };
     managed?: {
       enabled?: boolean;
-      global?: Record<string, string | number | boolean | Array<string | number | boolean>>;
-      paths?: Record<string, Record<string, string | number | boolean | Array<string | number | boolean>>>;
+      global?: MediamtxOptions;
+      global_?: MediamtxOptions;
+      paths?: Record<string, MediamtxOptions>;
     };
   };
   multiview?: {

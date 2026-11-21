@@ -101,8 +101,12 @@ class ReleaseTests(unittest.TestCase):
             for stage in STAGES: report.stage(stage, 'passed', 'Fixture evidence')
             for name in ('browser', 'retained'):
                 target = report.output/name; target.mkdir()
+                checks = BROWSER_CHECKS if name == 'browser' else RETAINED_CHECKS
+                if name == 'browser' and method == 'source' and runner.startswith('ubuntu'):
+                    checks = checks | {'synthetic-USB-and-IP-live-multiview-and-removal',
+                                       'desktop-browser-one-use-setup-handoff'}
                 (target/'browser.json').write_text(json.dumps({'result': 'passed', 'apiMocked': False,
-                    'stages': sorted(BROWSER_CHECKS if name == 'browser' else RETAINED_CHECKS),
+                    'stages': sorted(checks),
                     'realApiRequests': ['POST /api/v1/setup'], 'identity': {'release': value, 'commit': self.commit, 'dirty': False}}))
             (report.output/'decoded-recordings.json').write_text(json.dumps(
                 [f'recordings/{stream}/test.mp4' for stream in ('qa-camera-1', 'qa-camera-2', 'multiview_1')]))
@@ -129,6 +133,12 @@ class ReleaseTests(unittest.TestCase):
         evidence.write_text(json.dumps({**original, 'stages': []}))
         with self.assertRaisesRegex(ValueError, 'Incomplete browser'): release.assemble(self.inputs, self.output, self.commit)
         evidence.write_text(json.dumps(original))
+        mixed = self.lifecycle/'source-ubuntu-24.04/browser/browser.json'
+        mixed_original = json.loads(mixed.read_text())
+        mixed.write_text(json.dumps({**mixed_original, 'stages': sorted(set(mixed_original['stages'])
+                                                                      - {'synthetic-USB-and-IP-live-multiview-and-removal'})}))
+        with self.assertRaisesRegex(ValueError, 'Incomplete browser'): release.assemble(self.inputs, self.output, self.commit)
+        mixed.write_text(json.dumps(mixed_original))
         next(self.lifecycle.rglob('lifecycle.json')).unlink()
         with self.assertRaisesRegex(ValueError, 'Missing lifecycle cases'): release.assemble(self.inputs, self.output, self.commit)
 

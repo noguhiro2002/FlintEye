@@ -6,7 +6,7 @@
 
 ## Enable access
 
-On the server computer, complete administrator setup in the browser using the setup token displayed by FlintEye. Open **Settings → Runtime & access → LAN connection and certificate trust**. Select **Enable LAN HTTPS**, enter an IPv4 address actually assigned to this server, and enter the private source networks permitted to connect (for example `192.168.1.0/24`). Leave access disabled to use only this PC.
+On the server computer, open FlintEye and complete administrator setup in the browser. In **Settings → Runtime & access → LAN connection and certificate trust**, select **Allow access from other devices on LAN or VPN (HTTPS)**. Enter an IPv4 address assigned to the server and the permitted client networks, such as `192.168.1.0/24`. Use **This computer (HTTP)** for local access.
 
 Save the connection settings. Select **Save public certificate and connection guide**. The displayed folder contains a CA certificate, its fingerprint, an iOS/iPadOS certificate profile and these instructions. It contains no private key or setup token. Transfer this folder using a method you control, such as USB storage, AirDrop or an existing authenticated file share. Compare the CA SHA-256 fingerprint with the server's display before trusting it. Do not use a browser's certificate-warning bypass to retrieve the certificate.
 
@@ -28,7 +28,7 @@ The installation-specific CA can establish trust for server certificates. Instal
 
 ## Initial ownership and everyday use
 
-A LAN visitor cannot claim administrator access without the server's one-use setup token. For a headless installation enabled before setup, the owner reads `setup-token` in its data directory and enters it over the trusted HTTPS connection. The token expires after 30 minutes; restart the server or use **Address and setup assistance → Renew setup token** on the server to replace it. Setup attempts are rate limited. Tokens and passwords must never appear in URLs, shared instructions, logs or screenshots.
+The desktop app opens its local browser and passes one-use setup authorization, so the owner can choose the administrator password directly. If the browser is closed or setup expires, choose **Open FlintEye** in the desktop app to resume. For manual entry, use the token in **Address and setup assistance**. For Docker, systemd or a setup started from another permitted device, use the server's `setup-token` and a trusted connection. The manual token expires after 30 minutes. Restart the server or use **Renew setup token** in the desktop assistance window to replace it. Keep tokens and passwords out of URLs and shared evidence.
 
 After setup, the existing admin account remains in place after application/OS restart and reinstallation. Set a viewer password before sharing viewer access. Viewers can watch authorized video and recordings but cannot change administrator configuration or start/stop monitoring. Closing the browser leaves the server running. Use **Dashboard → Stop monitoring** to pause monitoring or the native **Quit FlintEye** action to finish recordings and stop all bundled processes.
 
@@ -40,7 +40,13 @@ After choosing **Renew trust certificate**, restart FlintEye so its HTTPS listen
 
 If DHCP changes the server IP, FlintEye does not silently expose another interface. Open the local server address, select the new IP, export the updated guide and restart. A new leaf certificate is issued under the same CA. If the local port is occupied, stop the conflicting instance or use the launcher's `--port` override; the control window shows the actual local URL.
 
-An unreachable page, an untrusted certificate, a rejected source network, incorrect credentials and a page with no video are different problems. Check the local settings error, selected bind address, firewall and certificate fingerprint first. For video, check the selected IP advertised by WebRTC and UDP 8189. HTTPS page access alone does not prove video reachability. A browser may also request local-network access; make a deliberate per-site decision. Public network profiles are not automatically opened.
+### Diagnose a connection from another device
+
+- **Outside the permitted ranges.** In the server's local settings, choose **Refresh connection status** and look for the last rejected source. Compare that address with the permitted client networks. For example, a VPN client with a `172.21.x.x` source needs its approved VPN range even when the server is on `10.0.0.0/8`. Save and restart, then update the Windows rule if you use it.
+- **Port in use or address unavailable.** Windows error `10048` means a process already owns the reported address and port. Quit FlintEye normally and run `Get-NetTCPConnection -LocalPort 18080 -State Listen`, substituting the reported port. Check `OwningProcess` and `LocalAddress` before deciding which application to stop or whether to change ports. Error `10049` means the selected address is unavailable. Select an address assigned to the server.
+- **`ERR_SSL_PROTOCOL_ERROR`.** On the server, check whether connection settings are waiting for a restart or the HTTPS listener failed. Copy the **Active address for other devices (HTTPS)** after restarting. If another process answers on that address and port, confirm which service owns it.
+- **Certificate warning.** If the HTTPS listener is active, check that the browser is using the selected server IP and that the viewer device trusts this installation's CA. Compare the fingerprint and install or update the CA using the instructions above.
+- **Page opens but video is missing.** Check the selected WebRTC address and UDP 8189 permission. The browser may ask for local-network access.
 
 Disable LAN access and restart to close the HTTPS listener. On Windows remove this installation's firewall rules with the dedicated button. Remove the FlintEye CA from every viewing device when it is no longer needed. Uninstall does not remotely remove client trust; retained data includes the existing installation's certificates. Explicit data deletion removes those certificates too, so reinstalling with erased data requires fresh trust.
 

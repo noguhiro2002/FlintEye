@@ -19,6 +19,8 @@ import time
 import uuid
 
 CERTIFICATE_LOCK = threading.RLock()
+DESKTOP_CODE_SECONDS = 120
+DESKTOP_GRANT_SECONDS = 600
 
 
 def lan_candidates() -> list[tuple[str, str, str]]:
@@ -243,35 +245,87 @@ class Bootstrap:
         self.lock = threading.Lock()
         self.attempts = defaultdict(deque)
         self.global_attempts = deque()
+        self.desktop_code: bytes | None = None
+        self.desktop_code_expires = 0.0
+        self.desktop_grant: bytes | None = None
+        self.desktop_grant_expires = 0.0
 
-    def verify(self, supplied, host: str):
+    def _record_attempt(self, host: str, now: float) -> None:
         from fastapi import HTTPException
-        now = time.monotonic()
+        self.attempts = defaultdict(deque, {key: value for key, value in self.attempts.items()
+                                           if value and value[-1] > now - 60})
+        attempts = self.attempts[host]
+        for queue in (attempts, self.global_attempts):
+            while queue and queue[0] <= now - 60:
+                queue.popleft()
+        if len(attempts) >= 5 or len(self.global_attempts) >= 30:
+            raise HTTPException(429, 'Too many setup attempts. Wait one minute.', headers={'Retry-After': '60'})
+        attempts.append(now)
+        self.global_attempts.append(now)
+
+    @staticmethod
+    def _matches_desktop_secret(supplied, expected: bytes | None) -> bool:
+        return (expected is not None and isinstance(supplied, str) and len(supplied) == 43
+                and supplied.isascii() and secrets.compare_digest(hashlib.sha256(supplied.encode()).digest(), expected))
+
+    def _desktop_ready(self, grant, now: float) -> bool:
+        return (bool(self.token) and now < self.expires and now < self.desktop_grant_expires
+                and self._matches_desktop_secret(grant, self.desktop_grant))
+
+    def desktop_ready(self, grant) -> bool:
         with self.lock:
-            self.attempts = defaultdict(deque, {key: value for key, value in self.attempts.items()
-                                               if value and value[-1] > now - 60})
-            attempts = self.attempts[host]
-            for queue in (attempts, self.global_attempts):
-                while queue and queue[0] <= now - 60:
-                    queue.popleft()
-            if len(attempts) >= 5 or len(self.global_attempts) >= 30:
-                raise HTTPException(429, 'Too many setup attempts. Wait one minute.', headers={'Retry-After': '60'})
-            attempts.append(now)
-            self.global_attempts.append(now)
+            return self._desktop_ready(grant, time.monotonic())
+
+    def issue_desktop_code(self) -> str | None:
+        with self.lock:
+            now = time.monotonic()
+            if not self.token or now >= self.expires:
+                return None
+            code = secrets.token_urlsafe(32)
+            self.desktop_code = hashlib.sha256(code.encode()).digest()
+            self.desktop_code_expires = min(self.expires, now + DESKTOP_CODE_SECONDS)
+            return code
+
+    def exchange_desktop_code(self, code, host: str) -> tuple[str, int]:
+        from fastapi import HTTPException
+        with self.lock:
+            now = time.monotonic()
+            self._record_attempt(host, now)
+            if (not self.token or now >= self.expires or now >= self.desktop_code_expires
+                    or not self._matches_desktop_secret(code, self.desktop_code)):
+                raise HTTPException(403, 'Setup link expired or already used. Open FlintEye from the app again.')
+            self.desktop_code = None
+            grant = secrets.token_urlsafe(32)
+            self.desktop_grant = hashlib.sha256(grant.encode()).digest()
+            self.desktop_grant_expires = min(self.expires, now + DESKTOP_GRANT_SECONDS)
+            return grant, max(1, int(self.desktop_grant_expires - now))
+
+    def verify(self, supplied, host: str, *, desktop_grant=None):
+        from fastapi import HTTPException
+        with self.lock:
+            now = time.monotonic()
+            self._record_attempt(host, now)
             if not self.token or now >= self.expires:
                 raise HTTPException(403, 'Setup token expired. Generate a new token on the server.')
-            if not isinstance(supplied, str) or not secrets.compare_digest(supplied, self.token):
+            if not supplied and self._desktop_ready(desktop_grant, now):
+                return
+            if (not isinstance(supplied, str) or not supplied.isascii()
+                    or not secrets.compare_digest(supplied, self.token)):
                 raise HTTPException(403, 'Enter the setup token shown on the server')
 
     def renew(self) -> None:
         with self.lock:
-            self.token = secrets.token_urlsafe(32)
+            token = secrets.token_urlsafe(32)
+            private_write(self.root / 'setup-token', token.encode())
+            self.token = token
             self.expires = time.monotonic() + 1800
-            private_write(self.root / 'setup-token', self.token.encode())
+            self.desktop_code = self.desktop_grant = None
 
-    def consume(self):
-        self.token = ''
-        (self.root / 'setup-token').unlink(missing_ok=True)
+    def consume(self) -> None:
+        with self.lock:
+            self.token = ''
+            self.desktop_code = self.desktop_grant = None
+            (self.root / 'setup-token').unlink(missing_ok=True)
 
 
 def permitted_source(host: str, ranges: list[str]) -> bool:

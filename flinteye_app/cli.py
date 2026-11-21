@@ -11,6 +11,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 import urllib.request
 import webbrowser
 from flinteye_app.flinteye_runtime import application_dir, data_dir, default_data_dir, launch_command
@@ -162,11 +163,14 @@ def _print_connection(root: Path, connection: dict) -> None:
     else:
         print('Access is local to this computer. Choose a trusted network to connect from another device.', flush=True)
     if setup:
-        print(f'One-use setup code: read {root / "setup-token"} on the server.', flush=True)
+        if connection.get('browser_requests'):
+            print('Open FlintEye from the desktop app to finish setup in the browser.', flush=True)
+        else:
+            print(f'One-use setup code: read {root / "setup-token"} on the server.', flush=True)
 
 
-def setup_dialog(runtime: Path) -> None:
-    """Accessible password form lives in the browser; this window conveys ownership."""
+def setup_dialog(runtime: Path, open_browser) -> None:
+    """Show connection details when the browser cannot open or setup-only was requested."""
     from flinteye_app.orchestrator_store import RuntimeStore
     from flinteye_app.orchestrator_auth import local_auth_is_configured
     from flinteye_app.instance_control import active_listener_port, active_listener_url, browser_url
@@ -192,7 +196,7 @@ def setup_dialog(runtime: Path) -> None:
     config = RuntimeStore(env_file='', runtime_file=str(runtime), use_env=False).get_effective()
     url = active_listener_url(root, browser_url(config.api.host, port))
     ttk.Label(frame, text=url).pack(anchor='w')
-    ttk.Button(frame, text='Open setup in browser', command=lambda: webbrowser.open(url)).pack(anchor='w', pady=8)
+    ttk.Button(frame, text='Open setup in browser', command=open_browser).pack(anchor='w', pady=8)
     if connection.get('lan_url'):
         lan_url = connection['lan_url']
         def copy_lan_url():
@@ -238,7 +242,11 @@ def connection_information(root: Path, url: str) -> None:
     def copy(value):
         window.clipboard_clear(); window.clipboard_append(value); window.update()
     ttk.Button(frame, text='Copy address', command=lambda: copy(url)).pack(anchor='w')
-    ttk.Button(frame, text='Open FlintEye', command=lambda: webbrowser.open(url)).pack(anchor='w', pady=6)
+    def open_browser():
+        from flinteye_app.instance_control import request_local_browser
+        if not request_local_browser(root):
+            webbrowser.open(url)
+    ttk.Button(frame, text='Open FlintEye', command=open_browser).pack(anchor='w', pady=6)
     connection = _connection_state(root)
     if lan_url := connection.get('lan_url'):
         ttk.Label(frame, text=lan_url).pack(anchor='w')
@@ -408,8 +416,16 @@ def main() -> int:
         name = sys.argv[2]
         if name not in WORKERS:
             raise SystemExit('Unknown worker')
-        sys.argv = [name + '.py', *sys.argv[3:]]
-        runpy.run_module('flinteye_app.workers.' + name, run_name='__main__')
+        launcher_argv = sys.argv
+        try:
+            sys.argv = [name + '.py', *launcher_argv[3:]]
+            runpy.run_module('flinteye_app.workers.' + name, run_name='__main__')
+        except Exception:
+            # The supervisor captures stderr and the worker's exit code.
+            traceback.print_exc()
+            return 1
+        finally:
+            sys.argv = launcher_argv
         return 0
     if '--segment-complete' in sys.argv or '--segment-created' in sys.argv:
         from flinteye_app.recording_events import record_event
@@ -490,12 +506,13 @@ def main() -> int:
             import fcntl
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
-        if not args.headless:
-            from flinteye_app.orchestrator_store import RuntimeStore
-            existing = RuntimeStore(env_file='', runtime_file=str(root/'runtime.json'), use_env=False)
-            from flinteye_app.instance_control import active_listener_port, active_listener_url, browser_url
-            api = existing.get_effective().api
-            webbrowser.open(active_listener_url(root, browser_url(api.host, active_listener_port(root, api.port))))
+        if not (args.headless or args.background):
+            from flinteye_app.instance_control import active_listener_port, active_listener_url, browser_url, request_local_browser
+            if not request_local_browser(root):
+                from flinteye_app.orchestrator_store import RuntimeStore
+                existing = RuntimeStore(env_file='', runtime_file=str(root/'runtime.json'), use_env=False)
+                api = existing.get_effective().api
+                webbrowser.open(active_listener_url(root, browser_url(api.host, active_listener_port(root, api.port))))
         return 0
     first_install = not (root/'runtime.json').exists()
     runtime = initialize(root)
@@ -589,7 +606,8 @@ def main() -> int:
     if token:
         fd = os.open(token_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, 'w') as stream: stream.write(token)
-        print(f'Initial setup: open the web UI and enter the token from {token_file}', flush=True)
+        if args.headless:
+            print(f'Initial setup: open the web UI and enter the token from {token_file}', flush=True)
     install_routes(app, context, setup_token=token, desktop=not args.headless)
     host = '0.0.0.0' if os.environ.get('FLINTEYE_CONTAINER_BRIDGE') == '1' else context.store.get_effective().api.host
     port = args.port or context.store.get_effective().api.port
@@ -605,8 +623,12 @@ def main() -> int:
     server = ListenerGroup(app, root=root, host=host, port=port, network=network)
     context.listener_group = server
     from flinteye_app.instance_control import InstanceControl
+    from flinteye_app.desktop_setup import DesktopSetupBrowser
+    setup_browser = None if args.headless else DesktopSetupBrowser(context, url)
     def renew_setup():
-        if not local_auth_is_configured(context.store.get_effective().auth): context.bootstrap.renew()
+        with context.lock:
+            if not local_auth_is_configured(context.store.get_effective().auth):
+                context.bootstrap.renew()
     def requested_quit():
         from flinteye_app.monitoring import MonitoringConflict
         try:
@@ -617,7 +639,8 @@ def main() -> int:
             return False
         server.should_exit = True
         return True
-    control = InstanceControl(root, requested_quit, port=port, renew_setup=renew_setup, url=url)
+    control = InstanceControl(root, requested_quit, port=port, renew_setup=renew_setup,
+                              open_browser=setup_browser.open if setup_browser else None, url=url)
     def ready():
         lan_url = context.listener['lan_url'] if server.lan_started else None
         context.listener['lan_url'] = lan_url
@@ -636,21 +659,24 @@ def main() -> int:
     with termination_signals(server):
         thread = None
         try:
-            if args.headless:
+            if setup_browser is None:
                 server.run()
                 return 0
             thread = threading.Thread(target=server.run, name='flinteye-api')
             thread.start()
             for _ in range(100):
                 if control.metadata.get('ready'): break
-                if not thread.is_alive(): raise RuntimeError('Could not start FlintEye. Check logs or port conflicts.')
+                if not thread.is_alive():
+                    raise RuntimeError(server.local_error or 'Could not start FlintEye. Check logs or port conflicts.')
                 time.sleep(.1)
             else: raise RuntimeError('FlintEye did not become ready.')
             from flinteye_app.flinteye_desktop import run_desktop
-            if not args.background: webbrowser.open(url)
-            setup_dialog(runtime)
-            if args.setup_only: return 0
-            run_desktop(url, server, root, context.monitoring)
+            browser_failed = not args.background and not setup_browser.open()
+            if args.setup_only or browser_failed:
+                setup_dialog(runtime, setup_browser.open)
+            if args.setup_only:
+                return 0
+            run_desktop(url, server, root, context.monitoring, setup_browser.open)
         finally:
             server.should_exit = True
             try:
@@ -664,6 +690,8 @@ def main() -> int:
                     if thread is not None:
                         thread.join()
                     control.close()
+                    if setup_browser is not None:
+                        setup_browser.close()
     return 0
 
 

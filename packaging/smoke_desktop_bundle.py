@@ -234,6 +234,17 @@ def main() -> None:
             assert result.returncode == 2 and '--cfr-fps must be in range' in result.stderr, result.stderr
             assert 'bundle-private-marker' not in result.stdout + result.stderr
             print('PASS: all six frozen workers load; redirected output and private credential stdin survive')
+            if os.name == 'nt':
+                ffmpeg = executable.parent/'_internal/bin/ffmpeg.exe'
+                result = subprocess.run([str(executable), '--worker', 'uvc_to_rtsp', '--no-env',
+                    '--input-driver', 'dshow', '--device', 'QA Camera', '--camera-name', 'UVC-CAM-01',
+                    '--width', '1920', '--height', '1080', '--fps', '30', '--input-format', 'codec:mjpeg', '--encoder', 'libx264',
+                    '--ffmpeg-bin', str(ffmpeg), '--rtsp-url', 'rtsp://127.0.0.1:8554/unused', '--dry-run'],
+                    cwd=cwd, capture_output=True, text=True, timeout=30)
+                assert result.returncode == 0, result.stderr
+                for setting in ('-f dshow', '-video_size 1920x1080', '-framerate 30.0', '-vcodec mjpeg', 'video=QA Camera'):
+                    assert setting in result.stderr, result.stderr
+                print('PASS: frozen DirectShow worker probes bundled FFmpeg and prepares 1080p MJPEG capture')
             check_application(executable, profile, cwd, first_run=True)
             if sys.platform == 'darwin':
                 # Same saved profile, old executable no longer exists: reproduces

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import ExitStack, contextmanager
+import errno
 import logging
 import signal
 import socket
@@ -14,6 +15,17 @@ import uvicorn
 from flinteye_app.network_access import ensure_certificates
 
 logger = logging.getLogger(__name__)
+
+def listener_bind_error(host: str, port: int, error: OSError) -> str:
+    address = f'[{host}]' if ':' in host else host
+    code = getattr(error, 'winerror', None) or error.errno
+    endpoint = f'{address}:{port}'
+    if code in {errno.EADDRINUSE, 10048}:
+        return (f'{endpoint} is already in use ({code}). Quit any other FlintEye instance and check which process '
+                'owns this address and port before changing the port.')
+    if code in {errno.EADDRNOTAVAIL, 10049}:
+        return f'The address {address} is unavailable ({code}). Select an IPv4 address assigned to this server.'
+    return f'Could not listen at {endpoint} (error {code}). Check the server network and permissions.'
 
 
 @contextmanager
@@ -57,6 +69,7 @@ class ListenerGroup:
                        forwarded_allow_ips='127.0.0.1,::1'))]
         self.certificate = None
         self.lan_error = ''
+        self.local_error = ''
         if network.enabled:
             if host != '127.0.0.1':
                 raise ValueError('Built-in LAN access requires the local API host to be 127.0.0.1')
@@ -108,9 +121,11 @@ class ListenerGroup:
                     sock.setblocking(False)
                     sockets.append((server, sock))
                 except OSError as error:
+                    message = listener_bind_error(server.config.host, server.config.port, error)
                     if index == 0:
+                        self.local_error = message
                         raise
-                    self.lan_error = f'LAN address unavailable ({error.errno}). Check the selected IP on this server.'
+                    self.lan_error = f'LAN HTTPS could not start. {message}'
                     logger.error('%s; local access remains available', self.lan_error)
             owner_task = asyncio.create_task(self.servers[0]._serve(sockets=[sockets[0][1]]))
             while not self.started and not owner_task.done():

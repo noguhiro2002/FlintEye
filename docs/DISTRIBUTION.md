@@ -7,20 +7,23 @@
 The desktop package includes Python, the compiled Web UI, FFmpeg and MediaMTX.
 Users do not install Python, Node.js, npm, or Docker.
 
-On Windows, run the matching `FlintEye-<version>-windows-<arch>-setup.exe`. After copying the application files, setup opens a native window
-for the `admin` password (12–1024 characters, entered twice). The password is
-hashed locally; it is never put in installer arguments or logs. Closing setup
-without a password leaves setup pending; the next launch resumes it.
+On Windows, run the matching `FlintEye-<version>-windows-<arch>-setup.exe`. Launch
+FlintEye from the installer or Start menu.
 
 On macOS, copy `FlintEye.app` from the DMG into Applications and open it. On Linux,
-install the DEB/RPM with the desktop package installer and open FlintEye. The same
-password window appears on first launch. Developer ID signing/notarization and
+install the DEB/RPM with the desktop package installer and open FlintEye.
+Developer ID signing/notarization and
 Windows publisher signing are not included in this community release. macOS may
 require the app-specific **Privacy & Security → Open Anyway** action. Do not disable
 OS-wide security. macOS bundles use a local ad-hoc integrity signature for ARM64.
 
-The browser opens after setup. The English getting-started guide can be skipped
-and reopened. Configure USB/IP cameras in Settings. Configure the `viewer`
+Starting with preview 6, the desktop launcher opens the browser and passes one-use
+setup authorization. Choose the `admin` password (12–1024 characters, entered twice).
+If the window closes before setup finishes, choose **Open FlintEye** in the desktop
+app. Use **Address and setup assistance** for manual token entry. The password is
+hashed locally and omitted from installer arguments and logs.
+
+The English getting-started guide can be skipped and reopened. Configure USB/IP cameras in Settings. Configure the `viewer`
 password in **Settings → Runtime & access → Viewer access**; viewers cannot sign in until
 that password exists. Changing it invalidates existing sessions.
 

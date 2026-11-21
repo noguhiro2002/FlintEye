@@ -1,6 +1,7 @@
 """Production-only setup, authenticated media bridge, and packaged UI."""
 from __future__ import annotations
 import hmac
+from ipaddress import IPv4Address
 import json
 import os
 from pathlib import Path
@@ -14,7 +15,7 @@ from urllib.parse import urlsplit
 
 import httpx
 from fastapi import Depends, HTTPException, Request, Response
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from flinteye_app.orchestrator_auth import generate_session_secret, hash_password, local_auth_is_configured
 from flinteye_app.flinteye_runtime import application_dir, launch_command
@@ -23,12 +24,15 @@ from flinteye_app.flinteye_storage import suggested_quota
 
 def install_routes(app, context, *, setup_token: str, desktop: bool):
     from flinteye_app.orchestrator_api import require_admin, require_viewer
+    from flinteye_app.desktop_setup import HANDOFF_COOKIE, HANDOFF_COOKIE_PATH, HANDOFF_PATH, local_setup_request
     data = Path(context.store.runtime_file).resolve().parent
     from flinteye_app.network_access import Bootstrap, permitted_source
     bootstrap = Bootstrap(data, setup_token)
     context.bootstrap = bootstrap
+    context.desktop_setup = desktop
     # Snapshot the effective listener policy. Saved changes apply on restart.
     active_network = context.store.get_effective().network.model_copy(deep=True)
+    last_denied_source: tuple[str, float] | None = None
 
     def owner_local(request):
         if not request.client or request.client.host not in {'127.0.0.1', '::1'}:
@@ -36,9 +40,14 @@ def install_routes(app, context, *, setup_token: str, desktop: bool):
 
     @app.middleware('http')
     async def same_origin_mutations(request: Request, call_next):
+        nonlocal last_denied_source
         if active_network.enabled:
             peer = request.client.host if request.client else ''
             if not permitted_source(peer, active_network.allowed_subnets):
+                try:
+                    last_denied_source = (str(IPv4Address(peer)), time.monotonic())
+                except ValueError:
+                    pass
                 return Response('This device is outside the permitted LAN ranges', status_code=403)
             if peer not in {'127.0.0.1', '::1'} and request.url.scheme != 'https':
                 return Response('Use the HTTPS address shown on the server', status_code=403)
@@ -47,18 +56,42 @@ def install_routes(app, context, *, setup_token: str, desktop: bool):
         # Cookies authenticate media requests too. Reject cross-site form/fetch mutations.
         if request.method not in {'GET', 'HEAD', 'OPTIONS'}:
             origin = request.headers.get('origin')
-            if (origin and origin != str(request.base_url).rstrip('/')) or request.headers.get('sec-fetch-site') == 'cross-site':
+            file_handoff = (request.method == 'POST' and request.url.path == HANDOFF_PATH
+                            and origin == 'null' and local_setup_request(request, context))
+            if not file_handoff and ((origin and origin != str(request.base_url).rstrip('/'))
+                                     or request.headers.get('sec-fetch-site') == 'cross-site'):
                 return Response('Cross-origin request rejected', status_code=403)
         return await call_next(request)
 
+    @app.post('/api/v1/setup/handoff', status_code=303)
+    async def setup_handoff(request: Request):
+        if not local_setup_request(request, context) or request.headers.get('origin') != 'null':
+            raise HTTPException(403, 'Open setup from FlintEye on the server computer.')
+        if request.headers.get('content-type', '').split(';', 1)[0] != 'application/x-www-form-urlencoded':
+            raise HTTPException(415, 'Open the setup form from the application.')
+        body = bytearray()
+        async for chunk in request.stream():
+            if len(body) + len(chunk) > 128:
+                raise HTTPException(413, 'Setup form is too large.')
+            body.extend(chunk)
+        code = body[5:].decode('ascii') if body.startswith(b'code=') and body.isascii() else ''
+        with context.lock:
+            if local_auth_is_configured(context.store.get_effective().auth):
+                raise HTTPException(409, 'Setup is already complete')
+            grant, seconds = bootstrap.exchange_desktop_code(code, request.client.host)
+        redirect = RedirectResponse('/', status_code=303, headers={'Cache-Control': 'no-store'})
+        redirect.set_cookie(HANDOFF_COOKIE, grant, max_age=seconds, path=HANDOFF_COOKIE_PATH,
+                            httponly=True, samesite='strict')
+        return redirect
+
     @app.post('/api/v1/setup')
-    def setup(request: Request, payload: dict):
-        nonlocal setup_token
+    def setup(request: Request, response: Response, payload: dict):
         with context.lock:
             if local_auth_is_configured(context.store.get_effective().auth):
                 raise HTTPException(409, 'Setup is already complete')
             supplied = payload.get('token', '')
-            bootstrap.verify(supplied, request.client.host if request.client else 'unknown')
+            grant = request.cookies.get(HANDOFF_COOKIE) if local_setup_request(request, context) else None
+            bootstrap.verify(supplied, request.client.host if request.client else 'unknown', desktop_grant=grant)
             password = payload.get('password', '')
             if not isinstance(password, str) or not 12 <= len(password) <= 1024:
                 raise HTTPException(422, 'Use a password with 12–1024 characters')
@@ -77,8 +110,8 @@ def install_routes(app, context, *, setup_token: str, desktop: bool):
             context.store.patch_runtime({**connection, 'auth': {'provider': 'local', 'viewer_auth_required': True,
                 'session_secret': generate_session_secret(),
                 'local': {'admin': {'username': 'admin', 'password_hash': hash_password(password)}}}})
-            setup_token = ''
             bootstrap.consume()
+            response.delete_cookie(HANDOFF_COOKIE, path=HANDOFF_COOKIE_PATH, httponly=True, samesite='strict')
             from flinteye_app.orchestrator_api import _on_startup
             _on_startup()
         return {'ok': True}
@@ -103,10 +136,14 @@ def install_routes(app, context, *, setup_token: str, desktop: bool):
             ca = x509.load_pem_x509_certificate((data/'tls/ca.crt').read_bytes())
             metadata = {'fingerprint': ca.fingerprint(hashes.SHA256()).hex(), 'ca_expires': ca.not_valid_after_utc.isoformat()}
         group = getattr(context, 'listener_group', None)
+        lan_url = listeners.get('lan_url') if group and group.lan_started else None
+        recent = last_denied_source
         from flinteye_app.network_access import lan_guide_url
         return {'saved': config.network.model_dump(), 'active': active_network.model_dump(), 'guide_url': lan_guide_url(),
                 'restart_required': config.network != active_network,
-                'local_url': listeners.get('url'), 'lan_url': listeners.get('lan_url'),
+                'local_url': listeners.get('url'), 'lan_url': lan_url,
+                'lan_state': 'listening' if lan_url else ('unavailable' if active_network.enabled else 'disabled'),
+                'last_denied_source': recent[0] if recent and time.monotonic() - recent[1] < 900 else None,
                 'error': group.lan_error if group else '',
                 'rtsp_status': context.supervisor.rtsps_status(), **metadata}
 

@@ -1,5 +1,7 @@
 """Exercise source dispatch and resource discovery outside the checkout directory."""
 from __future__ import annotations
+from contextlib import redirect_stderr
+from io import StringIO
 import json
 import os
 from pathlib import Path
@@ -14,7 +16,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
 from flinteye_app._version import RELEASE_VERSION
-from flinteye_app.cli import WORKERS
+from flinteye_app.cli import WORKERS, entrypoint, main
 from flinteye_app.flinteye_runtime import application_dir, worker_command
 from flinteye_app.orchestrator_supervisor import _protected_worker_command
 
@@ -39,6 +41,48 @@ class LayoutTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory, patch('sys._MEIPASS',directory,create=True), patch('sys.frozen',True,create=True):
             self.assertEqual(application_dir(),Path(directory))
             self.assertEqual(worker_command('uvc_to_rtsp'),[sys.executable,'--worker','uvc_to_rtsp'])
+
+    def test_uvc_worker_probes_ffmpeg_and_launches_directshow_mjpeg(self):
+        rtsp_url = 'rtsp://127.0.0.1:8554/uvc_cam1'
+        argv = [
+            'FlintEye', '--worker', 'uvc_to_rtsp', '--no-env', '--profile', 'cam1',
+            '--input-driver', 'dshow', '--device', 'QA Camera', '--camera-name', 'UVC-CAM-01',
+            '--width', '1920', '--height', '1080', '--fps', '30', '--input-format', 'codec:mjpeg',
+            '--rtsp-url', rtsp_url,
+        ]
+        responses = [
+            subprocess.CompletedProcess([], 0, stdout=' V....D libx264 H.264', stderr=''),
+            subprocess.CompletedProcess([], 0, stdout=' T. drawtext V->V', stderr=''),
+            subprocess.CompletedProcess([], 0),
+        ]
+        with patch.object(sys, 'argv', argv), redirect_stderr(StringIO()), patch(
+            'flinteye_app.process_lifetime.run_background', side_effect=responses,
+        ) as ffmpeg:
+            with self.assertRaises(SystemExit) as exit_status:
+                main()
+        self.assertEqual(exit_status.exception.code, 0)
+        encoders, filters, capture = [call.args[0] for call in ffmpeg.call_args_list]
+        self.assertEqual(encoders, ['ffmpeg', '-hide_banner', '-encoders'])
+        self.assertEqual(filters, ['ffmpeg', '-hide_banner', '-filters'])
+        for flag, value in [('-f', 'dshow'), ('-video_size', '1920x1080'), ('-framerate', '30.0'),
+                            ('-vcodec', 'mjpeg'), ('-i', 'video=QA Camera')]:
+            self.assertEqual(capture[capture.index(flag) + 1], value)
+        self.assertEqual(capture[-1], rtsp_url)
+
+    def test_failed_worker_writes_traceback_without_desktop_startup_dialog(self):
+        argv = ['FlintEye', '--worker', 'uvc_to_rtsp']
+        with (
+            patch.object(sys, 'argv', argv),
+            patch('flinteye_app.cli.runpy.run_module', side_effect=RuntimeError('QA worker failure')),
+            patch('flinteye_app.cli.desktop_available', return_value=False) as desktop_available,
+            redirect_stderr(StringIO()) as stderr,
+        ):
+            with self.assertRaises(SystemExit) as exit_status:
+                entrypoint()
+            self.assertIs(sys.argv, argv)
+            desktop_available.assert_not_called()
+        self.assertEqual(exit_status.exception.code, 1)
+        self.assertIn('RuntimeError: QA worker failure', stderr.getvalue())
 
     def test_relocated_worker_still_receives_credentials_only_over_stdin(self):
         for frozen in (False,True):

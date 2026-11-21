@@ -183,6 +183,49 @@ class ApiContractTests(unittest.TestCase):
             self.assertEqual(admin.delete(path).status_code, 200)
             self.assertEqual(admin.get(path).status_code, 404)
 
+    def test_usb_discovery_add_remove_and_readd_supported_modes(self):
+        admin = self.clients['admin']
+        store = self.app.state.context.store
+        base = '/api/v1/uvc/devices'
+        for driver, capture_device, input_format in (
+            ('dshow', 'video=QA camera', 'codec:mjpeg'),
+            ('avfoundation', 'QA camera:none', ''),
+            ('v4l2', '/dev/flinteye-qa', 'mjpeg'),
+        ):
+            with self.subTest(driver=driver):
+                modes = [{'width': width, 'height': height, 'fps': 30, 'input_format': input_format}
+                         for width, height in [(1280, 720), (1920, 1080)]]
+                device = {'device_id': f'qa-{driver}', 'driver': driver, 'display_name': 'QA camera',
+                          'ffmpeg_device': capture_device, 'modes': modes, 'recommended': modes[1]}
+                device_url = f'{base}/{device["device_id"]}'
+                camera_url = f'/api/v1/cameras/qa-{driver}'
+                fixture = {'driver': driver, 'ffmpeg_bin': 'ffmpeg', 'devices': [device]}
+                with (patch.object(self.app.state.context.uvc_probe_cache, 'get', return_value=fixture),
+                      patch.object(core, '_restart_affected')):
+                    self.assertEqual(admin.get(base, params={'refresh': True}).json()['items'][0]['modes'], modes)
+                    expected = {**modes[1], 'path': f'qa-{driver}'}
+                    suggestion = admin.post(device_url+'/suggest', json=expected).json()['suggestion']
+                    self.assertEqual(suggestion['runtime_camera']['uvc']['env']['HEIGHT'], '1080')
+                    prior = self.runtime.read_bytes()
+                    self.assertEqual(admin.post(device_url+'/apply', json={**expected, 'input_format': 'unsupported'}).status_code, 422)
+                    self.assertEqual(self.runtime.read_bytes(), prior)
+                    self.assertEqual(admin.post(device_url+'/apply', json=expected).status_code, 200)
+                    saved = store.get_effective().cameras[0]
+                    self.assertEqual(saved.uvc.env['DEVICE'], capture_device)
+                    self.assertEqual(saved.uvc.env['INPUT_DRIVER'], driver)
+                    self.assertFalse(saved.audio.enabled)
+                    self.assertEqual(admin.delete(camera_url).status_code, 200)
+                    self.assertEqual(admin.get(camera_url).status_code, 404)
+                    prior = admin.get('/api/v1/config/effective')
+                    ignored = admin.patch('/api/v1/config/runtime', headers={'If-Match': prior.headers['etag']},
+                                          json={'device_discovery': {'ignored_uvc_devices': [device['device_id']]}})
+                    self.assertEqual(ignored.status_code, 200)
+                    self.assertTrue(admin.get(device_url).json()['ignored'])
+                    self.assertEqual(admin.post(device_url+'/apply', json=expected).status_code, 200)
+                    self.assertFalse(admin.get(device_url).json()['ignored'])
+                    self.assertEqual(admin.get(camera_url).status_code, 200)
+                    self.assertEqual(admin.delete(camera_url).status_code, 200)
+
     def test_download_ranges_and_hidden_previous_location(self):
         admin = self.clients['admin']
         clip = self.runtime.parent/'recordings'/'camera'/'2026-01-01'/'clip.ts'
