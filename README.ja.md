@@ -2,7 +2,7 @@
 
 **FlintEyeは現在開発中です。これは安定版ではなく開発プレビューです。テストには開発プレビューをご利用ください。**
 
-現在の開発プレビュー版は **1.2.0-preview.5** です。以下のクイックインストールコマンドを使用してインストールしてください。macOSをお使いの場合は、初回起動時の承認手順に従ってください。[検証状況](docs/INSTALLATION_QA.ja.md)では、自動テストの結果と、未完了の実機確認項目を確認できます。
+現在の開発プレビュー版は **1.2.0-preview.7** です。以下のクイックインストールコマンドで導入できます。macOSでは初回起動時の承認手順に従ってください。自動テストの結果と残っている実機確認は[プレビュー7の検証一覧](docs/RELEASE_CHECKLIST_1_2_0.ja.md)で確認できます。
 
 [既知の問題](docs/KNOWN_ISSUES.ja.md) · [バグを報告する](https://github.com/noguhiro2002/FlintEye/issues) · [質問とアイデア](https://github.com/noguhiro2002/FlintEye/discussions)
 
@@ -32,24 +32,24 @@ USBカメラやIPカメラの監視、ライブ映像の視聴、録画の検索
 
 [管理者権限なしでインストールする方法](#install-without-administrator-privileges)
 
-**開発プレビュー：[v1.2.0-preview.5](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.2.0-preview.5)。** 実機での受け入れ確認は現在進行中です。お使いのコンピュータ用のコマンドを実行し、セットアップに従ってください。Python、FFmpeg、FFprobe、MediaMTXが同梱されているため、Gitのチェックアウトやコンパイルは不要です。
+**開発プレビュー：[v1.2.0-preview.7](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.2.0-preview.7)。** 実機での受け入れ確認は現在進行中です。お使いのコンピュータ用のコマンドを実行し、セットアップに従ってください。Python、FFmpeg、FFprobe、MediaMTXが同梱されているため、Gitのチェックアウトやコンパイルは不要です。
 
 **Windows — PowerShell**
 
 ```powershell
-irm https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.5/install.ps1 | iex
+irm https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.7/install.ps1 | iex
 ```
 
 **macOS — ターミナル**
 
 ```sh
-bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.5/install.sh
+bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.7/install.sh
 ```
 
 **Linux — ターミナル**
 
 ```sh
-bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.5/install.sh
+bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.7/install.sh
 ```
 
 また、選択したリリースからスクリプトをダウンロードして内容を確認し、ローカルで実行することもできます。パッケージ版にはPython、FFmpeg、FFprobe、MediaMTXが含まれています。別途インストールする必要はありません。Windows/macOSパッケージは署名なし/公証されていません。[OS確認画面](docs/INSTALL.ja.md#unsigned-packages)をご覧ください。
@@ -62,7 +62,7 @@ bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap clean
 
 - **Windows** — 一般ユーザーでEXEまたはPowerShellのインストーラーを実行します。インストール先は `%LOCALAPPDATA%\Programs\FlintEye` です。スタートメニューから起動できます。削除するときはFlintEyeを終了し、**設定 → アプリ → FlintEye → アンインストール**を選びます。データを保持する既定の選択を使ってください。
 - **macOS** — 一般ユーザーでワンコマンド版を実行するか、DMG内の `FlintEye.app` を個人用の `~/Applications` にコピーして開きます。必要に応じて[初回起動の承認手順](#macos-trust)に従ってください。削除するときはメニューバーで **Disable start at login and quit** を選び、そのアプリをゴミ箱に移動します。組織管理のMacでは、起動に管理者の承認が必要な場合があります。
-- **Linux** — リリースから `install.sh` をダウンロードし、`bash install.sh --help` に `--user` が表示される版で次を実行します。同じビルドのActions成果物で試す場合は、ZIPを展開し、そのフォルダで `--package-directory .` を付けて実行します。
+- **Linux** — スクリプトをダウンロードし、次のコマンドを実行します。同じビルドのActions成果物で試す場合は、ZIPを展開し、そのフォルダで `--package-directory .` を付けて実行します。[install.shをダウンロード](https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.7/install.sh)
 
 ```sh
 bash ./install.sh --user

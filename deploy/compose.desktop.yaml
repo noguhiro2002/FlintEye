@@ -2,7 +2,7 @@
 # Existing Linux host-network installs continue to use ../compose.yaml.
 services:
   flinteye:
-    image: ${FLINTEYE_IMAGE:-ghcr.io/noguhiro2002/flinteye:1.2.0-preview.5}
+    image: ${FLINTEYE_IMAGE:-ghcr.io/noguhiro2002/flinteye:1.2.0-preview.7}
     init: true
     restart: unless-stopped
     stop_grace_period: 60s

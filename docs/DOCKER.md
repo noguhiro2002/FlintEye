@@ -10,14 +10,14 @@ Host networking preserves ONVIF discovery and WebRTC. Docker Desktop USB forward
 
 ## Install without cloning
 
-**UNDER DEVELOPMENT.** The preview image is `ghcr.io/noguhiro2002/flinteye:1.2.0-preview.5`. Pull this version from the [public GHCR package](https://github.com/users/noguhiro2002/packages/container/package/flinteye) for installation and physical-device testing. Automated package checks passed; real-device acceptance remains in progress. This is not a stable release. You can also [build locally](#build-the-development-image).
+**UNDER DEVELOPMENT.** The preview image is `ghcr.io/noguhiro2002/flinteye:1.2.0-preview.7`. Pull this version from the [public GHCR package](https://github.com/users/noguhiro2002/packages/container/package/flinteye) for installation and physical-device testing. Automated package checks passed; real-device acceptance remains in progress. This is not a stable release. You can also [build locally](#build-the-development-image).
 
 Published public images can be pulled without a GitHub account or token. If Docker has an expired saved credential, use `docker logout ghcr.io` before pulling anonymously. Private maintainer testing still requires an authorized account and a classic token with `read:packages`, entered at `docker login ghcr.io -u YOUR_GITHUB_USERNAME`'s password prompt; never put tokens in `.env` or command arguments.
 
-Download [compose.yaml](https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.5/compose.yaml) from the same version's GitHub Release into a new directory, and create `.env`:
+Download [compose.yaml](https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.7/compose.yaml) from the same version's GitHub Release into a new directory, and create `.env`:
 
 ```dotenv
-FLINTEYE_IMAGE=ghcr.io/noguhiro2002/flinteye:1.2.0-preview.5
+FLINTEYE_IMAGE=ghcr.io/noguhiro2002/flinteye:1.2.0-preview.7
 ```
 
 The preview has no `latest` image tag. Pin the exact version as above and complete the [acceptance checks](ACCEPTANCE.md) for your hardware.
