@@ -83,7 +83,7 @@ class Adapter:
         self.check_closed()
 
     def check_closed(self):
-        config = json.loads((self.profile/'runtime.json').read_text())
+        config = json.loads((self.profile/'runtime.json').read_text(encoding='utf-8'))
         wait_closed(self.port)
         for key in ('rtspAddress', 'webrtcAddress', 'apiAddress'):
             wait_closed(int(config['mediamtx']['managed']['global'][key].rsplit(':', 1)[1]))
@@ -105,11 +105,12 @@ class Adapter:
                 relative = path.relative_to(logs)
                 copy = target/relative; copy.parent.mkdir(parents=True, exist_ok=True)
                 # QA profiles contain only synthetic media and credentials.
-                copy.write_text(path.read_text(errors='replace')[-100_000:])
+                copy.write_text(path.read_text(encoding='utf-8', errors='replace')[-100_000:], encoding='utf-8')
         for name in ('uninstall-failure.txt', 'uninstall.log', 'last-stop-result.json', 'last-monitoring-stop.json'):
             path = self.profile/name
             if path.is_file():
-                (self.report.output/name).write_text(path.read_text(errors='replace')[-100_000:])
+                (self.report.output/name).write_text(
+                    path.read_text(encoding='utf-8', errors='replace')[-100_000:], encoding='utf-8')
 
     def verify(self):
         result = subprocess.run([str(self.executable), '--version'], capture_output=True, text=True, timeout=30)
@@ -217,9 +218,9 @@ class Native(Adapter):
         arch = 'arm64' if platform.machine().lower() in {'arm64', 'aarch64'} else 'amd64'
         target = 'macos' if sys.platform == 'darwin' else 'windows' if os.name == 'nt' else 'linux'
         package = self.inputs/f'FlintEye-{version()}-{target}-{arch}{suffix}'
-        sums = dict(line.split('  ', 1)[::-1] for line in (self.inputs/'SHA256SUMS').read_text().splitlines())
+        sums = dict(line.split('  ', 1)[::-1] for line in (self.inputs/'SHA256SUMS').read_text(encoding='utf-8').splitlines())
         if sums.get(package.name) != digest(package): raise RuntimeError('Installer checksum mismatch')
-        build = json.loads((self.inputs/'validation-build.json').read_text())
+        build = json.loads((self.inputs/'validation-build.json').read_text(encoding='utf-8'))
         if build.get('release') != self.args.release or (self.args.commit and build.get('commit') != self.args.commit):
             raise RuntimeError('Validation artifacts belong to another release/commit')
         if build.get('packages', {}).get(package.name) != digest(package): raise RuntimeError('Installer provenance mismatch')
@@ -243,7 +244,7 @@ class Native(Adapter):
                 # The script atomically installs the complete app before asking
                 # Launch Services to open it. That request may await OS consent.
                 while time.monotonic() < end:
-                    installed = (self.report.output/'installation.log').read_text(errors='replace')
+                    installed = (self.report.output/'installation.log').read_text(encoding='utf-8', errors='replace')
                     if f'files installed at: {self.app}' in installed and self.executable.is_file(): break
                     if self.installer_process.poll() is not None:
                         raise RuntimeError(f'Installer did not complete the app copy (exit {self.installer_process.returncode})')
@@ -278,7 +279,7 @@ class Native(Adapter):
             verify_app(self.app)
             policy_path = self.report.output/'macos-policy.json'
             assess_gatekeeper(self.app, policy_path)
-            policy = json.loads(policy_path.read_text())
+            policy = json.loads(policy_path.read_text(encoding='utf-8'))
             if 'Internal Xprotect Error' in policy.get('system_policy', {}).get('output', ''):
                 from macos_ci_policy import assess
                 control_dir = self.report.output/'os-control'
@@ -286,7 +287,7 @@ class Native(Adapter):
                 previous = self.report.output.parent/'os-control/independent-policy-control.json'
                 if previous.is_file(): shutil.copy2(previous, control_dir/previous.name)
                 else: assess(control_dir)
-                control = json.loads((control_dir/'independent-policy-control.json').read_text())
+                control = json.loads((control_dir/'independent-policy-control.json').read_text(encoding='utf-8'))
                 validate_policy_control(policy, control, self.report.data['os_version'])
         else: super().verify()
 
@@ -343,7 +344,7 @@ class Native(Adapter):
         result = subprocess.run(['/usr/bin/log', 'show', '--last', '8m', '--style', 'compact', '--info', '--debug', '--predicate', expression],
                                 capture_output=True, text=True, timeout=45)
         text = result.stdout+result.stderr
-        (self.report.output/'macos-trust.log').write_text(text[-150_000:])
+        (self.report.output/'macos-trust.log').write_text(text[-150_000:], encoding='utf-8')
         self.command(['ps', '-axo', 'pid,ppid,stat,comm'], name='os-processes.log', check=False)
         return text
 
@@ -394,7 +395,7 @@ def exercise(adapter: Adapter, report: Report, args):
             phase = 'quit'
             adapter.quit()
             adapter.sync_profile()
-            completion = json.loads((adapter.profile/'last-monitoring-stop.json').read_text())
+            completion = json.loads((adapter.profile/'last-monitoring-stop.json').read_text(encoding='utf-8'))
             if completion.get('ok') is not True or completion.get('forced') or completion.get('pending_segments') != 0:
                 raise AssertionError('Normal Quit did not finish active recordings cleanly')
             decode_recordings(adapter.profile, adapter.ffmpeg, report.output,
@@ -403,7 +404,7 @@ def exercise(adapter: Adapter, report: Report, args):
             retained = {str(path.relative_to(adapter.profile)): digest(path) for path in
                         [adapter.profile/'runtime.json', *(adapter.profile/'recordings').rglob('*')]
                         if path.is_file() and (path.name == 'runtime.json' or path.suffix in {'.mp4', '.ts'})}
-            selection = json.loads((report.output/'browser/download-selection.json').read_text())
+            selection = json.loads((report.output/'browser/download-selection.json').read_text(encoding='utf-8'))
             selected = str(Path('recordings')/selection['relativePath'])
             downloaded = report.output/'browser'/selection['savedName']
             if selected not in retained or digest(downloaded) != retained[selected]:

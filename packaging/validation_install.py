@@ -15,7 +15,7 @@ def prepare(directory: Path, commit: str) -> None:
         raise ValueError('No native installer in the validation directory')
     release, channel = release_identity()
     for name in ('install.sh', 'install.ps1'):
-        text = (ROOT / 'packaging' / name).read_text().replace('@RELEASE_VERSION@', release)
+        text = (ROOT / 'packaging' / name).read_text(encoding='utf-8').replace('@RELEASE_VERSION@', release)
         (directory / name).write_text(text, encoding='utf-8', newline='\n')
     (directory / 'validation-build.json').write_text(json.dumps({
         'version': version(), 'release': release, 'channel': channel, 'commit': commit,

@@ -125,7 +125,7 @@ def collect(directory: Path, *, release: str, commit: str) -> dict:
     results, keys = [], set()
     for path in sorted(directory.rglob('lifecycle.json')):
         if path.is_symlink(): raise ValueError('Symlink lifecycle receipt')
-        receipt = json.loads(path.read_text())
+        receipt = json.loads(path.read_text(encoding='utf-8'))
         result = validate(receipt, release=release, commit=commit)
         arch = {'x86_64': 'amd64', 'amd64': 'amd64', 'aarch64': 'arm64', 'arm64': 'arm64'}.get(receipt.get('cpu'))
         key = (receipt['method'], receipt.get('runner'), arch)
@@ -138,7 +138,7 @@ def collect(directory: Path, *, release: str, commit: str) -> dict:
         if result == 'passed':
             for name in ('browser/browser.json', 'retained/browser.json'):
                 proof_path = path.parent/name
-                proof = json.loads(proof_path.read_text())
+                proof = json.loads(proof_path.read_text(encoding='utf-8'))
                 if proof.get('result') != 'passed' or proof.get('apiMocked') is not False or not proof.get('realApiRequests'):
                     raise ValueError('Missing real API/browser evidence: '+str(key))
                 if proof.get('identity', {}).get('release') != release or proof['identity'].get('commit') != commit:
@@ -154,23 +154,23 @@ def collect(directory: Path, *, release: str, commit: str) -> dict:
                 proofs[name] = hashlib.sha256(proof_path.read_bytes()).hexdigest()
             if requires_preview_7_checks(release):
                 onvif = path.parent/'fixture/onvif-operations.json'
-                requests = json.loads(onvif.read_text())
+                requests = json.loads(onvif.read_text(encoding='utf-8'))
                 for operation in ('ContinuousMove', 'Stop'):
                     if not any(row['endpoint'] == 'ptz' and row['operation'] == operation
                                and row['profile'] == 'qa-main' for row in requests):
                         raise ValueError(f'Missing real ONVIF {operation} evidence for {key}')
                 proofs['fixture/onvif-operations.json'] = hashlib.sha256(onvif.read_bytes()).hexdigest()
-            decoded = json.loads((path.parent/'decoded-recordings.json').read_text())
+            decoded = json.loads((path.parent/'decoded-recordings.json').read_text(encoding='utf-8'))
             if not isinstance(decoded, list) or not decoded: raise ValueError('No decoded recording evidence')
             sources = {Path(name).parts[:2] for name in decoded}
             if sources != {('recordings', name) for name in ('qa-camera-1', 'qa-camera-2', 'multiview_1')}:
                 raise ValueError('Missing or unexpected decoded recording sources')
-            selection = json.loads((path.parent/'browser/download-selection.json').read_text())
+            selection = json.loads((path.parent/'browser/download-selection.json').read_text(encoding='utf-8'))
             filename = selection.get('savedName')
             selected = 'recordings/' + selection['relativePath']
             if filename not in {'recording-download.mp4', 'recording-download.ts'} or selected not in decoded:
                 raise ValueError('Browser selected an unknown recording')
-            retained = json.loads((path.parent/'retained-files.json').read_text())
+            retained = json.loads((path.parent/'retained-files.json').read_text(encoding='utf-8'))
             original_hashes = {name.replace(chr(92), '/'): value for name, value in retained.items()}
             from release_lib import digest
             download_hash = digest(path.parent/'browser'/filename)
@@ -178,18 +178,18 @@ def collect(directory: Path, *, release: str, commit: str) -> dict:
                 raise ValueError('Downloaded bytes differ from selected original recording')
             proofs['browser/'+filename] = download_hash
             if not (path.parent/'decode.log').is_file(): raise ValueError('No full recording decode log')
-            audio = json.loads((path.parent/'recording-audio.json').read_text())
+            audio = json.loads((path.parent/'recording-audio.json').read_text(encoding='utf-8'))
             if not audio.get('enabled_camera') or audio.get('disabled_camera') != []:
                 raise ValueError('Missing per-camera recording audio evidence')
         else:
-            evidence = (path.parent/'macos-trust.log').read_text().lower()
+            evidence = (path.parent/'macos-trust.log').read_text(encoding='utf-8').lower()
             from verify_macos import validate_policy_control, confirmed_approval_refusal
             if not confirmed_approval_refusal(evidence):
                 raise ValueError('No explicit macOS approval refusal evidence')
             policy_path = path.parent/'macos-policy.json'
-            policy = json.loads(policy_path.read_text())
+            policy = json.loads(policy_path.read_text(encoding='utf-8'))
             control_path = path.parent/'os-control/independent-policy-control.json'
-            control = json.loads(control_path.read_text()) if control_path.is_file() else {}
+            control = json.loads(control_path.read_text(encoding='utf-8')) if control_path.is_file() else {}
             validate_policy_control(policy, control, receipt['os_version'])
             proofs['macos-policy.json'] = hashlib.sha256(policy_path.read_bytes()).hexdigest()
             if control_path.is_file(): proofs['independent-policy-control.json'] = hashlib.sha256(control_path.read_bytes()).hexdigest()

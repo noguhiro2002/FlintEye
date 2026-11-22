@@ -11,7 +11,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'packaging'))
-from lifecycle import owned_profile, remove_owned_profile
+from lifecycle import Adapter, owned_profile, remove_owned_profile
 from lifecycle_common import seed_runtime
 from lifecycle_report import Report, STAGES, validate, collect, required_matrix
 from verify_macos import verify_structure
@@ -19,6 +19,26 @@ from public_install_inputs import validate_manifest, verify_public_tag
 
 
 class LifecycleTests(unittest.TestCase):
+    def test_preserved_utf8_settings_are_read_with_a_legacy_default_encoding(self):
+        original = Path.read_text
+
+        def read_text(path, encoding=None, **options):
+            return original(path, encoding=encoding or 'cp1252', **options)
+
+        with tempfile.TemporaryDirectory() as directory:
+            adapter = Adapter(None, Path(directory), None)
+            owned_profile(adapter.profile)
+            adapter.prepare_profile()
+            runtime = adapter.profile/'runtime.json'
+            config = json.loads(runtime.read_text(encoding='utf-8'))
+            config['cameras'] = [{'id': 'camera', 'display_name': '入口カメラ'}]
+            runtime.write_text(json.dumps(config, ensure_ascii=False), encoding='utf-8')
+            with patch.object(Path, 'read_text', read_text), patch('lifecycle.wait_closed') as closed:
+                adapter.check_closed()
+                self.assertEqual(closed.call_count, 4)
+                adapter.prepare_profile()
+            self.assertEqual(json.loads(runtime.read_text(encoding='utf-8')), config)
+
     @unittest.skipIf(os.name == 'nt', 'POSIX service termination')
     def test_sigterm_finishes_cli_cleanup_before_exit(self):
         from lifecycle_common import ROOT, wait_http, wait_closed

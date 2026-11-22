@@ -58,7 +58,7 @@ def seed_runtime(profile: Path, app_profile: str, media: str, *, prefix: list[st
     (profile/'recordings').mkdir(exist_ok=True)
     runtime = profile/'runtime.json'
     if runtime.exists():
-        value = json.loads(runtime.read_text())
+        value = json.loads(runtime.read_text(encoding='utf-8'))
         return value['api']['port']
     port, rtsp, web, api, rtc = free_port(), free_port(), free_port(), free_port(), free_port(udp=True)
     # Full config defaults are applied by the actual installed application.
@@ -85,7 +85,7 @@ def seed_runtime(profile: Path, app_profile: str, media: str, *, prefix: list[st
                          'webrtcLocalUDPAddress': f'127.0.0.1:{rtc}', 'webrtcIPsFromInterfaces': False,
                          'webrtcAdditionalHosts': ['127.0.0.1']}}},
     }
-    runtime.write_text(json.dumps(value, indent=2)+'\n')
+    runtime.write_text(json.dumps(value, indent=2)+'\n', encoding='utf-8')
     (profile/'mediamtx.yml').write_text('paths:\n  all_others: {}\n')
     return port
 
@@ -196,14 +196,14 @@ def browser_check(url: str, profile: Path, output: Path, release: str, commit: s
     if completed.returncode:
         raise AssertionError(f'Installed browser checks failed (exit {completed.returncode}):\n'
                              + log_path.read_text(encoding='utf-8', errors='replace')[-2500:])
-    receipt = json.loads((output/'browser.json').read_text())
+    receipt = json.loads((output/'browser.json').read_text(encoding='utf-8'))
     if receipt.get('result') != 'passed' or receipt.get('apiMocked') is not False:
         raise AssertionError('Browser did not validate the installed API')
 
 
 def request_quit(profile: Path, process=None) -> None:
-    control = json.loads((profile/'instance-control.json').read_text())
-    (profile/'stop-request.json').write_text(json.dumps({'token': control['token']}))
+    control = json.loads((profile/'instance-control.json').read_text(encoding='utf-8'))
+    (profile/'stop-request.json').write_text(json.dumps({'token': control['token']}), encoding='utf-8')
     if process:
         if process.wait(timeout=60) != 0:
             raise AssertionError('Application did not quit normally')
