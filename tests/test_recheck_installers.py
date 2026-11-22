@@ -61,7 +61,7 @@ class RecheckTests(unittest.TestCase):
         self.assertEqual(len(matrix('macos')['include']), 8)
 
     def test_linux_user_diagnostic_covers_each_package_and_cpu_with_original_binaries(self):
-        allowed = ['packaging/install.sh', 'packaging/lifecycle_linux.py',
+        allowed = ['packaging/install.sh', 'packaging/lifecycle_linux.py', 'packaging/acceptance-1.2.0.json',
                    '.github/workflows/build-release.yml', 'README.md']
         validate_changes(allowed, target='linux-user')
         for name in ('packaging/nfpm.yaml', 'packaging/LinuxBuilder.Dockerfile', 'flinteye_app/cli.py'):

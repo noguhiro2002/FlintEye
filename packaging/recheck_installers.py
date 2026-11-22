@@ -25,6 +25,7 @@ def validate_changes(paths, *, target='all'):
     if target == 'linux-user':
         allowed.update({
             'packaging/lifecycle_linux.py', 'packaging/LifecycleLinux.Dockerfile',
+            'packaging/acceptance-1.2.0.json',  # Release metadata is bundled as documentation.
             '.github/workflows/build-release.yml', '.github/workflows/online-lifecycle.yml',
             'tests/test_install_staging.py', 'tests/test_release_packaging.py',
         })
