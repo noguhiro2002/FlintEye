@@ -45,7 +45,7 @@ def locations(config, workspace: str, visible_only: bool = False):
 
 def register_segment(data: Path, segment: Path, *, expected: tuple[int, int] | None = None, timeout=30) -> bool:
     from flinteye_app.orchestrator_models import RuntimeConfig
-    config = RuntimeConfig.model_validate(json.loads((data / 'runtime.json').read_text()))
+    config = RuntimeConfig.model_validate(json.loads((data / 'runtime.json').read_text(encoding='utf-8')))
     if segment.is_symlink() or not segment.is_file(): return False
     path = segment.resolve()
     for root, _, _ in locations(config, str(data)):

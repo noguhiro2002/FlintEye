@@ -35,7 +35,7 @@ def record_event(root: Path, segment: Path, *, complete: bool, session: str | No
         if complete:
             register_segment(root, segment)
         return
-    config = RuntimeConfig.model_validate(json.loads((root / 'runtime.json').read_text()))
+    config = RuntimeConfig.model_validate(json.loads((root / 'runtime.json').read_text(encoding='utf-8')))
     path = segment.resolve()
     if segment.is_symlink():
         return

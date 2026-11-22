@@ -220,6 +220,34 @@ assert not (Path(profile)/'instance-control.json').exists()
 for connection in connections: connection.close()
 ''', profile)
 
+    def test_recording_hooks_read_utf8_settings_with_a_legacy_default_encoding(self):
+        from flinteye_app import recording_events
+        from flinteye_app.cli import initialize
+        from flinteye_app.orchestrator_store import RuntimeStore
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            runtime = initialize(root)
+            store = RuntimeStore(runtime_file=str(runtime), use_env=False)
+            store.patch_runtime({
+                'cameras': [{'id': 'camera', 'type': 'uvc', 'path': 'camera',
+                             'display_name': '入口カメラ'}],
+            })
+            self.assertIn('入口カメラ'.encode('utf-8'), runtime.read_bytes())
+            segment = root/'recordings/camera/2026-11-22/00-00-00-000000.mp4'
+            segment.parent.mkdir(parents=True)
+            segment.write_bytes(b'completed test segment')
+            env = {**os.environ, 'PYTHONUTF8': '0', 'PYTHONCOERCECLOCALE': '0',
+                   'LC_ALL': 'C', 'MTX_SEGMENT_PATH': str(segment)}
+            session = 'qa-utf8'
+            for action in ('--segment-created', '--segment-complete'):
+                result = subprocess.run([sys.executable, str(ROOT/'flinteye.py'), action, str(root),
+                                         '--recording-session', session], env=env, cwd=ROOT,
+                                        capture_output=True, timeout=30)
+                self.assertEqual(result.returncode, 0, result.stderr.decode('utf-8', errors='replace'))
+            self.assertEqual(recording_events.summary(root, session)['pending_segments'], 0)
+            self.assertTrue(recording_events.file_evidence(root, [segment])[str(segment.resolve())]['is_stable'])
+
     @unittest.skipUnless(os.name == 'nt', 'Windows job ownership')
     def test_parent_crash_kills_nested_children_but_not_unrelated_process(self):
         self.isolated(r'''
