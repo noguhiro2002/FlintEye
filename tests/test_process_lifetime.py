@@ -42,8 +42,8 @@ class ProcessLifetimeTests(unittest.TestCase):
                         time.sleep(.05)
                     self.assertEqual(len(attempts), expected)
             finally: control.close()
-    def isolated(self, script):
-        result = subprocess.run([sys.executable, '-c', script], cwd=ROOT,
+    def isolated(self, script, *args):
+        result = subprocess.run([sys.executable, '-c', script, *args], cwd=ROOT,
                                 capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         return result
@@ -183,8 +183,11 @@ stop_background_processes()
                                      [call(group_id, signal.SIGTERM), call(group_id, signal.SIGKILL)])
 
     def test_desktop_force_quit_stops_children_even_with_open_stream_client(self):
-        self.isolated('''
-import asyncio, socket, sys, tempfile, time, urllib.request
+        # Windows keeps logging files open until the launcher process exits.
+        # Own the profile outside that process and require ordinary removal.
+        with tempfile.TemporaryDirectory() as profile:
+            self.isolated('''
+import asyncio, socket, sys, time, urllib.request
 from pathlib import Path
 from starlette.responses import StreamingResponse
 from flinteye_app import cli, flinteye_desktop
@@ -207,15 +210,15 @@ def desktop(url,server,root,monitoring,open_browser):
 cli.desktop_available=lambda: True
 cli.enable_autostart=lambda: None
 flinteye_desktop.run_desktop=desktop
-with tempfile.TemporaryDirectory() as tmp:
-    sys.argv=['FlintEye','--background','--data-dir',tmp,'--port',str(port)]
-    started=time.monotonic()
-    assert cli.main()==0
-    assert time.monotonic()-started<15
-    assert children[0].poll() is not None
-    assert not (Path(tmp)/'instance-control.json').exists()
-    for connection in connections: connection.close()
-''')
+profile=sys.argv[1]
+sys.argv=['FlintEye','--background','--data-dir',profile,'--port',str(port)]
+started=time.monotonic()
+assert cli.main()==0
+assert time.monotonic()-started<15
+assert children[0].poll() is not None
+assert not (Path(profile)/'instance-control.json').exists()
+for connection in connections: connection.close()
+''', profile)
 
     @unittest.skipUnless(os.name == 'nt', 'Windows job ownership')
     def test_parent_crash_kills_nested_children_but_not_unrelated_process(self):

@@ -29,6 +29,11 @@ on:
       - packaging/LifecycleLinux.Dockerfile
       - frontend/tests/installed.mjs
       - frontend/tests/settings-*
+      - tests/test_macos_lifecycle.py
+      - tests/test_network_access.py
+      - tests/test_package_layout.py
+      - tests/test_process_lifetime.py
+      - tests/test_windows_maintenance.py
       - .github/workflows/build-release.yml
       - .github/workflows/check.yml
   workflow_dispatch:
