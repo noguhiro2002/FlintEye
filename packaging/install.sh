@@ -9,16 +9,16 @@ user_install=0
 uninstall=0
 fail() { printf 'FlintEye: %s\n' "$*" >&2; exit 1; }
 
-check_user_install_stopped() {
-  local installed process image
-  installed=$(realpath -- "$user_destination")
+user_install_running() {
+  local process image
   for process in /proc/[0-9]*/exe; do
     [ -O "${process%/exe}" ] || continue
     image=$(readlink -- "$process" 2>/dev/null) || continue
     case "$image" in
-      "$installed/"*) fail 'Quit this FlintEye installation and wait for recordings to finish, then retry.' ;;
+      "$1/"*) return 0 ;;
     esac
   done
+  return 1
 }
 
 check_user_destination() {
@@ -32,7 +32,13 @@ check_user_destination() {
     [ -d "$user_destination" ] && [ -O "$user_destination" ] && [ ! -L "$user_destination" ] &&
       [ -f "$user_destination/.flinteye-user-install" ] && [ ! -L "$user_destination/.flinteye-user-install" ] ||
       fail "This directory is not a FlintEye user installation: $user_destination"
-    check_user_install_stopped
+    # The API can close just before the executable exits.
+    local deadline=$((SECONDS + 5))
+    while user_install_running "$installed"; do
+      [ "$SECONDS" -lt "$deadline" ] ||
+        fail 'Quit this FlintEye installation and wait for recordings to finish, then retry.'
+      sleep 0.2
+    done
   fi
 }
 
