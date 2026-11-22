@@ -6,6 +6,10 @@
 
 Of the 36 preview 7 lifecycle cases, 28 passed all seven stages. The 8 macOS package cases awaiting first-launch approval passed install, integrity and removal. Use QA-RESULTS.json for per-case results. The eight real-device gates are pending.
 
+Twelve of the 14 public download cases passed all seven stages, including Windows x64 and ARM64, Linux DEB and RPM with and without administrator privileges, and both GHCR architectures. Both macOS script cases passed installation, integrity and removal and await first-launch approval. [Public installation results](https://github.com/noguhiro2002/FlintEye/actions/runs/44995453064)
+
+A Linux source test received two physical USB cameras and one IP camera in the same session. Live View and Multiview showed advancing video, 44 recordings decoded, and Quit released the listeners and USB devices. The test preserved the existing profile and recordings. Physical PTZ operation, packaged camera tests and the 24-hour run are pending.
+
 ## Use the exact QA build
 
 | Field | Required value or record |
@@ -25,7 +29,7 @@ Test both the standalone package and the one-command installer using these same 
 
 ## Preview 7 on Windows and M1 Mac
 
-Extract `release-bundle` and verify the checksums in its `public` folder. Use `FlintEye-1.2.0-windows-amd64-setup.exe` on Windows x64 and `FlintEye-1.2.0-macos-arm64.dmg` on the M1 Mac. Confirm **Information → System** shows `1.2.0-preview.7` and the manifest commit. To test the supplied scripts, use the directory containing `public`.
+Download the installer and check its SHA-256 against the release checksum file. Confirm **Information → System** shows `1.2.0-preview.7` and the manifest commit. [Windows x64 EXE](https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.7/FlintEye-1.2.0-windows-amd64-setup.exe) · [Apple Silicon DMG](https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.7/FlintEye-1.2.0-macos-arm64.dmg) · [SHA256SUMS](https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.7/SHA256SUMS)
 
 Each smaller OS-specific artifact includes its installer, script and `SHA256SUMS`. In its extracted directory, use `.\install.ps1 -PackageDirectory .` on Windows or `bash ./install.sh --package-directory .` on macOS. [Windows x64 artifact](https://github.com/noguhiro2002/FlintEye/actions/runs/44989522412/artifacts/14742586242) · [M1 Mac artifact](https://github.com/noguhiro2002/FlintEye/actions/runs/44989522412/artifacts/14741617608)
 

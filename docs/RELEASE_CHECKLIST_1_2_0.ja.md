@@ -6,6 +6,10 @@
 
 プレビュー7の自動検証は36件中28件が全段階に合格しました。macOSの8件はインストール、整合性、削除まで合格し、初回起動のOS承認待ちです。各段階の結果は `QA-RESULTS.json` で確認できます。実機での受入確認8項目は進行中です。
 
+公開URLからの導入は14件中12件が全7段階に合格しました。対象はWindows x64・ARM64、Linux DEB・RPMのシステム全体向けとユーザー向け、GHCRの両CPUです。macOSのワンコマンド導入2件は、インストール・整合性・削除まで合格し、初回起動の承認待ちです。[公開経路の検証結果](https://github.com/noguhiro2002/FlintEye/actions/runs/44995453064)
+
+Linuxのソース版では、USBカメラ実機2台とIPカメラ実機1台を同時に使用しました。Live ViewとMultiviewで映像の進行を確認し、録画44本をデコードしました。終了時にはリスナーが閉じ、USBカメラが解放されました。元の設定と録画は保持されています。実機のPTZ操作、配布パッケージでの実機検証、24時間稼働は確認待ちです。
+
 ## 正確なQAビルドを使用すること
 
 | 項目 | 必要な値または記録 |
@@ -25,7 +29,7 @@
 
 ## WindowsとM1 Macでプレビュー7を試す
 
-`release-bundle` を展開し、`public` 内の `SHA256SUMS` を照合します。Windows x64では `FlintEye-1.2.0-windows-amd64-setup.exe`、M1 Macでは `FlintEye-1.2.0-macos-arm64.dmg` を使います。起動後、**Information → System** の版が `1.2.0-preview.7` で、コミットがビルドと一致することを確認します。
+公開リリースからインストーラーを取得し、SHA-256を照合します。起動後は **Information → System** で版が `1.2.0-preview.7`、コミットがビルドと一致することを確認します。[Windows x64用EXE](https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.7/FlintEye-1.2.0-windows-amd64-setup.exe) · [Apple Silicon用DMG](https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.7/FlintEye-1.2.0-macos-arm64.dmg) · [SHA256SUMS](https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.7/SHA256SUMS)
 
 OS別の成果物にもインストーラー、スクリプト、`SHA256SUMS` が入っています。展開先で、Windowsは `.\install.ps1 -PackageDirectory .`、Macは `bash ./install.sh --package-directory .` を実行できます。[Windows x64の成果物](https://github.com/noguhiro2002/FlintEye/actions/runs/44989522412/artifacts/14742586242) · [M1 Macの成果物](https://github.com/noguhiro2002/FlintEye/actions/runs/44989522412/artifacts/14741617608)
 
