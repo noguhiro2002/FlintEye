@@ -18,6 +18,7 @@ const info = { api: { swagger_url: 'http://example.test/docs', redoc_url: 'http:
 const cap = { supported: true, pan_tilt: true, zoom: true, current: { zoom: 0.5 }, selected_profile_name: 'Main profile', modes: { pan_tilt: { continuous: true, relative: false, absolute: false }, zoom: { continuous: true, relative: false, absolute: false } } };
 async function start(role, width, height = 900, opts = {}) {
     let requests = [], errors = [], cams = [...cameras], outViews = [...views, { ...views[0], id: 'other-cameras', webrtc_url: 'http://example.test/other' }];
+    if (opts.noMultiviewPlayback) outViews[0] = { ...outViews[0], webrtc_url: null };
     const ctx = await browser.newContext({ viewport: { width, height } });
     ctx.on('page', p => p.on('pageerror', e => errors.push(String(e))));
     await ctx.route('**/*', async (route) => {
@@ -61,7 +62,9 @@ async function start(role, width, height = 900, opts = {}) {
                 await new Promise(r => setTimeout(r, 2500));
             v = { ...cap, pan_tilt: true, zoom: u.pathname.includes('/cam1/'), selected_profile_name: u.pathname.includes('/cam1/') ? 'Front profile' : 'Back profile' };
         }
-        else if (u.pathname.includes('/ptz/') || u.pathname.endsWith('/exclude') || u.pathname.endsWith('/restore'))
+        else if (u.pathname.endsWith('/exclude') || u.pathname.endsWith('/restore'))
+            v = opts.cameraAction ? await opts.cameraAction() : { ok: true };
+        else if (u.pathname.includes('/ptz/'))
             v = { ok: true };
         else if (u.pathname === '/api/v1/storage/status')
             v = { message: '' };
@@ -92,6 +95,39 @@ try {
     await run('6 removed camera', async () => { const { ctx, p, removeFirst } = await start('admin', 390); await p.locator('.sidebar').getByRole('button', { name: 'Live View', exact: true }).click(); await p.locator('.thumb-select').filter({ hasText: 'Front entrance' }).waitFor(); removeFirst(); await p.waitForTimeout(4800); assert.match(await p.locator('.webrtc-title').innerText(), /Back door/); await ctx.close(); });
     await run('6 removed multiview', async () => { const { ctx, p, removeView } = await start('admin', 390); await p.locator('.sidebar').getByRole('button', { name: 'Multiview', exact: true }).click(); await p.getByText('all-cameras', { exact: true }).first().waitFor(); removeView(); await p.waitForTimeout(4800); assert.match(await p.locator('.webrtc-title').innerText(), /other-cameras/); await ctx.close(); });
     await run('14 guide navigation', async () => { const { ctx, p } = await start('admin', 390); await p.locator('.sidebar').getByRole('button', { name: 'Recordings', exact: true }).click(); await p.getByRole('button', { name: 'Getting started' }).click(); assert.equal(await p.locator('.sidebar').getByRole('button', { name: 'Recordings', exact: true }).getAttribute('aria-current'), 'page'); assert.equal(await p.locator('.sidebar').getByRole('button', { name: 'Dashboard', exact: true }).getAttribute('aria-current'), null); await ctx.close(); });
+    await run('failed camera operations stay visible through a refresh', async () => {
+        let release;
+        const { ctx, p } = await start('admin', 390, 900, {
+            cameraAction: () => new Promise(resolve => { release = () => resolve({ ok: false }); }),
+        });
+        try {
+            await p.locator('.sidebar').getByRole('button', { name: 'Live View', exact: true }).click();
+            await p.getByRole('button', { name: 'View Front entrance', exact: true }).waitFor();
+            const viewerPoll = () => p.waitForResponse(response => response.url().endsWith('/api/v1/viewer/cameras'));
+            for (const [label, command, result] of [['Front entrance', 'Exclude', 'excluded'], ['Garage', 'Restore', 'restored']]) {
+                const refresh = viewerPoll();
+                await p.locator('.thumb').filter({ has: p.getByRole('button', { name: 'View '+label }) })
+                    .getByRole('button', { name: command, exact: true }).click();
+                await refresh;
+                release();
+                await p.getByRole('alert').filter({ hasText: 'The camera could not be '+result }).waitFor({ timeout: 5000 });
+            }
+            await viewerPoll();
+            assert(await p.getByRole('alert').filter({ hasText: 'The camera could not be restored' }).isVisible());
+        } finally {
+            release?.();
+            await ctx.close();
+        }
+    });
+    await run('selected multiview without an address reports why video is unavailable', async () => {
+        const { ctx, p } = await start('admin', 390, 900, { noMultiviewPlayback: true });
+        try {
+            await p.locator('.sidebar').getByRole('button', { name: 'Multiview', exact: true }).click();
+            await p.getByRole('status').filter({ hasText: 'The selected Multiview output has no playback address.' }).waitFor();
+        } finally {
+            await ctx.close();
+        }
+    });
 }
 finally {
     await browser.close();

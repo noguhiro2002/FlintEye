@@ -60,9 +60,11 @@ export function LiveViewPage({ api, canManage = false, authRole = null, onConfig
   const [loadingSnapshots, setLoadingSnapshots] = useState(false);
   const [thumbnailRefreshIntervalMs, setThumbnailRefreshIntervalMs] = useState(10000);
   const [error, setError] = useState("");
+  const [actionError, setActionError] = useState("");
   const [initialLoading, setInitialLoading] = useState(true);
   const cameraRequest = useRef(0);
   const snapshotRequest = useRef(0);
+  const actionRequest = useRef(0);
 
   usePolling(async (isCurrent) => {
     const request = ++cameraRequest.current;
@@ -205,31 +207,28 @@ export function LiveViewPage({ api, canManage = false, authRole = null, onConfig
     };
   }, []);
 
-  const handleExclude = async (camera: ViewerCameraItem): Promise<void> => {
-    const request = ++cameraRequest.current;
+  const changeCameraExclusion = async (camera: ViewerCameraItem, exclude: boolean): Promise<void> => {
+    const request = ++actionRequest.current;
+    const verb = exclude ? "exclude" : "restore";
+    setActionError("");
     try {
-      const result = await api.excludeCamera(camera.id, "Manually excluded from Live View");
-      if (!result.ok) throw new Error("The camera could not be excluded. Check its status and retry.");
+      const result = exclude
+        ? await api.excludeCamera(camera.id, "Manually excluded from Live View")
+        : await api.restoreCamera(camera.id);
+      if (!result.ok) throw new Error(exclude
+        ? "The camera could not be excluded. Check its status and retry."
+        : "The camera could not be restored. Check its status and retry.");
+      if (request !== actionRequest.current) return;
+      const refresh = ++cameraRequest.current;
       const data = await api.getViewerCameras();
-      if (request !== cameraRequest.current) return;
-      setCameras(data.items);
-      setError("");
+      if (request === actionRequest.current && refresh === cameraRequest.current) {
+        setCameras(data.items);
+        setError("");
+      }
     } catch (e) {
-      if (request === cameraRequest.current) setError(e instanceof Error ? e.message : "Failed to exclude camera");
-    }
-  };
-
-  const handleRestore = async (camera: ViewerCameraItem): Promise<void> => {
-    const request = ++cameraRequest.current;
-    try {
-      const result = await api.restoreCamera(camera.id);
-      if (!result.ok) throw new Error("The camera could not be restored. Check its status and retry.");
-      const data = await api.getViewerCameras();
-      if (request !== cameraRequest.current) return;
-      setCameras(data.items);
-      setError("");
-    } catch (e) {
-      if (request === cameraRequest.current) setError(e instanceof Error ? e.message : "Failed to restore camera");
+      if (request === actionRequest.current) {
+        setActionError(e instanceof Error ? e.message : `Failed to ${verb} camera`);
+      }
     }
   };
 
@@ -245,6 +244,7 @@ export function LiveViewPage({ api, canManage = false, authRole = null, onConfig
         </div>
       </div>
       {error && <div className="panel-error">{error}</div>}
+      {actionError && <div className="panel-error" role="alert">{actionError}</div>}
       {initialLoading && <p role="status">Loading cameras…</p>}
       {!initialLoading && !error && cameras.length === 0 && <div className="panel-empty">
         No cameras are configured.{canManage && onConfigure
@@ -290,11 +290,11 @@ export function LiveViewPage({ api, canManage = false, authRole = null, onConfig
                 {canManage ? (
                   <div className="thumb-actions" onClick={(e) => e.stopPropagation()}>
                     {health?.manual_excluded || health?.quarantined ? (
-                      <button type="button" onClick={() => void handleRestore(camera)}>
+                      <button type="button" onClick={() => void changeCameraExclusion(camera, false)}>
                         Restore
                       </button>
                     ) : (
-                      <button type="button" onClick={() => void handleExclude(camera)}>
+                      <button type="button" onClick={() => void changeCameraExclusion(camera, true)}>
                         Exclude
                       </button>
                     )}
