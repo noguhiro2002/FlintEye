@@ -26,13 +26,15 @@ Every case uses the build's source commit. Installer cases reuse its existing ar
 | --- | --- | --- |
 | Windows Server 2022 / Windows 11 ARM | x64 / ARM64 | EXE; one-script installer |
 | macOS 15 and 26 | Intel / Apple Silicon | DMG; one-script installer |
-| Ubuntu 24.04 desktop in a disposable Xvfb container | x64 / ARM64 | DEB; one-script installer; actual desktop entry |
-| Rocky Linux 9 desktop in a disposable Xvfb container | x64 / ARM64 | RPM; one-script installer; actual desktop entry |
+| Ubuntu 24.04 desktop in a disposable Xvfb container | x64 / ARM64 | DEB, system-wide script, user script (`--user`); actual desktop entry for DEB |
+| Rocky Linux 9 desktop in a disposable Xvfb container | x64 / ARM64 | RPM, system-wide script, user script (`--user`); actual desktop entry for RPM |
 | Ubuntu 24.04 hosted VM | x64 / ARM64 | Shipped systemd unit with a separate QA service/state directory |
 | Linux Docker Engine | x64 / ARM64 | Distribution Compose; development Compose using the already-built image |
 | Windows, macOS 15, Ubuntu 24.04 | x64 / ARM64 | Source snapshot in a dedicated Python environment |
 
-There are **32 required cases**. macOS runners are pinned to 15/26 and Intel/Apple Silicon rather than `latest`; see [GitHub's runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners). Windows Server CI does not establish Windows 10 compatibility. A Linux container is not a physical Linux desktop; Docker Engine is not Docker Desktop.
+There are **36 required cases**. macOS runners are pinned to 15/26 and Intel/Apple Silicon rather than `latest`; see [GitHub's runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners). Windows Server CI does not establish Windows 10 compatibility. A Linux container is not a physical Linux desktop; Docker Engine is not Docker Desktop.
+
+The four Linux `--user` cases run in containers without sudo or privilege escalation. They check the real API and Web UI, reject removal while FlintEye is running, hash the saved settings and recordings before and after removal, and reopen them after reinstall.
 
 Windows script QA uses the supported `-Silent -NoStart` options, then starts the installed executable. Internet-origin metadata is retained. Interactive shell warnings, SmartScreen and native permission dialogs remain physical-device checks. macOS script QA observes its normal open request asynchronously so an OS approval dialog cannot prevent diagnostic collection.
 
@@ -52,9 +54,9 @@ Open **Actions → Build release → Artifacts**. Each `lifecycle-*` artifact co
 
 Assembly requires the complete matrix and matching commit/release evidence. Missing cases, failed stages, modified artifacts or missing real-browser evidence block `release-bundle`. Attached `QA-RESULTS.json` distinguishes completed CI cases from macOS approval requirements and pending physical acceptance. Existing releases/files are never overwritten.
 
-Diagnose existing installers reuses archived EXE/DMG files while the harness or installer scripts are corrected. It verifies that compiled application and native compiler inputs have not changed and records any diagnostic script overlay. These receipts are explicitly rejected by publication validation. A fresh complete Build release run is still required before publication.
+Diagnose existing installers reuses archived EXE, DMG or Linux packages while the harness or installer scripts are corrected. It verifies that compiled application and native compiler inputs have not changed and records any diagnostic script overlay. These receipts are explicitly rejected by publication validation. A fresh complete Build release run is still required before publication.
 
-After an authorized public publication, **Published installation lifecycle** runs another **10 cases**. It downloads scripts/packages anonymously from real Release URLs, verifies checksums, tag and commit, and runs scripts without a local package override. It also anonymously pulls both GHCR CPU images, checks their published digest/commit and runs the Compose lifecycle. Recommend new Quick Install URLs only after reviewing these results; successful upload alone is not an online install pass. The workflow can also be dispatched for a published release matching the selected checkout.
+After an authorized public publication, **Published installation lifecycle** runs another **14 cases**. It downloads scripts/packages anonymously from real Release URLs, verifies checksums, tag and commit, and runs scripts without a local package override. It also anonymously pulls both GHCR CPU images, checks their published digest/commit and runs the Compose lifecycle. Recommend new Quick Install URLs only after reviewing these results; successful upload alone is not an online install pass. The workflow can also be dispatched for a published release matching the selected checkout.
 
 The public-installation recheck used the published one-command scripts and GHCR images for **1.2.0-preview.5**. Eight of ten cases passed the full lifecycle. The macOS Intel and Apple Silicon script cases passed install, integrity and removal. They require OS approval before the installed API, browser, Quit and retained-data reinstall can be tested. [Public installation results](https://github.com/noguhiro2002/FlintEye/actions/runs/44729094734)
 
@@ -70,7 +72,7 @@ Prepare Python and Node, install the frontend's dependencies, build it and run `
 python packaging/lifecycle.py --method macos-dmg --artifact-directory installer-input --output lifecycle-results/macos-dmg --disposable
 ```
 
-Other methods: `windows-exe`, `windows-script`, `macos-script`, `linux-deb`, `linux-deb-script`, `linux-rpm`, `linux-rpm-script`, `linux-systemd`. Linux package cases require Docker Engine. Source uses `--method source --media-directory vendor/bin` with vetted native media binaries. Compose uses `--method compose` or `--method compose-development` and `--image YOUR_ALREADY_BUILT_IMAGE`; each creates its own project/volume without rebuilding that image. Leave the default release unchanged unless testing a matching published build.
+Other methods: `windows-exe`, `windows-script`, `macos-script`, `linux-deb`, `linux-deb-script`, `linux-rpm`, `linux-rpm-script`, `linux-deb-user-script`, `linux-rpm-user-script`, `linux-systemd`. Linux package cases require Docker Engine. Source uses `--method source --media-directory vendor/bin` with vetted native media binaries. Compose uses `--method compose` or `--method compose-development` and `--image YOUR_ALREADY_BUILT_IMAGE`; each creates its own project/volume without rebuilding that image. Leave the default release unchanged unless testing a matching published build.
 
 ## Checks still required on real machines
 

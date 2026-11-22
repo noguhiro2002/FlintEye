@@ -23,7 +23,7 @@ ARCH is `amd64` or `arm64`. These are acceptance targets, not a claim that all h
 
 - **Windows:** open the EXE and follow setup. The current build opens the browser for your admin password. Installation is per-user and creates a Start menu entry.
 - **macOS:** open the DMG, drag FlintEye into Applications, and open it. The one-command installer uses your personal `~/Applications` folder.
-- **Linux:** open the DEB/RPM with your package manager, then launch FlintEye from the application menu. Package installation needs administrator privileges.
+- **Linux:** open the DEB/RPM with your package manager, then launch FlintEye from the application menu. System-wide package installation needs administrator privileges. For installation in your home directory, follow the [Linux `--user` steps](../README.md#install-without-administrator-privileges).
 
 The command installers select the CPU, download the package for one fixed release, and verify its SHA-256.
 They do not compile software on your computer. Quit a running FlintEye instance before upgrading.
@@ -74,7 +74,7 @@ Packages include the application runtime and media tools. Linux desktop packages
 
 ## Update and remove
 
-The same removal method applies whether a one-command script, an Actions artifact or a binary installer installed the native package. Start with the [README removal table](../README.md#uninstall), then follow [your installation method](STOP_AND_UNINSTALL.md#remove-by-installation-method) for the full steps. macOS script installs normally go to `~/Applications`; dragging from the DMG normally installs to `/Applications`. A custom install folder must be removed at its actual location.
+Start with the [README removal table](../README.md#uninstall), then follow [your installation method](STOP_AND_UNINSTALL.md#remove-by-installation-method) for the full steps. macOS script installs go to `~/Applications` by default. Remove a DMG copy from the folder you dragged it into.
 
 The guide covers Windows 10/11, Linux DEB/RPM, Docker, systemd and source environments. Normal removal retains accounts, settings and recordings; [permanent data erasure](STOP_AND_UNINSTALL.md#permanently-erase-data-optional) is a separate choice.
 

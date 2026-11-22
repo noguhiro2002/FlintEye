@@ -15,6 +15,7 @@
 | Windowsスクリプト / EXE / Actionsパッケージ | [Windows](#windows-uninstall-the-application)を参照：終了後、Windowsの設定からアンインストールします。 |
 | macOSスクリプト / Actions `install.sh` | [macOS](#macos)を参照：ログイン起動を無効化して終了し、`~/Applications/FlintEye.app` またはカスタムインストール先を削除します。 |
 | macOS DMG / ローカルビルドDMG | [macOS](#macos)を参照：ログイン起動を無効化して終了し、`/Applications/FlintEye.app` またはドラッグしたコピーを削除します。 |
+| Linuxスクリプトの `--user` | FlintEyeを終了し、ダウンロードしたスクリプトで `bash ./install.sh --user --uninstall` を実行します。[ユーザー単位の導入と削除](../README.ja.md#install-without-administrator-privileges) |
 | Linuxスクリプト / DEB / RPM | [Linuxパッケージ](#linux-packages)を参照：ログイン起動を無効化して終了し、apt-getまたはdnfでパッケージを削除します。 |
 | Docker Engine / Docker Desktop / 開発用Compose | [Docker Compose](#docker-compose)を参照：インストール時に使用したComposeファイルとプロジェクトでコンテナを停止/削除します。 |
 | systemd | [systemd](#systemd)を参照：ユニットとアプリケーションを削除する前にサービスを停止・無効化します。 |

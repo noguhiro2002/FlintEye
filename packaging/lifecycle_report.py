@@ -8,6 +8,7 @@ import platform
 import time
 
 STAGES = ('install', 'integrity', 'os_launch', 'api_gui', 'quit', 'uninstall', 'retained_reinstall')
+LINUX_USER_METHODS = ('linux-deb-user-script', 'linux-rpm-user-script')
 MANUAL_CASES = ('os-first-launch-approval', 'native-menus-and-permissions', 'physical-usb-and-lan')
 BROWSER_CHECKS = {
     'browser-first-run-setup', 'real-api-build-identity-and-authentication',
@@ -102,7 +103,7 @@ def required_matrix() -> set[tuple[str, str, str]]:
         cases.add(('source', mac15, arch))
         for runner in (mac15, mac26):
             for method in ('macos-dmg', 'macos-script'): cases.add((method, runner, arch))
-        for method in ('source', 'linux-deb', 'linux-deb-script', 'linux-rpm', 'linux-rpm-script',
+        for method in ('source', 'linux-deb', 'linux-deb-script', 'linux-rpm', 'linux-rpm-script', *LINUX_USER_METHODS,
                        'linux-systemd', 'compose', 'compose-development'):
             cases.add((method, linux, arch))
     return cases

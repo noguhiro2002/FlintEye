@@ -57,7 +57,7 @@ class LifecycleTests(unittest.TestCase):
             with self.assertRaises(ValueError): validate(report.data, release='1.2.0-preview.4', commit='a'*40)
 
     def test_missing_platform_matrix_cannot_be_published(self):
-        self.assertEqual(len(required_matrix()), 32)
+        self.assertEqual(len(required_matrix()), 36)
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaisesRegex(ValueError, 'Missing lifecycle cases'):
                 collect(Path(directory), release='1.2.0-preview.4', commit='a'*40)

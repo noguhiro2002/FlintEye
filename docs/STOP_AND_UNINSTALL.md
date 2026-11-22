@@ -13,6 +13,7 @@ Choose your installation method below, finish the application shutdown, then rem
 | Windows script / EXE / Actions package | [Windows](#windows-uninstall-the-application): quit, then uninstall through Windows Settings. |
 | macOS script / Actions `install.sh` | [macOS](#macos): disable login startup, quit, and remove `~/Applications/FlintEye.app` or the custom installed copy. |
 | macOS DMG / locally built DMG | [macOS](#macos): disable login startup, quit, and remove `/Applications/FlintEye.app` or the copy you dragged elsewhere. |
+| Linux script with `--user` | Quit, then run `bash ./install.sh --user --uninstall` with the downloaded script. [User installation and removal](../README.md#install-without-administrator-privileges) |
 | Linux script / DEB / RPM | [Linux packages](#linux-packages): disable login startup, quit, then remove the package with apt-get or dnf. |
 | Docker Engine / Docker Desktop / development Compose | [Docker Compose](#docker-compose): stop/remove the containers with the same Compose file and project used at installation. |
 | systemd | [systemd](#systemd): stop and disable the service before removing its unit and application. |

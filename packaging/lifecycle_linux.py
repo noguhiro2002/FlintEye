@@ -23,10 +23,12 @@ class PackageContainer(Adapter):
         self.name = 'flinteye-package-qa-'+secrets.token_hex(8)
         self.image = self.name+':local'
         self.rpm = 'rpm' in self.args.method
+        self.user_install = '-user-' in self.args.method
         self.app_profile = '/qa/profile'
-        self.executable = '/opt/flinteye/FlintEye'
-        self.media = '/opt/flinteye/_internal/bin/mediamtx'
-        self.ffmpeg = '/opt/flinteye/_internal/bin/ffmpeg'
+        self.app = '/home/qa/.local/opt/flinteye-user' if self.user_install else '/opt/flinteye'
+        self.executable = self.app+'/FlintEye'
+        self.media = self.app+'/_internal/bin/mediamtx'
+        self.ffmpeg = self.app+'/_internal/bin/ffmpeg'
         self.fixture_prefix = ['docker', 'exec', self.name]
         self.fixture_app_directory = '/qa/fixture'
         self.ready = False
@@ -40,13 +42,19 @@ class PackageContainer(Adapter):
             base = 'rockylinux:9@sha256:d7be1c094cc5845ee815d4632fe377514ee6ebcf8efaed6892889657e5ddaaa6' if self.rpm else 'ubuntu:24.04'
             self.command(['docker', 'build', '-f', ROOT/'packaging/LifecycleLinux.Dockerfile',
                           '--build-arg', 'BASE='+base, '--build-arg', 'QA_UID='+str(os.getuid()),
-                          '--build-arg', 'QA_GID='+str(os.getgid()), '-t', self.image, ROOT], timeout=600)
+                          '--build-arg', 'QA_GID='+str(os.getgid()),
+                          '--build-arg', f'USER_INSTALL={int(self.user_install)}', '-t', self.image, ROOT], timeout=600)
+            privilege_options = ['--security-opt', 'no-new-privileges', '--cap-drop', 'ALL'] if self.user_install else []
             self.command(['docker', 'run', '-d', '--init', '--network', 'host', '--name', self.name,
+                          *privilege_options,
                           '--label', 'community.flinteye.qa='+self.name,
                           '--mount', f'type=bind,src={self.directory},dst=/qa',
                           '--mount', f'type=bind,src={self.inputs},dst=/artifacts,readonly', self.image])
             self.ready = True
             self.run(['sh', '-c', 'for attempt in $(seq 1 50); do xdpyinfo >/dev/null 2>&1 && exit 0; sleep .1; done; exit 1'])
+            if self.user_install:
+                self.run(['sh', '-c', 'id && test "$(id -u)" -ne 0 && ! command -v sudo && '
+                          'grep -E "^NoNewPrivs:[[:space:]]+1$" /proc/self/status'], name='user-privileges.log')
         suffix = '.rpm' if self.rpm else '.deb'
         package = Native.package(self, suffix)
         if self.args.method.endswith('script'):
@@ -56,7 +64,8 @@ class PackageContainer(Adapter):
             log = self.directory/'auto-install.log'
             try:
                 self.run(['sh', '-c', 'exec bash "$@" > /qa/auto-install.log 2>&1', 'installer',
-                          '/artifacts/install.sh', *([] if self.args.online else ['--package-directory', '/artifacts'])])
+                          '/artifacts/install.sh', *(['--user'] if self.user_install else []),
+                          *([] if self.args.online else ['--package-directory', '/artifacts'])])
             finally:
                 if log.is_file():
                     with (self.report.output/'installation.log').open('ab') as output:
@@ -64,6 +73,8 @@ class PackageContainer(Adapter):
         else:
             self.run(['sudo', 'dnf' if self.rpm else 'apt-get', 'install', '-y', '/artifacts/'+package.name])
         self.run(['test', '-x', self.executable])
+        if self.user_install:
+            self.run(['test', '!', '-e', '/opt/flinteye'])
 
     def verify(self):
         result = subprocess.run(['docker', 'exec', self.name, self.executable, '--version'],
@@ -76,14 +87,25 @@ class PackageContainer(Adapter):
         if not self.args.method.endswith('script'):
             self.run(['gtk-launch', 'flinteye'], name='os-launch.log')
         wait_http(f'http://127.0.0.1:{self.port}')
+        if self.user_install:
+            attempt = self.run(['bash', '/artifacts/install.sh', '--user', '--uninstall'],
+                               name='active-uninstall.log', check=False)
+            log = (self.report.output/'active-uninstall.log').read_text()
+            if attempt.returncode == 0 or 'Quit this FlintEye installation' not in log:
+                raise AssertionError('User uninstall must refuse to remove an active installation')
 
     def quit(self):
-        self.run([self.executable, '--disable-autostart'], name='quit.log')
+        if not self.user_install:
+            self.run([self.executable, '--disable-autostart'], name='quit.log')
         request_quit(self.profile)
         self.check_closed()
 
     def uninstall(self):
-        self.run(['sudo', 'dnf' if self.rpm else 'apt-get', 'remove', '-y', 'flinteye'])
+        if self.user_install:
+            self.run(['bash', '/artifacts/install.sh', '--user', '--uninstall'])
+            self.run(['test', '!', '-e', self.app])
+        else:
+            self.run(['sudo', 'dnf' if self.rpm else 'apt-get', 'remove', '-y', 'flinteye'])
         self.run(['sh', '-c', 'test ! -e /opt/flinteye/FlintEye && test ! -e /opt/flinteye/_internal/bin/ffmpeg && test ! -e /opt/flinteye/_internal/bin/mediamtx && test ! -e /usr/share/applications/flinteye.desktop && test ! -e /usr/lib/systemd/system/flinteye.service && test ! -e "$HOME/.config/autostart/flinteye.desktop"'])
         if not (self.profile/'.flinteye-qa-owned').is_file(): raise AssertionError('Package removal erased data')
 

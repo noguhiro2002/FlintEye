@@ -29,6 +29,8 @@ Monitor USB and IP cameras, watch live video, and find recordings in your browse
 
 ## Quick Install
 
+[Installing without administrator privileges?](#install-without-administrator-privileges)
+
 **Development preview: [v1.2.0-preview.5](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.2.0-preview.5).** Real-device acceptance is still in progress. Run the command for your computer and follow setup. Python, FFmpeg, FFprobe and MediaMTX are included; no Git checkout or compilation is needed.
 
 **Windows — PowerShell**
@@ -53,6 +55,23 @@ You can also download the script from the selected release, inspect it, and run 
 
 **macOS first launch:** after trying to open this community preview, use **System Settings → Privacy & Security → Open Anyway → Open** if offered. The app is ad-hoc signed and not notarized; installation alone does not grant permission to run it. [If macOS says the file cannot be found →](docs/INSTALL.md#unsigned-packages)
 
+<a id="install-without-administrator-privileges"></a>
+### Install without administrator privileges
+
+- **Windows** — Run the EXE or PowerShell installer from your normal account. FlintEye goes into `%LOCALAPPDATA%\Programs\FlintEye`. Open it from Start. To remove it, quit FlintEye, then use **Settings → Apps → FlintEye → Uninstall** and keep the default choice to retain data.
+- **macOS** — Run the shell installer from your normal account or copy `FlintEye.app` from the DMG into your personal `~/Applications` folder. Open that copy and follow the first-launch instructions if prompted. To remove it, choose **Disable start at login and quit** in the menu bar, then move that copy to Trash. Managed Macs may require IT approval for launch. [First-launch instructions](docs/INSTALL.md#unsigned-packages)
+- **Linux** — Download `install.sh` from the release you want. If `bash install.sh --help` lists `--user`, run the command below. For a matching Actions artifact, extract the ZIP and add `--package-directory .` from the extracted folder.
+
+```sh
+bash ./install.sh --user
+```
+
+On supported Ubuntu, Debian and 64-bit Raspberry Pi OS systems the script uses `dpkg-deb`. On supported Rocky, AlmaLinux and RHEL systems it uses `rpm2cpio` and `cpio`. The host needs the package's [runtime libraries](packaging/nfpm.yaml) already installed. The script puts the app in `~/.local/opt/flinteye-user`. Start it with `"$HOME/.local/opt/flinteye-user/FlintEye"` and open the address it shows. On a server add `--headless` and stop it with Ctrl+C.
+
+After quitting, run `bash ./install.sh --user --uninstall` with the same script. Keep data outside the program folder. The default profile is `$XDG_DATA_HOME/flinteye`, or `~/.local/share/flinteye` if `XDG_DATA_HOME` is unset. If you use a custom profile, disable its start-at-login entry before removing the app.
+
+For local use choose **This computer only**. USB cameras and microphones need permission for your OS account. Access from other devices can require administrator-managed firewall and certificate settings. [LAN and VPN guide](docs/LAN_ACCESS.md)
+
 
 <details>
 <summary><strong>Other Install Options</strong> — binary packages, Docker, manual installation</summary>
@@ -71,6 +90,7 @@ A pip application package is not part of the first release.
 | Method | Where to start |
 | --- | --- |
 | One-command install | Follow the installer's prompt. If FlintEye did not open, launch it as shown below. |
+| Linux `--user` | Run `"$HOME/.local/opt/flinteye-user/FlintEye"` and open its browser address. |
 | Binary installer | Windows: Start → FlintEye. macOS: drag FlintEye into Applications, then open it. Linux desktop: Applications → FlintEye. |
 | Docker Compose | Start the container and retrieve its browser address and setup instructions. [Docker setup →](docs/DOCKER.md#install-without-cloning) |
 | Linux server | Start the systemd service and retrieve the address printed at startup. [Server setup →](docs/DISTRIBUTION.md#systemd) |
@@ -127,13 +147,14 @@ This development preview includes opt-in HTTPS at `https://SERVER-IP:18080`, wit
 
 ## Uninstall
 
-**Accounts, settings and recordings are kept by default.** Quit FlintEye completely before removing it; closing the browser or choosing **Stop monitoring** leaves the application running. One-command scripts install the same native packages as the binary installers, so their removal methods are the same.
+**Accounts, settings and recordings are kept by default.** Quit FlintEye completely before removing it. Closing the browser or choosing **Stop monitoring** leaves the application running.
 
 | Installation | Remove the application |
 | --- | --- |
 | Windows script / EXE / Actions package | Windows 11: **Settings → Apps → Installed apps**. Windows 10: **Settings → Apps → Apps & features**. Select **FlintEye → Uninstall**; keep the default data-retention choice. |
 | macOS script | Menu-bar icon → **Disable start at login and quit**, then move `~/Applications/FlintEye.app` to Trash (or use your custom install folder). Remove `FlintEye.previous.app` too if you no longer need the rollback copy. |
 | macOS DMG / locally built DMG | Choose **Disable start at login and quit**, then move `/Applications/FlintEye.app` to Trash, or remove it from the folder you chose. |
+| Linux `--user` | Run `bash ./install.sh --user --uninstall` with the installer you downloaded. |
 | Linux script / DEB | Disable login startup, quit, then run `sudo apt-get remove flinteye`. |
 | Linux script / RPM | Disable login startup, quit, then run `sudo dnf remove flinteye`. |
 | Docker Engine, downloaded `compose.yaml` | In the original deployment folder, run `docker compose down`. |

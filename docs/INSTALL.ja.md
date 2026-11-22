@@ -26,7 +26,7 @@ ARCH は `amd64` または `arm64` です。これらは受け入れターゲッ
 
 - **Windows:** EXEを開き、セットアップに従います。現在のビルドでは、管理者パスワードの入力にブラウザが開きます。インストールはユーザーごとに行われ、スタートメニューのエントリが作成されます。
 - **macOS:** DMGを開き、FlintEyeをアプリケーションフォルダにドラッグして開きます。ワンコマンドインストーラーは、個人の `~/Applications` フォルダを使用します。
-- **Linux:** パッケージマネージャーで DEB/RPM を開き、アプリケーションメニューから FlintEye を起動します。パッケージのインストールには管理者権限が必要です。
+- **Linux:** システム全体に入れる場合は、パッケージマネージャーでDEB/RPMを開きます。この方法には管理者権限が必要です。ホームフォルダに入れる場合は、[Linuxの `--user` 手順](../README.ja.md#install-without-administrator-privileges)に従ってください。
 
 コマンドインストーラーは CPU を選択し、固定された1つのリリースのパッケージをダウンロードして、その SHA-256 を検証します。
 コンピューター上でソフトウェアをコンパイルすることはありません。アップグレードする前に、実行中の FlintEye インスタンスを終了してください。
@@ -82,7 +82,7 @@ Finder が **ファイルが見つかりません** と報告しても `Contents
 <a id="update-and-remove"></a>
 ## 更新とアンインストール
 
-ワンコマンドスクリプト、Actions アーティファクト、またはバイナリインストーラーのいずれでネイティブパッケージをインストールした場合も、削除方法は同じです。[README の削除テーブル](../README.ja.md#uninstall)から開始し、[インストール方法](STOP_AND_UNINSTALL.ja.md#remove-by-installation-method)に従って全手順を行ってください。macOS のスクリプトインストールは通常 `~/Applications` に入りますが、DMG からドラッグした場合は通常 `/Applications` にインストールされます。カスタムインストールフォルダは、実際の場所で削除する必要があります。
+[READMEの削除手順](../README.ja.md#uninstall)から、[インストール方法に合った手順](STOP_AND_UNINSTALL.ja.md#remove-by-installation-method)を選んでください。macOSのスクリプト版は既定で `~/Applications` に入ります。DMGからコピーした場合は、実際にコピーしたフォルダから削除してください。
 
 このガイドは、Windows 10/11、Linux DEB/RPM、Docker、systemd、およびソース環境をカバーしています。通常の削除ではアカウント、設定、録画が保持されます。[恒久的なデータ消去](STOP_AND_UNINSTALL.ja.md#permanently-erase-data-optional)は個別の選択肢です。
 

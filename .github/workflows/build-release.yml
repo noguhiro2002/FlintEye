@@ -531,7 +531,7 @@ jobs:
       fail-fast: false
       matrix:
         arch: [amd64, arm64]
-        method: [linux-deb, linux-deb-script, linux-rpm, linux-rpm-script, linux-systemd]
+        method: [linux-deb, linux-deb-script, linux-deb-user-script, linux-rpm, linux-rpm-script, linux-rpm-user-script, linux-systemd]
         include:
           - {arch: amd64, runner: ubuntu-24.04}
           - {arch: arm64, runner: ubuntu-24.04-arm}

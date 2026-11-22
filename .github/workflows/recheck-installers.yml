@@ -3,12 +3,12 @@ on:
   workflow_dispatch:
     inputs:
       build_run_id:
-        description: Completed Build release run with all four desktop builders successful
+        description: Completed Build release run with successful builders for the selected target
         required: true
         type: string
       target:
         type: choice
-        options: [all, windows, macos]
+        options: [all, windows, macos, linux-user]
         default: all
 permissions:
   contents: read

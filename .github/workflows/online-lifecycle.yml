@@ -33,8 +33,12 @@ jobs:
           - {runner: macos-26, method: macos-script}
           - {runner: ubuntu-24.04, method: linux-deb-script}
           - {runner: ubuntu-24.04, method: linux-rpm-script}
+          - {runner: ubuntu-24.04, method: linux-deb-user-script}
+          - {runner: ubuntu-24.04, method: linux-rpm-user-script}
           - {runner: ubuntu-24.04-arm, method: linux-deb-script}
           - {runner: ubuntu-24.04-arm, method: linux-rpm-script}
+          - {runner: ubuntu-24.04-arm, method: linux-deb-user-script}
+          - {runner: ubuntu-24.04-arm, method: linux-rpm-user-script}
     runs-on: ${{ matrix.runner }}
     env:
       FLINTEYE_QA_RUNNER: ${{ matrix.runner }}

@@ -1,31 +1,92 @@
 #!/usr/bin/env bash
-# Release assets replace this marker with a fixed version. Never run as root.
+# Release assets replace this marker with a fixed version. Run as a normal user.
 set -euo pipefail
 version='@RELEASE_VERSION@'
 start_app=1
 package_directory=''
 install_directory=''
+user_install=0
+uninstall=0
 fail() { printf 'FlintEye: %s\n' "$*" >&2; exit 1; }
+
+check_user_install_stopped() {
+  local installed process image
+  installed=$(realpath -- "$user_destination")
+  for process in /proc/[0-9]*/exe; do
+    [ -O "${process%/exe}" ] || continue
+    image=$(readlink -- "$process" 2>/dev/null) || continue
+    case "$image" in
+      "$installed/"*) fail 'Quit this FlintEye installation and wait for recordings to finish, then retry.' ;;
+    esac
+  done
+}
+
+check_user_destination() {
+  local installed profile
+  installed=$(realpath -m -- "$user_destination")
+  profile=$(realpath -m -- "${FLINTEYE_DATA_DIR:-${XDG_DATA_HOME:-"$HOME/.local/share"}/flinteye}")
+  case "$profile/" in
+    "$installed/"*) fail 'Move the FlintEye data directory outside the program directory before installing or removing the app.' ;;
+  esac
+  if [ -e "$user_destination" ] || [ -L "$user_destination" ]; then
+    [ -d "$user_destination" ] && [ -O "$user_destination" ] && [ ! -L "$user_destination" ] &&
+      [ -f "$user_destination/.flinteye-user-install" ] && [ ! -L "$user_destination/.flinteye-user-install" ] ||
+      fail "This directory is not a FlintEye user installation: $user_destination"
+    check_user_install_stopped
+  fi
+}
+
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --version) [ "$#" -ge 2 ] || fail '--version requires X.Y.Z'; version=$2; shift 2 ;;
     --no-start) start_app=0; shift ;;
     --package-directory) [ "$#" -ge 2 ] || fail '--package-directory requires an artifact folder'; package_directory=$2; shift 2 ;;
     --install-directory) [ "$#" -ge 2 ] || fail '--install-directory requires a macOS application folder'; install_directory=$2; shift 2 ;;
+    --user) user_install=1; shift ;;
+    --uninstall) uninstall=1; shift ;;
+    --help|-h)
+      printf '%s\n' 'Usage: bash install.sh [--version RELEASE] [--no-start]' \
+        '       bash install.sh --user [--version RELEASE] [--no-start]  (Linux, no sudo)' \
+        '       bash install.sh --user --uninstall                     (keeps settings and recordings)'
+      exit 0 ;;
     *) fail "Unknown option: $1" ;;
   esac
 done
-[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-preview\.[1-9][0-9]{0,5})?$ ]] || fail 'Use a published release or pass --version X.Y.Z[-preview.N].'
+[ "$(id -u)" -ne 0 ] || fail 'Run as your normal user. A system-wide Linux installation will request sudo when needed.'
+os=$(uname -s)
+[ "$uninstall" = 0 ] || [ "$user_install" = 1 ] || fail '--uninstall requires --user.'
+if [ "$uninstall" = 0 ]; then
+  [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-preview\.[1-9][0-9]{0,5})?$ ]] || fail 'Use a published release or pass --version X.Y.Z[-preview.N].'
+fi
+if [ "$user_install" = 1 ]; then
+  [ "$os" = Linux ] || fail '--user is available only on Linux. The macOS installer already uses ~/Applications.'
+  [ -z "$install_directory" ] || fail '--install-directory is available only on macOS.'
+  user_parent="$HOME/.local/opt"
+  user_destination="$user_parent/flinteye-user"
+  if [ "$uninstall" = 1 ] && [ ! -e "$user_destination" ] && [ ! -L "$user_destination" ]; then
+    printf 'FlintEye is already removed from %s. Settings and recordings are kept.\n' "$user_destination"
+    exit 0
+  fi
+  command -v flock >/dev/null || fail 'flock (util-linux) is required for user installation and removal.'
+  mkdir -p -- "$user_parent"
+  exec 9>>"$user_parent/.flinteye-user.lock"
+  flock -n 9 || fail 'Another FlintEye user installation or removal is in progress.'
+  check_user_destination
+  if [ "$uninstall" = 1 ]; then
+    "$user_destination/FlintEye" --disable-autostart
+    rm -rf -- "$user_destination"
+    printf 'Removed %s. Settings and recordings are kept.\n' "$user_destination"
+    exit 0
+  fi
+fi
 application_version=${version%%-preview.*}
 if [[ "$version" == *-preview.* ]]; then printf 'FlintEye %s — UNDER DEVELOPMENT; this is not a stable release.\n' "$version"; fi
-[ "$(id -u)" -ne 0 ] || fail 'Run as your normal user. The Linux package manager will request sudo when needed.'
 command -v curl >/dev/null || fail 'curl is required.'
 case "$(uname -m)" in
   x86_64|amd64) arch=amd64 ;;
   aarch64|arm64) arch=arm64 ;;
   *) fail 'Only 64-bit Intel/AMD and ARM computers are supported.' ;;
 esac
-os=$(uname -s)
 if [ "$os" = Darwin ]; then
   # Detect Apple Silicon even when Terminal is running under Rosetta.
   if [ "$(sysctl -in hw.optional.arm64 2>/dev/null || true)" = 1 ]; then arch=arm64; fi
@@ -45,20 +106,39 @@ elif [ "$os" = Linux ]; then
     *) fail "Unsupported automatic installation target: $ID. See the manual installation guide." ;;
   esac
   asset="FlintEye-$application_version-linux-$arch.$kind"
-  command -v sudo >/dev/null || fail 'sudo is required before downloading the package. Ask your administrator to install it, or download the package for administrator installation. See docs/MANUAL_INSTALL.md.'
-  if [ "$kind" = deb ]; then manager=apt-get; else manager=dnf; fi
-  command -v "$manager" >/dev/null || fail "$manager is required."
+  if [ "$user_install" = 1 ]; then
+    if [ "$kind" = deb ]; then
+      command -v dpkg-deb >/dev/null || fail 'dpkg-deb is required to unpack the DEB.'
+    else
+      command -v rpm2cpio >/dev/null && command -v cpio >/dev/null ||
+        fail 'rpm2cpio and cpio are required to unpack the RPM. Ask your administrator if they are missing.'
+    fi
+  else
+    command -v sudo >/dev/null || fail 'sudo is required for system-wide installation. Use --user to install in your home directory.'
+    if [ "$kind" = deb ]; then manager=apt-get; else manager=dnf; fi
+    command -v "$manager" >/dev/null || fail "$manager is required."
+  fi
 else
   fail "Unsupported OS: $os"
 fi
-if command -v pgrep >/dev/null && pgrep -x FlintEye >/dev/null; then
+if [ "$user_install" = 0 ] && command -v pgrep >/dev/null && pgrep -x FlintEye >/dev/null; then
   fail 'Quit FlintEye using Stop monitoring and quit, then run this installer again.'
 fi
 work=$(mktemp -d "${TMPDIR:-/tmp}/flinteye-install.XXXXXXXX")
 mount_dir=''
+user_stage=''
 cleanup() {
   if [ -n "$mount_dir" ]; then hdiutil detach "$mount_dir" -quiet || true; fi
   rm -rf -- "$work"
+  if [ -n "$user_stage" ]; then
+    if [ -d "$user_stage/previous" ] && [ ! -e "$user_destination" ] && [ ! -L "$user_destination" ]; then
+      if ! mv -T -- "$user_stage/previous" "$user_destination"; then
+        printf 'Previous installation is available at %s\n' "$user_stage/previous" >&2
+        return
+      fi
+    fi
+    rm -rf -- "$user_stage"
+  fi
 }
 trap cleanup EXIT
 base="https://github.com/noguhiro2002/FlintEye/releases/download/v$version"
@@ -144,6 +224,36 @@ if [ "$os" = Darwin ]; then
     printf 'Application was not started (--no-start). First-launch permission and operation remain unverified.\n'
   fi
   printf 'On first launch, choose a trusted network and follow the setup address shown by FlintEye.\n'
+elif [ "$user_install" = 1 ]; then
+  user_stage=$(mktemp -d "$user_parent/.flinteye-stage.XXXXXXXX")
+  unpacked="$user_stage/unpacked"
+  mkdir -- "$unpacked"
+  if [ "$kind" = deb ]; then
+    dpkg-deb -x "$work/$asset" "$unpacked"
+  else
+    rpm2cpio "$work/$asset" | (cd "$unpacked" && cpio -idm --quiet --no-absolute-filenames)
+  fi
+  bundle="$unpacked/opt/flinteye"
+  [ -d "$bundle" ] && [ ! -L "$bundle" ] && [ -x "$bundle/FlintEye" ] ||
+    fail 'The package does not contain the Linux application.'
+  if ! bundled_release=$("$bundle/FlintEye" --version); then
+    fail 'The bundled app could not run. Check that the required Linux runtime libraries are installed.'
+  fi
+  [ "$bundled_release" = "$version" ] || fail 'The package contains a different FlintEye release.'
+  printf '%s\n' "$version" > "$bundle/.flinteye-user-install"
+  check_user_destination
+  if [ -d "$user_destination" ]; then mv -T -- "$user_destination" "$user_stage/previous"; fi
+  mv -T -- "$bundle" "$user_destination"
+  printf 'Installed FlintEye %s for the current user at %s\n' "$version" "$user_destination"
+  printf 'To remove after quitting: bash install.sh --user --uninstall\n'
+  if [ "$start_app" = 1 ] && [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+    "$user_destination/FlintEye" </dev/null 9>&- &
+    "$user_destination/FlintEye" --headless --connection-info 9>&- ||
+      printf 'After choosing a network in FlintEye, use the address shown in its setup window.\n'
+  else
+    printf 'Start FlintEye with: %q\n' "$user_destination/FlintEye"
+    printf 'On a server, add --headless and open the address it prints.\n'
+  fi
 else
   if [ "$kind" = deb ]; then
     # Multiple previews share the numeric package version. Apply the selected

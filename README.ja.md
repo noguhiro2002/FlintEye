@@ -30,6 +30,8 @@ USBカメラやIPカメラの監視、ライブ映像の視聴、録画の検索
 <a id="quick-install"></a>
 ## クイックインストール
 
+[管理者権限なしでインストールする方法](#install-without-administrator-privileges)
+
 **開発プレビュー：[v1.2.0-preview.5](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.2.0-preview.5)。** 実機での受け入れ確認は現在進行中です。お使いのコンピュータ用のコマンドを実行し、セットアップに従ってください。Python、FFmpeg、FFprobe、MediaMTXが同梱されているため、Gitのチェックアウトやコンパイルは不要です。
 
 **Windows — PowerShell**
@@ -55,6 +57,23 @@ bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap clean
 <a id="macos-trust"></a>
 **macOSでの初回起動:** このコミュニティプレビューを開こうとした後、要求があれば **システム設定 → プライバシーとセキュリティ → このまま開く → 開く** を使用してください。このアプリはアドホック署名されており、公証されていません。インストールしただけでは実行権限が付与されません。[macOSでファイルが見つからないと言われた場合 →](docs/INSTALL.ja.md#unsigned-packages)
 
+<a id="install-without-administrator-privileges"></a>
+### 管理者権限なしでインストール
+
+- **Windows** — 一般ユーザーでEXEまたはPowerShellのインストーラーを実行します。インストール先は `%LOCALAPPDATA%\Programs\FlintEye` です。スタートメニューから起動できます。削除するときはFlintEyeを終了し、**設定 → アプリ → FlintEye → アンインストール**を選びます。データを保持する既定の選択を使ってください。
+- **macOS** — 一般ユーザーでワンコマンド版を実行するか、DMG内の `FlintEye.app` を個人用の `~/Applications` にコピーして開きます。必要に応じて[初回起動の承認手順](#macos-trust)に従ってください。削除するときはメニューバーで **Disable start at login and quit** を選び、そのアプリをゴミ箱に移動します。組織管理のMacでは、起動に管理者の承認が必要な場合があります。
+- **Linux** — リリースから `install.sh` をダウンロードし、`bash install.sh --help` に `--user` が表示される版で次を実行します。同じビルドのActions成果物で試す場合は、ZIPを展開し、そのフォルダで `--package-directory .` を付けて実行します。
+
+```sh
+bash ./install.sh --user
+```
+
+対応するUbuntu、Debian、64ビット版Raspberry Pi OSでは `dpkg-deb`、Rocky Linux、AlmaLinux、RHELでは `rpm2cpio` と `cpio` を使います。[実行に必要なライブラリ](packaging/nfpm.yaml)はOS側に入っている必要があります。インストール先は `~/.local/opt/flinteye-user` です。`"$HOME/.local/opt/flinteye-user/FlintEye"` で起動し、案内されたアドレスを開きます。サーバーでは `--headless` を付けて起動し、Ctrl+Cで終了します。
+
+削除するときはFlintEyeを終了し、同じスクリプトで `bash ./install.sh --user --uninstall` を実行します。設定と録画はプログラムフォルダの外に保存してください。既定のデータ保存先は `$XDG_DATA_HOME/flinteye` で、`XDG_DATA_HOME` が未設定なら `~/.local/share/flinteye` です。カスタムプロファイルでは、削除する前にそのプロファイルのログイン時起動を無効にしてください。
+
+同じ端末で使う場合は **This computer only** を選びます。USBカメラやマイクにはOSの利用許可が必要です。別端末から接続する場合、ファイアウォールや証明書の設定に管理者の対応が必要なことがあります。[LAN・VPN接続ガイド](docs/LAN_ACCESS.ja.md)
+
 <details>
 <summary><strong>その他のインストールオプション</strong> — バイナリパッケージ、Docker、手動インストール</summary>
 
@@ -72,6 +91,7 @@ pipアプリケーションパッケージは最初のリリースには含ま�
 | 方法 | 次の操作 |
 | --- | --- |
 | ワンコマンド | インストーラーの案内に従います。FlintEyeが開かなければ、下記の方法で起動します。 |
+| Linux `--user` | `"$HOME/.local/opt/flinteye-user/FlintEye"` を実行し、案内された接続先を開きます。 |
 | バイナリ | Windowsはスタートメニュー、Linuxはアプリ一覧からFlintEyeを開きます。macOSはDMGからApplicationsにコピーして開きます。 |
 | Docker Compose | コンテナを起動して接続先を確認します。[Dockerの初回設定](docs/DOCKER.ja.md#install-without-cloning) |
 | Linuxサーバー | systemdサービスを起動し、起動時に表示される接続先を確認します。[サーバーの初回設定](docs/DISTRIBUTION.ja.md#systemd) |
@@ -130,13 +150,14 @@ ssh -N -L 127.0.0.1:18080:127.0.0.1:18080 your-server
 <a id="uninstall"></a>
 ## アンインストール
 
-**アカウント、設定、録画はデフォルトで保持されます。** 削除する前に FlintEye を完全に終了してください。ブラウザを閉じたり **Stop monitoring** を選択してもアプリケーションは実行されたままになります。ワンコマンドスクリプトはバイナリインストーラーと同じネイティブパッケージをインストールするため、削除方法も同一です。
+**アカウント、設定、録画はデフォルトで保持されます。** 削除する前に FlintEye を完全に終了してください。ブラウザを閉じたり **Stop monitoring** を選択してもアプリケーションは実行されたままになります。
 
 | インストール方法 | アプリケーションの削除 |
 | --- | --- |
 | Windows スクリプト / EXE / Actions パッケージ | Windows 11: **設定 → アプリ → インストールされているアプリ**。Windows 10: **設定 → アプリ → アプリと機能**。**FlintEye → アンインストール**を選択し、データ保持の選択はデフォルトのままにします。 |
 | macOS スクリプト | メニューバーアイコン → **Disable start at login and quit** を選択し、`~/Applications/FlintEye.app` をゴミ箱に移動します（またはカスタムインストールフォルダを使用）。ロールバック用のコピーが不要な場合は `FlintEye.previous.app` も削除してください。 |
 | macOS DMG / ローカルビルド DMG | **Disable start at login and quit** を選択し、`/Applications/FlintEye.app` をゴミ箱に移動します（または選択したフォルダから削除）。 |
+| Linux `--user` | ダウンロードしたスクリプトで `bash ./install.sh --user --uninstall` を実行します。 |
 | Linux スクリプト / DEB | ログイン起動を無効にして終了し、`sudo apt-get remove flinteye` を実行します。 |
 | Linux スクリプト / RPM | ログイン起動を無効にして終了し、`sudo dnf remove flinteye` を実行します。 |
 | Docker Engine, ダウンロードした `compose.yaml` | 元のデプロイメントフォルダで `docker compose down` を実行します。 |

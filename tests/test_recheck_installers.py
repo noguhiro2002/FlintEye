@@ -60,6 +60,21 @@ class RecheckTests(unittest.TestCase):
         self.assertEqual(len(matrix('windows')['include']), 4)
         self.assertEqual(len(matrix('macos')['include']), 8)
 
+    def test_linux_user_diagnostic_covers_each_package_and_cpu_with_original_binaries(self):
+        allowed = ['packaging/install.sh', 'packaging/lifecycle_linux.py',
+                   '.github/workflows/build-release.yml', 'README.md']
+        validate_changes(allowed, target='linux-user')
+        for name in ('packaging/nfpm.yaml', 'packaging/LinuxBuilder.Dockerfile', 'flinteye_app/cli.py'):
+            with self.assertRaises(ValueError):
+                validate_changes([name], target='linux-user')
+        cases = matrix('linux-user')['include']
+        self.assertEqual({(case['method'], case['arch'], case['runner']) for case in cases}, {
+            ('linux-deb-user-script', 'amd64', 'ubuntu-24.04'),
+            ('linux-rpm-user-script', 'amd64', 'ubuntu-24.04'),
+            ('linux-deb-user-script', 'arm64', 'ubuntu-24.04-arm'),
+            ('linux-rpm-user-script', 'arm64', 'ubuntu-24.04-arm'),
+        })
+
     def test_diagnostic_pass_cannot_become_publication_acceptance(self):
         with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {'FLINTEYE_QA_DIAGNOSTIC': '1'}):
             r = Report(Path(directory), method='windows-exe', release='1.2.0-preview.4', commit='a'*40)

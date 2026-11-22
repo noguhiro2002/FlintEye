@@ -21,7 +21,7 @@ import venv
 
 from lifecycle_common import (ROOT, browser_check, decode_recordings, media_fixture,
                               request_quit, seed_runtime, stop_process, wait_closed, wait_http)
-from lifecycle_report import Report
+from lifecycle_report import LINUX_USER_METHODS, Report
 from release_lib import digest, release_identity, version
 
 
@@ -434,7 +434,11 @@ def exercise(adapter: Adapter, report: Report, args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--method', required=True, choices=['source', 'windows-exe', 'windows-script', 'macos-dmg', 'macos-script', 'linux-deb', 'linux-deb-script', 'linux-rpm', 'linux-rpm-script', 'linux-systemd', 'compose', 'compose-development'])
+    parser.add_argument('--method', required=True, choices=[
+        'source', 'windows-exe', 'windows-script', 'macos-dmg', 'macos-script',
+        'linux-deb', 'linux-deb-script', 'linux-rpm', 'linux-rpm-script', *LINUX_USER_METHODS,
+        'linux-systemd', 'compose', 'compose-development',
+    ])
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--artifact-directory', type=Path)
     parser.add_argument('--media-directory', type=Path)

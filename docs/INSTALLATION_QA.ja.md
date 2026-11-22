@@ -29,13 +29,15 @@ Windows ARM64のEXE版は、最初の検査で監視停止時に録画の完了�
 | --- | --- | --- |
 | Windows Server 2022 / Windows 11 ARM | x64 / ARM64 | EXE; ワンスクリプトインストーラー |
 | macOS 15 および 26 | Intel / Apple Silicon | DMG; ワンスクリプトインストーラー |
-| Ubuntu 24.04 desktop (使い捨てXvfbコンテナ内) | x64 / ARM64 | DEB; ワンスクリプトインストーラー; 実際のデスクトップエントリー |
-| Rocky Linux 9 desktop (使い捨てXvfbコンテナ内) | x64 / ARM64 | RPM; ワンスクリプトインストーラー; 実際のデスクトップエントリー |
+| Ubuntu 24.04 desktop (使い捨てXvfbコンテナ内) | x64 / ARM64 | DEB、システム全体に入れるスクリプト、ユーザー用スクリプト（`--user`） |
+| Rocky Linux 9 desktop (使い捨てXvfbコンテナ内) | x64 / ARM64 | RPM、システム全体に入れるスクリプト、ユーザー用スクリプト（`--user`） |
 | Ubuntu 24.04 ホストVM | x64 / ARM64 | システム同梱のsystemdユニットと個別のQAサービス/状態ディレクトリ |
 | Linux Docker Engine | x64 / ARM64 | Distribution Compose; ビルド済みイメージを使用した開発用Compose |
 | Windows, macOS 15, Ubuntu 24.04 | x64 / ARM64 | 専用Python環境でのソーススナップショット |
 
-**32の必須ケース**があります。macOSランナーは `latest` ではなく 15/26 および Intel/Apple Silicon に固定されています。[GitHubのランナーリファレンス](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)を参照してください。Windows Server CIはWindows 10の互換性を確立しません。Linuxコンテナは物理的なLinuxデスクトップではなく、Docker EngineはDocker Desktopではありません。
+**36の必須ケース**があります。macOSランナーは `latest` ではなく 15/26 および Intel/Apple Silicon に固定されています。[GitHubのランナーリファレンス](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)を参照してください。Windows Server CIはWindows 10の互換性を確立しません。Linuxコンテナは物理的なLinuxデスクトップではなく、Docker EngineはDocker Desktopではありません。
+
+Linuxの `--user` は4ケースです。sudoがなく権限昇格を禁止したコンテナで実行します。APIとWeb画面の操作、起動中の削除拒否、アンインストール前後の設定と録画のハッシュ一致、再インストール後の再利用を確認します。
 
 WindowsスクリプトのQAでは、サポートされている`-Silent -NoStart`オプションを使用し、その後インストール済みの実行ファイルを開始します。インターネット由来のメタデータは保持されます。対話型シェルの警告、SmartScreen、およびOS標準の許可ダイアログは、実機での確認項目となります。macOSスクリプトのQAでは、通常の `open` による起動要求を非同期で監視し、OSの承認ダイアログによって診断情報の収集が妨げられないようにします。
 
@@ -59,7 +61,7 @@ macOSで内部的なXProtectエラーが報告された場合、QAは同一ラ�
 
 `Diagnose existing installers`は、検証ツールやインストーラースクリプトを修正する間、アーカイブ済みのEXE/DMGファイルを再利用します。これは、コンパイル対象のアプリケーションとネイティブビルドの入力内容に変更がないことを検証し、診断用に差し替えたスクリプトを記録するものです。これらの検証記録は「配布判定」において明示的に拒否されます。配布前には、改めて完全な`Build release`の実行が必須となります。
 
-公開プレビューなどを承認のうえ公開すると、「Published installation lifecycle」がさらに10個のケースを実行します。ここでは、ローカルのパッケージ指定（package override）を使用せず、実際のリリースURLからスクリプトやパッケージを匿名でダウンロードし、チェックサム、タグ、コミットの検証を行い、スクリプトを実行します。また、GHCRのCPUイメージの両方を匿名でプルし、公開されたダイジェスト/コミットを確認した上で、Composeのライフサイクルを実行します。新しいQuick Install URLの推奨は、これらの結果を確認した後にのみ行ってください。アップロードが成功しただけでは、オンラインインストールの検証に合格したことにはなりません。本ワークフローは、選択したチェックアウトと一致する公開済みリリースに対しても手動で起動（dispatch）可能です。
+公開プレビューなどを承認のうえ公開すると、「Published installation lifecycle」がさらに14個のケースを実行します。ここでは、ローカルのパッケージ指定（package override）を使用せず、実際のリリースURLからスクリプトやパッケージを匿名でダウンロードし、チェックサム、タグ、コミットの検証を行い、スクリプトを実行します。また、GHCRのCPUイメージの両方を匿名でプルし、公開されたダイジェスト/コミットを確認した上で、Composeのライフサイクルを実行します。新しいQuick Install URLの推奨は、これらの結果を確認した後にのみ行ってください。アップロードが成功しただけでは、オンラインインストールの検証に合格したことにはなりません。本ワークフローは、選択したチェックアウトと一致する公開済みリリースに対しても手動で起動（dispatch）可能です。
 
 **1.2.0-preview.5** の公開スクリプトとGHCRイメージを使った再検証では、10ケース中8ケースが全工程に合格しました。macOSのIntel版・Apple Silicon版は、インストール、整合性、削除に合格しました。導入後のAPI・画面操作、終了、データを保持した再インストールの検証にはOSの初回起動承認が必要です。[公開経路の検査結果](https://github.com/noguhiro2002/FlintEye/actions/runs/44729094734)
 
@@ -76,7 +78,7 @@ PythonとNodeを準備し、フロントエンドの依存関係をインスト�
 python packaging/lifecycle.py --method macos-dmg --artifact-directory installer-input --output lifecycle-results/macos-dmg --disposable
 ```
 
-その他の手法: `windows-exe`, `windows-script`, `macos-script`, `linux-deb`, `linux-deb-script`, `linux-rpm`, `linux-rpm-script`, `linux-systemd`。LinuxパッケージのケースはDocker Engineを必要とします。ソースでは、検証済みのネイティブメディアバイナリを指定する `--method source --media-directory vendor/bin` を使用します。Composeでは `--method compose` または `--method compose-development` を使用し、`--image YOUR_ALREADY_BUILT_IMAGE` を指定します。それぞれがイメージを再構築することなく独自のプロジェクト/ボリュームを作成します。テスト対象と一致する公開ビルドをテストする場合を除き、デフォルトのリリース設定は変更しないでください。
+その他の手法: `windows-exe`, `windows-script`, `macos-script`, `linux-deb`, `linux-deb-script`, `linux-rpm`, `linux-rpm-script`, `linux-deb-user-script`, `linux-rpm-user-script`, `linux-systemd`。LinuxパッケージのケースはDocker Engineを必要とします。ソースでは、検証済みのネイティブメディアバイナリを指定する `--method source --media-directory vendor/bin` を使用します。Composeでは `--method compose` または `--method compose-development` を使用し、`--image YOUR_ALREADY_BUILT_IMAGE` を指定します。それぞれがイメージを再構築することなく独自のプロジェクト/ボリュームを作成します。テスト対象と一致する公開ビルドをテストする場合を除き、デフォルトのリリース設定は変更しないでください。
 
 <a id="checks-still-required-on-real-machines"></a>
 ## 実機でのチェック項目
