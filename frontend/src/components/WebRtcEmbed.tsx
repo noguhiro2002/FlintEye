@@ -2,13 +2,14 @@ import { useMediaPaused } from '../hooks/MonitoringContext';
 interface WebRtcEmbedProps {
   url: string | null;
   title: string;
+  unavailableMessage?: string;
 }
 
-export function WebRtcEmbed({ url, title }: WebRtcEmbedProps): JSX.Element {
+export function WebRtcEmbed({ url, title, unavailableMessage = "Select a stream to open WebRTC viewer." }: WebRtcEmbedProps): JSX.Element {
   const paused = useMediaPaused();
   if (paused) return <div className="panel-empty" role="status">Monitoring is stopped or finishing recordings. Start monitoring from Dashboard to watch live video.</div>;
   if (!url) {
-    return <div className="panel-empty">Select a stream to open WebRTC viewer.</div>;
+    return <div className="panel-empty" role="status">{unavailableMessage}</div>;
   }
 
   return (

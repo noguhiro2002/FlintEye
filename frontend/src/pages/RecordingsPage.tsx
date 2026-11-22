@@ -13,6 +13,7 @@ import {
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 import type { ApiClient } from "../api/client";
+import { EventRecordingList } from "../components/EventRecordings";
 import type { RecordingItem } from "../types";
 import { usePolling } from '../hooks/usePolling';
 
@@ -206,8 +207,11 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [recordedFrom, setRecordedFrom] = useState("");
   const [recordedTo, setRecordedTo] = useState("");
+  const [timeBasis, setTimeBasis] = useState<"recorded" | "updated">("recorded");
+  const [showEvents, setShowEvents] = useState(false);
+  const timeLabel = timeBasis === "recorded" ? "Recorded" : "Updated";
   const rangeInvalid = Boolean(recordedFrom && recordedTo && recordedFrom > recordedTo);
-  const queryKey = JSON.stringify([selectedStream, statusFilter, recordedFrom, recordedTo, sortKey, sortDir, pageIndex, pageSize]);
+  const queryKey = JSON.stringify([selectedStream, statusFilter, recordedFrom, recordedTo, timeBasis, sortKey, sortDir, pageIndex, pageSize]);
   const showingPrevious = hasLoaded && (loadedQuery !== queryKey || Boolean(error));
   const [thumbnailErrors, setThumbnailErrors] = useState<Record<string, boolean>>({});
 
@@ -219,20 +223,21 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
     }
     const grouped = new Map<string, RecordingSection>();
     filteredItems.forEach((item) => {
-      const key = formatDateKey(item.modified_at);
+      const date = timeBasis === "recorded" ? item.started_at : item.modified_at;
+      const key = date == null ? "unknown" : formatDateKey(date);
       const existing = grouped.get(key);
       if (existing) {
         existing.items.push(item);
       } else {
         grouped.set(key, {
           key,
-          label: formatDateHeading(item.modified_at),
+          label: date == null ? "Recording time unavailable" : formatDateHeading(date),
           items: [item],
         });
       }
     });
     return Array.from(grouped.values());
-  }, [filteredItems, sortKey]);
+  }, [filteredItems, sortKey, timeBasis]);
 
   const closePlayback = (): void => {
     playbackRequestRef.current += 1;
@@ -264,6 +269,7 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
       status: statusFilter,
       recordedFrom: parseRecordedBoundary(recordedFrom) ?? undefined,
       recordedTo: parseRecordedBoundary(recordedTo, true) ?? undefined,
+      timeBasis,
       sortBy: sortKey,
       sortDir,
       limit: pageSize,
@@ -291,13 +297,13 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
   };
 
   useEffect(() => {
-    void load();
+    if (!showEvents) void load();
     return () => { loadRequestRef.current += 1; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedStream, statusFilter, recordedFrom, recordedTo, sortKey, sortDir, pageIndex, pageSize]);
+  }, [selectedStream, statusFilter, recordedFrom, recordedTo, timeBasis, sortKey, sortDir, pageIndex, pageSize, showEvents]);
 
   usePolling(async () => {
-    if (!loading && !playbackOpen && !rangeInvalid && hasLoaded) await load();
+    if (!showEvents && !loading && !playbackOpen && !rangeInvalid && hasLoaded) await load();
   }, 5000);
 
   useLayoutEffect(() => {
@@ -418,18 +424,24 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
       <div className="page-header">
         <div>
           <h2>Recordings</h2>
-          <p className="panel-note">Times shown in {Intl.DateTimeFormat().resolvedOptions().timeZone}. Unknown recording times are not inferred from file modification time.</p>
-          <div className="recording-root" title={recordRoot}>
+          <p className="panel-note">Times shown in {Intl.DateTimeFormat().resolvedOptions().timeZone}.</p>
+          {!showEvents && <div className="recording-root" title={recordRoot}>
             {recordRoot || "Recording root unavailable"}
-          </div>
+          </div>}
         </div>
-        <button type="button" className="icon-text-button" onClick={() => void load()} disabled={loading}>
+        {!showEvents && <button type="button" className="icon-text-button" onClick={() => void load()} disabled={loading}>
           <ArrowPathIcon aria-hidden="true" />
           {loading ? "Refreshing..." : "Refresh"}
-        </button>
+        </button>}
       </div>
+      <nav className="button-row" aria-label="Recording views">
+        <button type="button" aria-pressed={!showEvents} onClick={() => setShowEvents(false)}>Loop recordings</button>
+        <button type="button" aria-pressed={showEvents} onClick={() => { setShowEvents(true); setError(""); }}>Event recordings</button>
+      </nav>
 
       {error && <div className="panel-error" role="alert">{error}</div>}
+      {showEvents ? <EventRecordingList api={api} canDownload={canDownload}
+        onPlay={item => void playRecording(item)} busy={Boolean(preparingFileId)} /> : <>
       {streamError && <div className="panel-error" role="alert">{streamError}</div>}
       {showingPrevious && <div role="status">Showing previous results; they may not match the current filters.</div>}
 
@@ -471,7 +483,17 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
               </select>
             </label>
             <label>
-              <span>Updated from</span>
+              <span>Date basis</span>
+              <select aria-label="Date basis" value={timeBasis} onChange={event => {
+                setTimeBasis(event.target.value as "recorded" | "updated");
+                setPageIndex(0);
+              }}>
+                <option value="recorded">Recording time</option>
+                <option value="updated">File update time</option>
+              </select>
+            </label>
+            <label>
+              <span>{timeLabel} from</span>
               <input
                 type="datetime-local"
                 step="60"
@@ -486,7 +508,7 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
               />
             </label>
             <label>
-              <span>Updated to</span>
+              <span>{timeLabel} to</span>
               <input
                 type="datetime-local"
                 step="60"
@@ -501,7 +523,7 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
               />
             </label>
           </div>
-          {rangeInvalid && <div id="recording-range-error" className="panel-error" role="alert">Updated from must be before updated to.</div>}
+          {rangeInvalid && <div id="recording-range-error" className="panel-error" role="alert">The start date must be before the end date.</div>}
         </div>
 
         <div className="recording-toolbar-group recording-sort-group" aria-label="Sort recordings">
@@ -520,7 +542,7 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
                 }}
               >
                 <option value="stream">Stream</option>
-                <option value="recorded">Updated date</option>
+                <option value="recorded">{timeLabel} date</option>
                 <option value="size">Size</option>
               </select>
             </label>
@@ -566,7 +588,8 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
               <div className="recording-grid">
                 {section.items.map((item) => {
                   const unavailable = Boolean(thumbnailErrors[item.file_id]);
-                  const statusText = item.is_stable ? "Stable" : item.completion_state === 'unavailable' ? 'Completion unavailable' : `Recording / finalizing · ${formatAgeSec(item.age_sec)}`;
+                  const statusText = item.is_stable ? (item.completion_state === "recovered" ? "Recovered" : "Stable")
+                    : item.completion_state === "unavailable" ? "Completion unavailable" : `Recording / finalizing · ${formatAgeSec(item.age_sec)}`;
                   const downloadFilename = buildDownloadFilename(item);
                   return (
                     <article key={item.file_id} className="recording-card">
@@ -663,6 +686,7 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
         onPageChange={goToPage}
         onPageSizeChange={changePageSize}
       />}
+      </>}
 
       {playbackOpen && selectedItem && (
         <div className="recording-modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && closePlayback()}>

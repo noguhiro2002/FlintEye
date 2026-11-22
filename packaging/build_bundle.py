@@ -81,6 +81,7 @@ command = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', '--one
 for name in ('uvc_to_rtsp', 'ip_camera_to_rtsp', 'multiview_input_to_rtsp', 'multiview_buffer_to_rtsp', 'multiview_raw_compositor', 'multiview_to_rtsp'):
     command += ['--hidden-import', 'flinteye_app.workers.' + name]
 if sys.platform in ('win32', 'darwin'): command += ['--windowed']
+if sys.platform.startswith('linux'): command += ['--python-option', 'X utf8']
 if sys.platform == 'win32': command += ['--icon', str(ROOT/'images/icons/flinteye.ico')]
 if sys.platform == 'darwin': command += ['--icon', str(ROOT/'images/icons/flinteye.icns')]
 if sys.platform == 'darwin': command += ['--osx-bundle-identifier', 'community.flinteye']

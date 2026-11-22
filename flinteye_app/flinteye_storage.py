@@ -66,36 +66,66 @@ def cleanup(data: Path, config, workspace: str, now: float | None = None) -> int
     if not config.recording.managed_storage: return 0
     now = time.time() if now is None else now
     count = 0
-    with database(data) as db:
-        for root, retention, quota in locations(config, workspace):
-            if not root.is_dir(): continue  # Disconnected volumes are never recreated here.
-            seconds = parse_duration_to_seconds(retention)
-            rows = db.execute('SELECT relative, size, mtime FROM segments WHERE root=? ORDER BY mtime', (str(root),)).fetchall()
-            # Include active recordings/cache in disk accounting, but never delete them here.
-            total = 0
-            for file in root.rglob('*'):
-                try:
-                    if file.relative_to(root).parts[0].lower() == '.playback_cache':
-                        continue
-                    if file.is_file() and not file.is_symlink(): total += file.stat().st_size
-                except FileNotFoundError:
-                    continue
-            free = shutil.disk_usage(root).free
-            for relative, size, mtime in rows:
+    from flinteye_app.recording_archive import source_reservations
+    from flinteye_app.recording_events import database as evidence_database, segment_started_at
+
+    for root, retention, quota in locations(config, workspace):
+        if not root.is_dir():
+            continue
+        seconds = parse_duration_to_seconds(retention)
+        # Scan outside the write transaction so a large recording directory
+        # does not delay event acceptance or newly completed recordings.
+        total = 0
+        for file in root.rglob('*'):
+            try:
+                if file.relative_to(root).parts[0].lower() != '.playback_cache' and file.is_file() and not file.is_symlink():
+                    total += file.stat().st_size
+            except FileNotFoundError:
+                continue
+        free = shutil.disk_usage(root).free
+        with database(data) as db:
+            # Accepting an event and deleting a candidate segment must be
+            # serialized even when a completion hook is a separate process.
+            db.execute('BEGIN IMMEDIATE')
+            reservations = source_reservations(db, root)
+            times = {}
+            if reservations and (data/'recording-events.sqlite3').is_file():
+                with evidence_database(data, timeout=.5) as ledger:
+                    times = {name: (start, end) for name, start, end in ledger.execute(
+                        'SELECT path, started, ended FROM completed_files')}
+            rows = db.execute('SELECT relative, size, mtime FROM segments WHERE root=? ORDER BY mtime', (str(root),))
+            for relative, size, mtime in rows.fetchall():
                 path = root / relative
-                if path.is_symlink() or not path.resolve().is_relative_to(root): continue
-                if not path.exists():
-                    db.execute('DELETE FROM segments WHERE root=? AND relative=?', (str(root), relative)); continue
-                stat = path.stat()
-                if stat.st_size != size or stat.st_mtime_ns != mtime: continue
+                if path.resolve() != path or not path.is_relative_to(root):
+                    continue
+                try:
+                    stat = path.stat()
+                except FileNotFoundError:
+                    db.execute('DELETE FROM segments WHERE root=? AND relative=?', (str(root), relative))
+                    continue
+                if stat.st_size != size or stat.st_mtime_ns != mtime:
+                    continue
                 expired = seconds is not None and now - mtime / 1e9 >= seconds
                 over_quota = quota is not None and total > quota
                 low_space = free < config.recording.min_free_bytes
-                if not (expired or over_quota or low_space): continue
-                try: path.unlink()
-                except OSError: continue
+                if not (expired or over_quota or low_space):
+                    continue
+                if reservations:
+                    stream = Path(relative).parts[0]
+                    started, ended = times.get(str(path), (None, None))
+                    started = segment_started_at(path) if started is None else started
+                    ended = max(ended or 0, mtime / 1e9)
+                    if any(stream in streams and ended > lower and (started is None or started < upper)
+                           for lower, upper, streams in reservations):
+                        continue
+                try:
+                    path.unlink()
+                except OSError:
+                    continue
                 db.execute('DELETE FROM segments WHERE root=? AND relative=?', (str(root), relative))
-                total -= size; free += size; count += 1
+                total -= size
+                free += size
+                count += 1
     return count
 
 

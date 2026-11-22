@@ -79,6 +79,45 @@ def inventory_count(profile: Path) -> int:
         return connection.execute('select count(*) from segments').fetchone()[0]
 
 
+def check_open_segment_stop(client, ffmpeg, cwd, *, disable_recording):
+    settings = client.patch('/api/v1/config/runtime', json={'recording': {
+        'enabled': True, 'record_segment_duration': '10m'}})
+    assert settings.status_code == 200, settings.text
+    source = subprocess.Popen([str(ffmpeg), '-nostdin', '-v', 'error', '-re',
+        '-f', 'lavfi', '-i', 'testsrc2=size=160x90:rate=10', '-t', '30', '-c:v', 'libx264',
+        '-threads', '2', '-g', '10', '-f', 'rtsp', 'rtsp://127.0.0.1:8554/bundle-smoke'],
+        cwd=cwd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    try:
+        end = time.monotonic()+15
+        while time.monotonic() < end:
+            items = client.get('/api/v1/recordings', params={'status': 'recording', 'stream_id': 'bundle-smoke'}).json()['items']
+            if any(item['size_bytes'] > 4096 for item in items):
+                active = next(item for item in items if item['size_bytes'] > 4096)
+                break
+            if source.poll() is not None:
+                raise AssertionError(source.stderr.read().decode(errors='replace'))
+            time.sleep(.25)
+        else:
+            raise AssertionError('No active long recording before Stop')
+        if disable_recording:
+            disabled = client.patch('/api/v1/config/runtime', json={'recording': {'enabled': False}})
+            assert disabled.status_code == 200, disabled.text
+        result = client.post('/api/v1/control/stop', timeout=45)
+        assert result.status_code == 200 and result.json()['result']['ok'], result.text
+        monitoring = client.get('/api/v1/status/monitoring').json()
+        assert monitoring['phase'] == 'stopped' and monitoring['counts']['recording'] == 0, monitoring
+        media = client.get('/api/v1/status/mediamtx').json()
+        assert media['running'] is False, media
+        items = client.get('/api/v1/recordings', params={'status': 'stable', 'stream_id': 'bundle-smoke'}).json()['items']
+        assert any(item['file_id'] == active['file_id'] for item in items), 'The open segment did not finalize'
+        assert client.get('/api/v1/recordings/files/'+active['file_id']).status_code == 200
+        print(f'PASS: macOS recording {"Off then Stop" if disable_recording else "direct Stop"} finalizes an open long segment')
+    finally:
+        if source.poll() is None:
+            source.kill()
+        source.communicate(timeout=5)
+
+
 def check_application(executable: Path, profile: Path, cwd: Path, *, first_run: bool) -> None:
     with socket.socket() as listener:
         listener.bind(('127.0.0.1', 0))
@@ -170,6 +209,12 @@ def check_application(executable: Path, profile: Path, cwd: Path, *, first_run: 
                 assert result.status_code == 200, result.text
                 receipt = json.loads((profile/'last-monitoring-stop.json').read_text())
                 assert receipt['ok'] and not receipt['forced'], receipt
+                if sys.platform == 'darwin':
+                    check_open_segment_stop(client, ffmpeg, cwd, disable_recording=not first_run)
+                    result = client.patch('/api/v1/config/runtime', json={'recording': {'enabled': True}})
+                    assert result.status_code == 200, result.text
+                    result = client.post('/api/v1/control/start', timeout=45)
+                    assert result.status_code == 200, result.text
                 for file in (profile/'recordings').rglob('*.mp4'):
                     decoded = subprocess.run([str(ffmpeg), '-v', 'error', '-i', str(file), '-f', 'null', '-'], capture_output=True, timeout=30)
                     assert decoded.returncode == 0 and not decoded.stderr, 'Recording failed full decode'

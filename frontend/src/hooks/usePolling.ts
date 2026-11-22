@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 
-export function usePolling(fn: (isCurrent: () => boolean) => void | Promise<void>, intervalMs: number): void {
+export function usePolling(fn: (isCurrent: () => boolean) => void | Promise<void>, intervalMs: number, key?: number): void {
   const fnRef = useRef(fn);
   fnRef.current = fn;
 
@@ -20,5 +20,5 @@ export function usePolling(fn: (isCurrent: () => boolean) => void | Promise<void
       active = false;
       window.clearTimeout(id);
     };
-  }, [intervalMs]);
+  }, [intervalMs, key]);
 }

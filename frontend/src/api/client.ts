@@ -4,11 +4,13 @@ import type {
   AuthMeResponse,
   CameraItem,
   DashboardStatus,
+  EventRecordingSettings,
   IpCameraProbeResult,
   MultiviewViewItem,
   MultiviewStatus,
   PtzCapabilities,
   RecordingListResponse,
+  RecordingEvent,
   RecordingPlaybackPrepareResponse,
   RecordingStreamListResponse,
   RuntimeConfigResponse,
@@ -378,12 +380,32 @@ export class ApiClient {
     return this.request("/api/v1/recordings/streams");
   }
 
+  getEventRecordingSettings(): Promise<EventRecordingSettings> {
+    return this.request("/api/v1/recording-events/settings");
+  }
+
+  saveEventRecordingSettings(settings: Pick<EventRecordingSettings, "enabled" | "folder" | "max_lookback_sec">, rotate: boolean): Promise<EventRecordingSettings> {
+    return this.request("/api/v1/recording-events/settings", {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...settings, rotate_token: rotate }),
+    });
+  }
+
+  getRecordingEvents(limit: number, offset: number): Promise<{items: RecordingEvent[]}> {
+    return this.request(`/api/v1/recording-events?limit=${limit}&offset=${offset}`);
+  }
+
+  cancelRecordingEvent(id: string): Promise<{ok: boolean}> {
+    return this.request(`/api/v1/recording-events/${encodeURIComponent(id)}/cancel`, { method: "POST" });
+  }
+
   getRecordings(
     params: {
       streamId?: string;
       status?: "all" | "stable" | "recording";
       recordedFrom?: number;
       recordedTo?: number;
+      timeBasis?: "recorded" | "updated";
       sortBy?: "stream" | "recorded" | "size";
       sortDir?: "asc" | "desc";
       limit?: number;
@@ -408,6 +430,9 @@ export class ApiClient {
     }
     if (typeof params.recordedTo === "number") {
       search.set("recorded_to", String(params.recordedTo));
+    }
+    if (params.timeBasis) {
+      search.set("time_basis", params.timeBasis);
     }
     if (params.sortBy) {
       search.set("sort_by", params.sortBy);

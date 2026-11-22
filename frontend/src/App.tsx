@@ -33,6 +33,8 @@ export default function App(): JSX.Element {
   const [showLogin, setShowLogin] = useState(false);
   const [authError, setAuthError] = useState("");
   const [settingsDirty, setSettingsDirty] = useState(false);
+  const settingsSave = useRef<Promise<boolean> | null>(null);
+  const navigationRequest = useRef(0);
   const sessionRequest = useRef(0);
 
   const api = useMemo(() => new ApiClient(), []);
@@ -80,15 +82,28 @@ export default function App(): JSX.Element {
   }, [hasAdminAccess, page]);
 
   const isViewerAllowed = Boolean(auth && (auth.authenticated || !auth.viewer_auth_required));
-  const canLeaveSettings = (): Promise<boolean> => settingsDirty ? ask("Your changes have not been saved. Discard them to leave Settings.") : Promise.resolve(true);
+  const onSettingsSaveStarted = (): ((saved: boolean) => void) => {
+    let resolveSave: (saved: boolean) => void = () => undefined;
+    const save = new Promise<boolean>(resolve => { resolveSave = resolve; });
+    settingsSave.current = save;
+    return saved => {
+      if (settingsSave.current === save) settingsSave.current = null;
+      resolveSave(saved);
+    };
+  };
+  const canLeaveSettings = (): Promise<boolean> => settingsSave.current ?? (settingsDirty
+    ? ask("Your changes have not been saved. Discard them to leave Settings.")
+    : Promise.resolve(true));
   const navigate = async (next: PageKey): Promise<void> => {
-    if (next === page || !await canLeaveSettings()) return;
+    const request = ++navigationRequest.current;
+    if (next === page || !await canLeaveSettings() || request !== navigationRequest.current) return;
     setSettingsDirty(false);
     setPage(next);
   };
 
   const onLogout = async (): Promise<void> => {
-    if (!await canLeaveSettings()) return;
+    const request = ++navigationRequest.current;
+    if (!await canLeaveSettings() || request !== navigationRequest.current) return;
     setSettingsDirty(false);
     await api.logout().catch(() => undefined);
     await refreshSession();
@@ -142,7 +157,7 @@ export default function App(): JSX.Element {
         {page === "dashboard" && <DashboardPage api={api} />}
         {page === "information" && <InformationPage api={api} />}
         {page === "settings" && hasAdminAccess && (
-          <SettingsPage api={api} onDirtyChange={setSettingsDirty} onUiConfigChanged={() => void refreshSession()} />
+          <SettingsPage api={api} onDirtyChange={setSettingsDirty} onSaveStarted={onSettingsSaveStarted} onUiConfigChanged={() => void refreshSession()} />
         )}
         {page === "live" && (
           <LiveViewPage api={api} canManage={hasAdminAccess} authRole={auth?.role ?? null} onConfigure={() => navigate("settings")} />

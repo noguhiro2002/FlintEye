@@ -11,6 +11,7 @@ import time
 
 from lifecycle import Adapter, Native, owned_profile, remove_owned_profile
 from lifecycle_common import ROOT, request_quit, seed_runtime, wait_http
+from lifecycle_report import requires_preview_8_checks
 
 
 class PackageContainer(Adapter):
@@ -45,8 +46,10 @@ class PackageContainer(Adapter):
                           '--build-arg', 'QA_GID='+str(os.getgid()),
                           '--build-arg', f'USER_INSTALL={int(self.user_install)}', '-t', self.image, ROOT], timeout=600)
             privilege_options = ['--security-opt', 'no-new-privileges', '--cap-drop', 'ALL'] if self.user_install else []
+            locale_options = (['-e', 'LC_ALL=C', '-e', 'PYTHONUTF8=0', '-e', 'PYTHONCOERCECLOCALE=0']
+                              if self.user_install and requires_preview_8_checks(self.args.release) else [])
             self.command(['docker', 'run', '-d', '--init', '--network', 'host', '--name', self.name,
-                          *privilege_options,
+                          *privilege_options, *locale_options,
                           '--label', 'community.flinteye.qa='+self.name,
                           '--mount', f'type=bind,src={self.directory},dst=/qa',
                           '--mount', f'type=bind,src={self.inputs},dst=/artifacts,readonly', self.image])

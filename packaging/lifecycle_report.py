@@ -24,12 +24,22 @@ RETAINED_CHECKS = {'retained-administrator-login', 'real-api-build-identity-and-
 NEW_BROWSER_CHECKS = {'GUI-settings-save-and-effective-values', 'GUI-ONVIF-inspect-and-PTZ-movement',
                       'GUI-camera-rename-preserves-stream-and-recordings', 'GUI-rejects-duplicate-and-migrates-paths'}
 NEW_RETAINED_CHECKS = {'retained-branding-rename-and-PTZ'}
+EVENT_BROWSER_CHECKS = {'GUI-event-settings-and-equipment-API-archive-playback-and-download'}
+EVENT_RETAINED_CHECKS = {'retained-event-recording-settings-and-playback'}
 
 
 def requires_preview_7_checks(release: str) -> bool:
+    return _requires_preview_checks(release, 7)
+
+
+def requires_preview_8_checks(release: str) -> bool:
+    return _requires_preview_checks(release, 8)
+
+
+def _requires_preview_checks(release: str, number: int) -> bool:
     version, _, preview = release.partition('-preview.')
     return tuple(map(int, version.split('.'))) > (1, 2, 0) or (
-        version == '1.2.0' and (not preview or int(preview) >= 7))
+        version == '1.2.0' and (not preview or int(preview) >= number))
 
 
 class Report:
@@ -146,6 +156,8 @@ def collect(directory: Path, *, release: str, commit: str) -> dict:
                 expected_checks = BROWSER_CHECKS if name.startswith('browser/') else RETAINED_CHECKS
                 if requires_preview_7_checks(release):
                     expected_checks = expected_checks | (NEW_BROWSER_CHECKS if name.startswith('browser/') else NEW_RETAINED_CHECKS)
+                if requires_preview_8_checks(release):
+                    expected_checks = expected_checks | (EVENT_BROWSER_CHECKS if name.startswith('browser/') else EVENT_RETAINED_CHECKS)
                 if name.startswith('browser/') and key[0] == 'source' and expected_os == 'linux':
                     expected_checks = expected_checks | {'synthetic-USB-and-IP-live-multiview-and-removal',
                                                         'desktop-browser-one-use-setup-handoff'}
@@ -177,6 +189,15 @@ def collect(directory: Path, *, release: str, commit: str) -> dict:
             if download_hash != original_hashes.get(selected):
                 raise ValueError('Downloaded bytes differ from selected original recording')
             proofs['browser/'+filename] = download_hash
+            if requires_preview_8_checks(release):
+                event = json.loads((path.parent/'browser/event-selection.json').read_text(encoding='utf-8'))
+                if not re.fullmatch(r'[0-9a-f]{32}', event['event_id']) or type(event['clip_index']) is not int or event['clip_index'] < 0:
+                    raise ValueError('Invalid event recording selection')
+                archived = f"event-recordings/{event['event_id']}/{event['clip_index']}.mp4"
+                archive_hash = digest(path.parent/'browser/event-download.mp4')
+                if archive_hash != original_hashes.get(archived):
+                    raise ValueError('Event download differs from the preserved archive')
+                proofs['browser/event-download.mp4'] = archive_hash
             if not (path.parent/'decode.log').is_file(): raise ValueError('No full recording decode log')
             audio = json.loads((path.parent/'recording-audio.json').read_text(encoding='utf-8'))
             if not audio.get('enabled_camera') or audio.get('disabled_camera') != []:

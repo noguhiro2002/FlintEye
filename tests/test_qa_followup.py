@@ -97,11 +97,11 @@ class BootstrapTests(unittest.TestCase):
             self.assertIn('bootout',run.call_args.args[0])
 
     def test_media_update_stops_publishers_before_reconfiguring_recorder(self):
-        from flinteye_app.orchestrator_supervisor import OrchestratorSupervisor
+        from flinteye_app.orchestrator_supervisor import ManagedProcess, OrchestratorSupervisor
         import threading
         supervisor=OrchestratorSupervisor.__new__(OrchestratorSupervisor)
         supervisor._lock=threading.RLock()
-        supervisor._processes={key:SimpleNamespace(key=key) for key in ['mediamtx:direct','camera:a','multiview','multiview-input:a','multiview-buffer:a']}
+        supervisor._processes={key:ManagedProcess(key, 'fixture') for key in ['mediamtx:direct','camera:a','multiview','multiview-input:a','multiview-buffer:a']}
         events=[]
         with patch.object(supervisor,'_stop_process',side_effect=lambda process:events.append(process.key)):
             with supervisor.media_update():

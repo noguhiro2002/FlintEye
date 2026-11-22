@@ -22,6 +22,25 @@
 - Runtime config persistence (`runtime.json`)
 - Snapshot capture and stream address discovery
 
+<a id="equipment-recording-events"></a>
+### Equipment recording events
+
+Enable event recordings and obtain the dedicated token in [Settings → Recording](../USER_GUIDE.md#event-recordings). Use local HTTP on the FlintEye server or the trusted LAN HTTPS address from another device.
+
+```bash
+curl --fail-with-body http://127.0.0.1:18080/api/v1/recording-events \
+  -H "Authorization: Bearer ${FLINTEYE_EVENT_TOKEN}" \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: press-03-alarm-42' \
+  --data '{"camera_ids":["press-03","workbench"],"occurred_at":"2026-11-22T10:35:23+09:00","lookback_sec":45,"label":"Press 03 alarm"}'
+```
+
+Use the camera IDs from `GET /api/v1/cameras` as an administrator. Supply one or more IDs. `occurred_at` accepts an ISO 8601 timestamp with an offset or `Z`. Omit it to use receipt time. For the example above, the requested interval is 10:34:38 to 10:35:23. Retrying the same request with the same idempotency key returns the original event. Reusing that key with different fields returns HTTP 409.
+
+`202 Accepted` returns an event ID. Poll `GET /api/v1/recording-events/{event_id}` with the event token, or use **Recordings → Event recordings** with a viewer or administrator session. `ready` means the requested interval was saved, `partial` means some footage was missing, and `unavailable` means no completed footage matched. `waiting_recording` can last until the current segment closes. `waiting_storage` resumes after the original destination is reconnected or space is freed. An administrator can cancel a waiting event.
+
+The event token can submit events and read their status. Sign in to play or download the media. The archive contains independent clips at video frame boundaries. The queue and archive index are kept in the FlintEye profile. Back up the profile and event folder together to retain playback from the list.
+
 ### 11.1 Install dependencies
 
 ```bash

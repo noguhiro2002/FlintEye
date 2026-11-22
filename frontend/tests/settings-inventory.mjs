@@ -9,6 +9,7 @@ const files = {
   'pages/SettingsPage.tsx': 'settings', 'components/StartupSettings.tsx': 'quick',
   'components/NetworkAccess.tsx': 'runtime-network', 'components/CameraAudioSettings.tsx': 'camera-audio',
   'components/SettingsHelp.tsx': 'settings-help',
+  'components/EventRecordings.tsx': 'event-recording',
 };
 const controls = new Map();
 const normalize = value => value.replace(/\s+/g, ' ').trim();
@@ -34,6 +35,8 @@ for (const [file, defaultSection] of Object.entries(files)) {
   }
   collectLabels(source);
   function visit(node, section = defaultSection, label = '', variants = []) {
+    if (defaultSection === 'event-recording' && ts.isFunctionDeclaration(node) &&
+        node.name?.text !== 'EventRecordingOptions') return;
     if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken) {
       const branch = node.left.getText().match(/\bmode === "(quick|advanced)"/);
       if (branch) section = branch[1];

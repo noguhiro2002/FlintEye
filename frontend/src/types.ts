@@ -608,6 +608,35 @@ export interface RecordingPlaybackPrepareResponse {
   cache_file: string;
 }
 
+export interface EventRecordingSettings {
+  enabled: boolean;
+  folder: string;
+  token_configured: boolean;
+  max_lookback_sec: number;
+  token?: string;
+}
+
+export interface EventRecordingClip {
+  file_id: string;
+  camera_id: string;
+  stream_id: string;
+  started_at: number;
+  ended_at: number;
+  modified_at: number;
+  size_bytes: number;
+}
+
+export interface RecordingEvent {
+  id: string;
+  label: string;
+  occurred_at: number;
+  requested_from: number;
+  status: string;
+  detail: string;
+  cameras: {id: string; stream: string; label: string}[];
+  clips: EventRecordingClip[];
+}
+
 export interface ViewerInfoResponse {
   generated_at: number;
   api: {

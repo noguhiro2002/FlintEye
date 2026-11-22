@@ -27,6 +27,10 @@ Use `ghcr.io/noguhiro2002/flinteye:@IMAGE_VERSION@` for `linux/amd64` or `linux/
 
 ## Changes in this version
 
+- Equipment can preserve the footage leading up to an event by sending a timestamp, lookback and camera IDs to the new API. FlintEye saves the requested interval in a separate folder and shows it in **Recordings → Event recordings**. [Setup and API guide](USER_GUIDE.md#event-recordings)
+- On macOS, stopping the recorder gives MediaMTX time to finalize open segments. **Retry Stop** can index a segment whose completion hook was lost after validating the finished video. Recordings can be filtered by capture time or file update time.
+- Camera settings identify recording and ONVIF controls during setup. Settings saves complete before navigation, and Live View reports a rejected camera operation. On first launch the network picker defaults to this computer only.
+
 - **Inspect camera** checks Media1 and Media2 profiles for PTZ capabilities. Auto discovery checks TCP 2020 for Tapo cameras when discovery over the network fails. The inspection result distinguishes unreachable endpoints, rejected credentials and TLS certificate failures.
 - The desktop menu and Dashboard share monitoring status and available actions. **Retry Stop** can index completed recordings after storage recovers. On macOS, the **Force quit** confirmation appears after the menu closes, and confirmed force quit interrupts an outstanding stop.
 - USB and IP camera display names can be edited in Settings. Changes to a MediaMTX path update explicit recording and Multiview source selections while previously recorded clips remain at their original paths.

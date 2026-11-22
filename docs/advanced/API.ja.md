@@ -11,8 +11,33 @@
 > 単体 MediaMTX の保持設定およびサービス設定は、FlintEye が管理するストレージには適用されません。
 > リスナーはループバックに維持してください。LAN アクセスには、[配布ガイド](../DISTRIBUTION.ja.md)で説明されている認証付き HTTPS プロキシを使用します。
 
-<a id="11-unified-camera-orchestrator-api-uvc--multiview--mediamtx"></a>
+<a id="equipment-recording-events"></a>
+## 設備の異常を受け付けて直前の映像を保存する
 
+[Settings → Recording](../USER_GUIDE.ja.md#event-recordings) でイベント録画を有効にし、専用トークンを取得します。FlintEye を動かしている端末からはローカルの HTTP、別端末からは証明書を信頼済みの LAN HTTPS アドレスを使います。
+
+```bash
+curl --fail-with-body http://127.0.0.1:18080/api/v1/recording-events \
+  -H "Authorization: Bearer ${FLINTEYE_EVENT_TOKEN}" \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: press-03-alarm-42' \
+  --data '{"camera_ids":["press-03","workbench"],"occurred_at":"2026-11-22T10:35:23+09:00","lookback_sec":45,"label":"Press 03 alarm"}'
+```
+
+`camera_ids` には、管理者として `GET /api/v1/cameras` で確認した ID を 1 件以上指定します。`occurred_at` には UTC オフセット付きの ISO 8601 時刻を指定します。省略時は FlintEye での受信時刻です。この例では 10:34:38 から 10:35:23 までを保存します。通信を再試行するときに同じ `Idempotency-Key` と同じ内容を送ると、最初に受け付けたイベントが返ります。キーが同じで内容が異なる場合は HTTP 409 が返ります。
+
+HTTP 202 が返ったら、応答の ID を使い `GET /api/v1/recording-events/{event_id}` で状態を確認できます。機器側では送信時と同じトークンを使います。映像を確認するにはブラウザでサインインし、**Recordings → Event recordings** を開きます。
+
+| API の状態 | 意味 |
+| --- | --- |
+| `waiting_recording` | 対象の録画セグメントが閉じるのを待っています。 |
+| `waiting_storage` | 保存先を再接続するか空き容量を確保すると再開します。 |
+| `ready` | 指定区間を保存しました。切り出しの境界は映像のフレーム単位です。 |
+| `partial` / `unavailable` | 一部だけ保存できたか、該当する完了済み録画がありませんでした。 |
+
+待機中のイベントは管理者が取り消せます。イベント一覧の情報は FlintEye のプロファイルに保存されます。バックアップにはプロファイルとイベント録画のフォルダーを含めてください。
+
+<a id="11-unified-camera-orchestrator-api-uvc--multiview--mediamtx"></a>
 ## 11. FlintEye API（UVC / MultiView / MediaMTX）
 
 `flinteye_app/orchestrator_api.py` は、以下を制御するための単一の REST API を提供します。

@@ -24,6 +24,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from flinteye_app.flinteye_runtime import application_dir
+from flinteye_app.recording_archive import ArchiveError, ArchiveSettings, EventRequest, RecordingArchive
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -101,6 +102,9 @@ class AppContext:
         self._closing = threading.Event()
         from flinteye_app.monitoring import MonitoringController
         self.monitoring = MonitoringController(self)
+        self.recording_archive = RecordingArchive(
+            Path(self.store.runtime_file).resolve().parent, self.workspace_dir, self.store.get_effective,
+            lambda: self.monitoring.desired or self.monitoring.phase in {'stopping', 'finalizing'})
 
     def check_login_budget(self, client_host: str) -> None:
         now = time.monotonic()
@@ -134,6 +138,7 @@ class AppContext:
                 return
             self._recording_cache_cleanup_stop.set()
             try:
+                self.recording_archive.close()
                 try:
                     self.monitoring.close()
                 finally:
@@ -750,7 +755,9 @@ def _all_recording_files(config: RuntimeConfig, workspace: str):
     return files
 
 
-def _resolve_recording_file(config: RuntimeConfig, workspace: str, file_id: str):
+def _resolve_recording_file(config: RuntimeConfig, workspace: str, file_id: str, archive=None):
+    if file_id.startswith("event.") and archive is not None:
+        return _archive_call(archive.resolve, file_id)
     root = _resolve_record_root_path(config, workspace)
     if file_id.startswith("v2."):
         try:
@@ -904,8 +911,8 @@ def _recording_natural_sort_key(value: str) -> tuple[tuple[int, int | str], ...]
 
 
 def _select_recording_ffmpeg_bin(config: RuntimeConfig) -> str:
-    ffmpeg_bin = config.multiview.ffmpeg_bin.strip()
-    return ffmpeg_bin or "ffmpeg"
+    from flinteye_app.recording_events import media_bins
+    return media_bins(config)[0]
 
 
 def _build_recording_playback_cache_path(
@@ -1012,12 +1019,14 @@ def _prepare_recording_playback_file(
     root: Path,
     relative_path: str,
     file_path: Path,
+    archive_file: bool = False,
 ) -> Path:
     stat_result = file_path.stat()
     age_sec = max(0.0, time.time() - float(stat_result.st_mtime))
     from flinteye_app.recording_events import file_evidence
     evidence = file_evidence(Path(context.store.runtime_file).resolve().parent, [file_path]).get(str(file_path.resolve()))
-    if (evidence is not None and not evidence['is_stable']) or (evidence is None and age_sec < RECORDING_STABLE_AGE_SEC):
+    if not archive_file and ((evidence is not None and not evidence['is_stable'])
+                             or (evidence is None and age_sec < RECORDING_STABLE_AGE_SEC)):
         raise HTTPException(
             status_code=409,
             detail="recording file is still being written; wait until it becomes stable",
@@ -1395,6 +1404,7 @@ def _on_startup() -> None:
                 " viewer APIs are public and admin APIs are disabled until API_ADMIN_TOKEN is set"
             )
     context.monitoring.startup()
+    context.recording_archive.start()
     if config.auth.provider == "local" and not local_auth_is_configured(config.auth):
         return
     enabled_camera_count = sum(1 for cam in config.cameras if cam.enabled)
@@ -2633,6 +2643,58 @@ def get_recording_streams(request: Request) -> dict[str, Any]:
     }
 
 
+def _archive_call(operation, *args, **kwargs):
+    try:
+        return operation(*args, **kwargs)
+    except ArchiveError as error:
+        headers = {"Retry-After": "5"} if error.status == 429 else None
+        raise HTTPException(status_code=error.status, detail=str(error), headers=headers) from error
+    except (OSError, sqlite3.Error) as error:
+        raise HTTPException(status_code=503, detail="Event recording storage is temporarily unavailable") from error
+
+
+def _archive_token(credentials: HTTPAuthorizationCredentials | None = Depends(http_bearer)) -> str:
+    if credentials is None or not 1 <= len(credentials.credentials) <= 256:
+        raise HTTPException(status_code=401, detail="An event recording token is required")
+    return credentials.credentials
+
+
+@app.get("/api/v1/recording-events/settings", dependencies=[Depends(require_admin)])
+def get_event_recording_settings(request: Request) -> dict:
+    return _archive_call(get_context(request).recording_archive.settings)
+
+
+@app.put("/api/v1/recording-events/settings", dependencies=[Depends(require_admin)])
+def put_event_recording_settings(request: Request, response: Response, payload: ArchiveSettings) -> dict:
+    response.headers["Cache-Control"] = "no-store"
+    context = get_context(request)
+    with context.lock:
+        return _archive_call(context.recording_archive.configure, payload)
+
+
+@app.post("/api/v1/recording-events", status_code=202)
+def create_recording_event(request: Request, payload: EventRequest, token: str = Depends(_archive_token)) -> dict:
+    return _archive_call(get_context(request).recording_archive.submit, payload, token,
+                         request.headers.get("Idempotency-Key"))
+
+
+@app.get("/api/v1/recording-events", dependencies=[Depends(require_viewer)])
+def get_recording_events(request: Request, limit: int = 100, offset: int = 0) -> dict:
+    if not 1 <= limit <= 200 or offset < 0:
+        raise HTTPException(status_code=400, detail="Use a limit of 1 to 200 and a nonnegative offset")
+    return {"items": _archive_call(get_context(request).recording_archive.events, limit=limit, offset=offset)}
+
+
+@app.get("/api/v1/recording-events/{event_id}")
+def get_recording_event(request: Request, event_id: str, token: str = Depends(_archive_token)) -> dict:
+    return _archive_call(get_context(request).recording_archive.event_status, event_id, token)
+
+
+@app.post("/api/v1/recording-events/{event_id}/cancel", dependencies=[Depends(require_admin)])
+def cancel_recording_event(request: Request, event_id: str) -> dict:
+    return _archive_call(get_context(request).recording_archive.cancel, event_id)
+
+
 @app.get("/api/v1/recordings", dependencies=[Depends(require_viewer)])
 def get_recordings(
     request: Request,
@@ -2640,6 +2702,7 @@ def get_recordings(
     status: str = "all",
     recorded_from: float | None = None,
     recorded_to: float | None = None,
+    time_basis: str = "updated",
     sort_by: str = "recorded",
     sort_dir: str = "desc",
     limit: int = 200,
@@ -2653,8 +2716,12 @@ def get_recordings(
         raise HTTPException(status_code=400, detail="offset must be >= 0")
     if status not in {"all", "stable", "recording"}:
         raise HTTPException(status_code=400, detail="status must be one of: all, stable, recording")
+    if any(value is not None and not math.isfinite(value) for value in (recorded_from, recorded_to)):
+        raise HTTPException(status_code=400, detail="Recording date bounds must be finite")
     if recorded_from is not None and recorded_to is not None and recorded_from > recorded_to:
         raise HTTPException(status_code=400, detail="recorded_from must be <= recorded_to")
+    if time_basis not in {"updated", "recorded"}:
+        raise HTTPException(status_code=400, detail="time_basis must be updated or recorded")
     if sort_by not in {"stream", "recorded", "size"}:
         raise HTTPException(status_code=400, detail="sort_by must be one of: stream, recorded, size")
     if sort_dir not in {"asc", "desc"}:
@@ -2681,10 +2748,15 @@ def get_recordings(
         files = [item for item in files if bool(item["is_stable"])]
     elif status == "recording":
         files = [item for item in files if not bool(item["is_stable"])]
-    if recorded_from is not None:
-        files = [item for item in files if float(item["modified_at"]) >= recorded_from]
-    if recorded_to is not None:
-        files = [item for item in files if float(item["modified_at"]) <= recorded_to]
+    if time_basis == "recorded" and (recorded_from is not None or recorded_to is not None):
+        files = [item for item in files if item["started_at"] is not None and item["ended_at"] is not None
+                 and (recorded_from is None or item["ended_at"] > recorded_from)
+                 and (recorded_to is None or item["started_at"] <= recorded_to)]
+    elif time_basis == "updated":
+        if recorded_from is not None:
+            files = [item for item in files if float(item["modified_at"]) >= recorded_from]
+        if recorded_to is not None:
+            files = [item for item in files if float(item["modified_at"]) <= recorded_to]
 
     reverse_sort = sort_dir == "desc"
     if sort_by == "stream":
@@ -2695,7 +2767,10 @@ def get_recordings(
     elif sort_by == "size":
         files.sort(key=lambda item: int(item["size_bytes"]), reverse=reverse_sort)
     else:
-        files.sort(key=lambda item: float(item["modified_at"]), reverse=reverse_sort)
+        field = "started_at" if time_basis == "recorded" else "modified_at"
+        known = [item for item in files if item[field] is not None]
+        unknown = [item for item in files if item[field] is None]
+        files = sorted(known, key=lambda item: float(item[field]), reverse=reverse_sort) + unknown
 
     total = len(files)
     page = files[offset : offset + limit]
@@ -2713,13 +2788,14 @@ def get_recordings(
 def post_prepare_recording_file(request: Request, file_id: str) -> dict[str, Any]:
     context = get_context(request)
     config = context.store.get_effective()
-    root, relative_path, file_path = _resolve_recording_file(config, context.workspace_dir, file_id)
+    root, relative_path, file_path = _resolve_recording_file(config, context.workspace_dir, file_id, context.recording_archive)
     playable_path = _prepare_recording_playback_file(
         context,
         config,
         root=root,
         relative_path=relative_path,
         file_path=file_path,
+        archive_file=file_id.startswith("event."),
     )
     from flinteye_app.camera_audio import probe_audio
     audio_status, _ = probe_audio("ffprobe", playable_path)
@@ -2736,7 +2812,7 @@ def post_prepare_recording_file(request: Request, file_id: str) -> dict[str, Any
 def get_recording_thumbnail_file(request: Request, file_id: str) -> Response:
     context = get_context(request)
     config = context.store.get_effective()
-    root, relative_path, file_path = _resolve_recording_file(config, context.workspace_dir, file_id)
+    root, relative_path, file_path = _resolve_recording_file(config, context.workspace_dir, file_id, context.recording_archive)
     thumbnail_path = _prepare_recording_thumbnail_file(
         context,
         config,
@@ -2751,13 +2827,14 @@ def get_recording_thumbnail_file(request: Request, file_id: str) -> Response:
 def get_recording_playable_file(request: Request, file_id: str) -> Response:
     context = get_context(request)
     config = context.store.get_effective()
-    root, relative_path, file_path = _resolve_recording_file(config, context.workspace_dir, file_id)
+    root, relative_path, file_path = _resolve_recording_file(config, context.workspace_dir, file_id, context.recording_archive)
     playable_path = _prepare_recording_playback_file(
         context,
         config,
         root=root,
         relative_path=relative_path,
         file_path=file_path,
+        archive_file=file_id.startswith("event."),
     )
     return FileResponse(path=playable_path, media_type="video/mp4")
 
@@ -2766,7 +2843,7 @@ def get_recording_playable_file(request: Request, file_id: str) -> Response:
 def get_recording_file(request: Request, file_id: str) -> Response:
     context = get_context(request)
     config = context.store.get_effective()
-    root, relative_path, file_path = _resolve_recording_file(config, context.workspace_dir, file_id)
+    root, relative_path, file_path = _resolve_recording_file(config, context.workspace_dir, file_id, context.recording_archive)
     return FileResponse(
         path=file_path,
         filename=_build_recording_download_filename(relative_path, file_path),

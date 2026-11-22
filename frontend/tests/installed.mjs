@@ -9,7 +9,7 @@ const { values } = parseArgs({ options: {
   url: { type: 'string' }, profile: { type: 'string' }, output: { type: 'string' },
   release: { type: 'string' }, commit: { type: 'string' }, retained: { type: 'boolean', default: false },
   'fixture-url': { type: 'string' }, 'synthetic-uvc': { type: 'boolean', default: false },
-  'onvif-url': { type: 'string' },
+  'onvif-url': { type: 'string' }, 'archive-folder': { type: 'string' },
 }});
 assert(values.url && values.profile && values.output && values.release);
 const origin = new URL(values.url);
@@ -19,6 +19,9 @@ await mkdir(output, { recursive: true });
 const password = 'FlintEye-synthetic-QA-admin-174';
 const viewerPassword = 'FlintEye-synthetic-QA-viewer-174';
 const onvif = values['onvif-url'] && new URL(values['onvif-url']);
+const eventFolder = values['archive-folder'];
+const eventApi = '/api/v1/recording-events';
+const eventLabel = 'Synthetic equipment fault';
 if (onvif) assert.equal(onvif.hostname, '127.0.0.1');
 const renamedIp = '入口 IP – QA';
 const renamedSecond = '作業台 カメラ – QA';
@@ -103,6 +106,71 @@ function usbDiscovery() {
   return page.getByRole('heading', { name: 'UVC Camera Discovery', exact: true }).locator('..');
 }
 
+async function archivePlayback() {
+  await nav('Recordings');
+  await page.getByRole('button', { name: 'Event recordings', exact: true }).click();
+  await page.getByRole('heading', { name: new RegExp('^'+eventLabel) }).waitFor();
+  await page.getByRole('button', { name: 'Play QA camera 1', exact: true }).click();
+  const video = page.getByRole('dialog').locator('video');
+  await video.waitFor();
+  await video.evaluate(v => { v.muted = true; void v.play().catch(() => {}); });
+  await until(() => video.evaluate(v => ({ width: v.videoWidth, time: v.currentTime, duration: v.duration })),
+    v => v.width > 0 && v.time > .1 && Math.abs(v.duration - 1) <= .15, 'Event video playback and duration', 30);
+}
+
+async function archiveEvent() {
+  await nav('Settings'); await settingsReady(); await category('Recording');
+  await page.getByLabel('Enable event recordings', { exact: true }).check();
+  await page.getByLabel('Event recording folder', { exact: true }).fill(eventFolder);
+  await page.getByLabel('Maximum lookback (seconds)', { exact: true }).fill('90');
+  const configured = page.waitForResponse(r => r.url().endsWith(eventApi+'/settings') && r.request().method() === 'PUT');
+  await page.getByRole('button', { name: 'Save event settings', exact: true }).click();
+  assert.equal((await configured).status(), 200, 'Could not save event recording settings');
+  const token = await page.getByLabel('Event token (copy it now)', { exact: true }).inputValue();
+  assert(token.length >= 32);
+  const settings = await json(eventApi+'/settings');
+  assert.equal(settings.enabled, true);
+  assert.equal(settings.max_lookback_sec, 90);
+  assert.equal(settings.token, undefined);
+  const clips = await until(() => json('/api/v1/recordings?status=stable&stream_id=qa-camera-1&time_basis=recorded'),
+    value => value.items.some(clip => clip.duration_sec > 1.2), 'Finalized event input');
+  const input = clips.items.find(clip => clip.duration_sec > 1.2);
+  const occurred = new Date((input.ended_at - .05) * 1000);
+  const payload = { camera_ids: ['qa-camera-1'], lookback_sec: 1, occurred_at: occurred.toISOString(), label: eventLabel };
+  // A separate request context supplies only the synthetic equipment credential.
+  const device = await browser.newContext({ extraHTTPHeaders: { Authorization: 'Bearer '+token } });
+  let result;
+  try {
+    const response = await device.request.post(new URL(eventApi, origin).href, { data: payload,
+      headers: { 'Idempotency-Key': 'fixture-fault-01' } });
+    assert.equal(response.status(), 202, await response.text());
+    const submitted = await response.json();
+    assert.equal(submitted.occurred_at, occurred.getTime() / 1000);
+    const status = new URL(eventApi+'/'+submitted.id, origin).href;
+    result = await until(async () => (await device.request.get(status)).json(),
+      value => ['ready','partial','unavailable','failed'].includes(value.status), 'Equipment recording result', 60);
+  } finally {
+    await device.close();
+  }
+  assert.equal(result.status, 'ready', result.detail);
+  assert.equal(result.clips.length, 1);
+  assert.equal(result.clips[0].ended_at - result.clips[0].started_at, 1);
+  await archivePlayback();
+  const downloaded = page.waitForEvent('download');
+  await page.getByRole('dialog').getByRole('link', { name: 'Download', exact: true }).click();
+  await (await downloaded).saveAs(join(output, 'event-download.mp4'));
+  await writeFile(join(output, 'event-selection.json'), JSON.stringify({ event_id: result.id,
+    clip_index: Number(result.clips[0].file_id.split('.').at(-1)) }));
+  await page.getByRole('button', { name: 'Close player', exact: true }).click();
+  await nav('Settings'); await settingsReady(); await category('Recording');
+  const rotated = page.waitForResponse(r => r.url().endsWith(eventApi+'/settings') && r.request().method() === 'PUT');
+  await page.getByRole('button', { name: 'Replace event token', exact: true }).click();
+  assert.equal((await rotated).status(), 200, 'Could not replace event recording token');
+  const replacement = await page.getByLabel('Event token (copy it now)', { exact: true }).inputValue();
+  assert.notEqual(replacement, token);
+  stages.push('GUI-event-settings-and-equipment-API-archive-playback-and-download');
+}
+
 async function applyUvcCamera() {
   const usb = usbDiscovery();
   await usb.getByRole('button', { name: /^FlintEye QA USB camera/ }).click();
@@ -144,7 +212,12 @@ async function configureSettings() {
   await page.getByLabel(/^Additional Record Paths/).fill('qa-camera-1\nqa-camera-2');
   await page.getByLabel(/^Segment Duration/).fill('2s');
   await page.getByLabel(/^Record Part Duration/).fill('200ms');
-  await saveCameraForm();
+  if (eventFolder) {
+    await header.getByRole('button', { name: 'Save changes', exact: true }).click();
+    await nav('Dashboard');
+  } else {
+    await saveCameraForm();
+  }
   const config = await json('/api/v1/config/effective');
   for (const [key, value] of Object.entries(branding)) assert.equal(config.ui[key], value);
   assert.equal(config.logging.level, 'INFO');
@@ -409,6 +482,14 @@ try {
     await page.screenshot({ path: join(output, name.replaceAll(' ', '-')+'.png'), fullPage: true });
   }
   stages.push('all-six-main-screens');
+  if (values.retained && eventFolder) {
+    const settings = await json(eventApi+'/settings');
+    assert.equal(settings.enabled, true);
+    assert.equal(settings.token_configured, true);
+    await archivePlayback();
+    await page.getByRole('button', { name: 'Close player', exact: true }).click();
+    stages.push('retained-event-recording-settings-and-playback');
+  }
   if (!values.retained) {
     await until(() => json('/api/v1/viewer/cameras'), value => value.items.length === 2 && value.items.every(c => c.health?.state === 'healthy'), 'Two receiving camera workers', 120);
     await nav('Live View');
@@ -440,6 +521,7 @@ try {
     await writeFile(join(output, 'download-selection.json'), JSON.stringify({ relativePath, savedName }));
     await page.getByRole('button', { name: 'Close player', exact: true }).click();
     stages.push('recording-GUI-playback-and-download');
+    if (eventFolder) await archiveEvent();
 
     const redBefore = (await json('/api/v1/status/processes')).items.find(stream => stream.id === 'camera:qa-camera-1');
     assert.equal(redBefore.status, 'running');

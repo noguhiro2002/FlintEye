@@ -208,26 +208,28 @@ export function LiveViewPage({ api, canManage = false, authRole = null, onConfig
   const handleExclude = async (camera: ViewerCameraItem): Promise<void> => {
     const request = ++cameraRequest.current;
     try {
-      await api.excludeCamera(camera.id, "Manually excluded from Live View");
+      const result = await api.excludeCamera(camera.id, "Manually excluded from Live View");
+      if (!result.ok) throw new Error("The camera could not be excluded. Check its status and retry.");
       const data = await api.getViewerCameras();
       if (request !== cameraRequest.current) return;
       setCameras(data.items);
       setError("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to exclude camera");
+      if (request === cameraRequest.current) setError(e instanceof Error ? e.message : "Failed to exclude camera");
     }
   };
 
   const handleRestore = async (camera: ViewerCameraItem): Promise<void> => {
     const request = ++cameraRequest.current;
     try {
-      await api.restoreCamera(camera.id);
+      const result = await api.restoreCamera(camera.id);
+      if (!result.ok) throw new Error("The camera could not be restored. Check its status and retry.");
       const data = await api.getViewerCameras();
       if (request !== cameraRequest.current) return;
       setCameras(data.items);
       setError("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to restore camera");
+      if (request === cameraRequest.current) setError(e instanceof Error ? e.message : "Failed to restore camera");
     }
   };
 

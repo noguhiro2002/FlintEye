@@ -1,13 +1,16 @@
 """Exercise the registered HTTP routes with independent anonymous, viewer and admin clients."""
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from io import BytesIO
 import json
+import os
 from pathlib import Path
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from threading import Barrier
 import unittest
 from unittest.mock import AsyncMock, patch
@@ -85,6 +88,7 @@ class ApiContractTests(unittest.TestCase):
             for params, status in [({'limit': 0}, 400), ({'limit': 5001}, 400), ({'offset': -1}, 400),
                                    ({'recorded_from': 2, 'recorded_to': 1}, 400), ({'status': 'other'}, 400),
                                    ({'sort_by': 'other'}, 400), ({'sort_dir': 'other'}, 400),
+                                   ({'time_basis': 'other'}, 400), ({'recorded_from': 'nan'}, 400),
                                    ({'limit': 'invalid'}, 422), ({'limit': 1}, 200), ({'limit': 5000}, 200)]:
                 with self.subTest(role=role, params=params):
                     response = client.get('/api/v1/recordings', params=params)
@@ -93,6 +97,76 @@ class ApiContractTests(unittest.TestCase):
                         self.assertEqual(response.json()['items'], [])
                     else:
                         self.assertIn('detail', response.json())
+
+    def test_event_settings_token_submission_status_and_cancellation(self):
+        admin, viewer, device = (self.clients[role] for role in ('admin', 'viewer', 'anonymous'))
+        archive = self.app.state.context.recording_archive
+        events = '/api/v1/recording-events'
+        settings = events+'/settings'
+        self.assertFalse(admin.get(settings).json()['enabled'])
+        self.assertEqual(viewer.get(events).json(), {'items': []})
+        root = self.runtime.parent/'event recordings'
+        root.mkdir()
+        config = {'enabled': True, 'folder': str(root), 'max_lookback_sec': 90}
+        owner = self.app.state.context
+        owner.store.patch_runtime({'cameras': [{'id': 'fixture-camera', 'path': 'fixture-camera', 'type': 'ip',
+            'ip': {'source_url': 'rtsp://127.0.0.1:8997/synthetic', 'onvif_mode': 'disabled'}}]})
+        with patch.object(archive, 'start'):
+            self.assertEqual(admin.put(settings, json={**config, 'folder': str(root.parent)}).status_code, 422)
+            configured = admin.put(settings, json=config)
+            self.assertEqual(configured.status_code, 200, configured.text)
+            self.assertEqual(configured.headers['cache-control'], 'no-store')
+            token = configured.json()['token']
+            self.assertNotIn('token', admin.get(settings).json())
+            self.assertNotIn(token, self.runtime.read_text(encoding='utf-8'))
+            headers = {'Authorization': f'Bearer {token}', 'Idempotency-Key': 'equipment-7'}
+            payload = {'camera_ids': ['fixture-camera'], 'lookback_sec': 10, 'label': 'fixture alert'}
+            for bad in ({'lookback_sec': 91}, {'camera_ids': ['absent']},
+                        {'camera_ids': ['fixture-camera', 'FIXTURE-CAMERA']},
+                        {'occurred_at': '2026-01-01T00:00:00'}, {'occurred_at': '2099-01-01T00:00:00Z'}):
+                self.assertEqual(device.post(events, json={**payload, **bad}, headers=headers).status_code, 422)
+            now = time.time()
+            result = device.post(events, json=payload, headers=headers)
+            self.assertEqual(result.status_code, 202, result.text)
+            event = result.json()
+            self.assertGreaterEqual(event['occurred_at'], now)
+            self.assertEqual(event['occurred_at'] - event['requested_from'], 10)
+            self.assertEqual(event['status'], 'waiting_recording')
+            self.assertEqual(device.post(events, json=payload, headers=headers).json(), event)
+            self.assertEqual(device.post(events, json={**payload, 'label': 'new'}, headers=headers).status_code, 409)
+            self.assertEqual(device.get(events, headers=headers).status_code, 401)
+            status = events+'/'+event['id']
+            self.assertEqual(device.get(status, headers=headers).json(), event)
+            self.assertEqual(viewer.get(events).json(), {'items': [event]})
+            self.assertEqual(admin.post(status+'/cancel').json(), {'ok': True})
+            self.assertEqual(device.get(status, headers=headers).json()['status'], 'cancelled')
+            self.assertEqual(admin.post(status+'/cancel').status_code, 409)
+            self.assertEqual(admin.put(settings, json={**config, 'rotate_token': True}).status_code, 200)
+            self.assertEqual(device.get(status, headers=headers).status_code, 401)
+
+    def test_recording_time_filter_overlaps_the_capture_interval(self):
+        from flinteye_app import recording_events
+        viewer = self.clients['viewer']
+        root = self.runtime.parent
+        directory = root/'recordings/camera/2026-01-01'
+        directory.mkdir(parents=True)
+        file = directory/'10-00-00-000000_+0900.mp4'
+        file.write_bytes(b'synthetic recording')
+        start = datetime.fromisoformat('2026-01-01T10:00:00+09:00').timestamp()
+        changed = start + 3600
+        os.utime(file, (changed, changed))
+        with patch.dict(os.environ, {'MTX_SEGMENT_DURATION': '60'}):
+            recording_events.record_event(root, file, session='test-session', complete=True)
+        legacy = directory/'legacy.mp4'
+        legacy.write_bytes(b'legacy file without capture time')
+        os.utime(legacy, (changed, changed))
+        path = '/api/v1/recordings'
+        search = {'recorded_from': start+20, 'recorded_to': start+21}
+        [found] = viewer.get(path, params={**search, 'time_basis': 'recorded'}).json()['items']
+        self.assertEqual((found['started_at'], found['ended_at'], found['modified_at']), (start, start+60, changed))
+        self.assertEqual(viewer.get(path, params=search).json()['items'], [])
+        updated = viewer.get(path, params={'recorded_from': changed, 'recorded_to': changed}).json()['items']
+        self.assertEqual(len(updated), 2)
 
     def test_rotation_invalidates_both_sessions_and_rejects_old_viewer_password(self):
         admin, viewer = self.clients['admin'], self.clients['viewer']
@@ -383,6 +457,7 @@ class ApiContractTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which('ffmpeg') and shutil.which('ffprobe'), 'requires local media tools')
     def test_viewer_can_play_and_prepare_a_real_recording(self):
         viewer = self.clients['viewer']
+        self.app.state.context.store.patch_runtime({'recording': {'min_free_bytes': 0}})
         clip = self.runtime.parent/'recordings/camera/2026-01-01/clip.mp4'
         clip.parent.mkdir(parents=True)
         subprocess.run(['ffmpeg', '-v', 'error', '-nostdin', '-f', 'lavfi', '-i', 'testsrc2=s=160x120:r=10',

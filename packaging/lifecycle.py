@@ -22,7 +22,7 @@ import venv
 
 from lifecycle_common import (ROOT, browser_check, decode_recordings, media_fixture,
                               request_quit, seed_runtime, stop_process, wait_closed, wait_http)
-from lifecycle_report import LINUX_USER_METHODS, Report, requires_preview_7_checks
+from lifecycle_report import LINUX_USER_METHODS, Report, requires_preview_7_checks, requires_preview_8_checks
 from qa_onvif import onvif_fixture
 from release_lib import digest, release_identity, version
 
@@ -157,6 +157,8 @@ class Source(Adapter):
         env = {**os.environ, 'PATH': str(Path(self.ffmpeg).parent)+os.pathsep+os.environ.get('PATH', '')}
         for name in ('FLINTEYE_LAN_ADDRESS', 'FLINTEYE_LAN_SOURCES', 'FLINTEYE_CONTAINER_BRIDGE'):
             env.pop(name, None)
+        if sys.platform.startswith('linux') and requires_preview_8_checks(self.args.release):
+            env.update(LC_ALL='C', PYTHONUTF8='0', PYTHONCOERCECLOCALE='0')
         script = self.source/'qa_uvc_source.py' if self.args.synthetic_uvc else self.executable
         mode = '--disable-lan' if self.args.synthetic_uvc else '--headless'
         self.launch([self.python, script, mode, '--data-dir', self.profile], env=env)
@@ -388,9 +390,11 @@ def exercise(adapter: Adapter, report: Report, args):
                                               prefix=adapter.fixture_prefix, app_directory=adapter.fixture_app_directory))
             onvif = (resources.enter_context(onvif_fixture(fixture, fixture_dir/'onvif-operations.json'))
                      if requires_preview_7_checks(args.release) else None)
+            archive_folder = (str(Path(adapter.app_profile)/'event-recordings')
+                              if requires_preview_8_checks(args.release) else None)
             adapter.sync_profile()
             browser_check(url, adapter.profile, report.output/'browser', args.release, args.commit, fixture,
-                          synthetic_uvc=args.synthetic_uvc, onvif_url=onvif)
+                          synthetic_uvc=args.synthetic_uvc, onvif_url=onvif, archive_folder=archive_folder)
             report.stage(phase, 'passed', 'browser/browser.json; real API; browser video/trace/screenshots')
             phase = 'quit'
             adapter.quit()
@@ -402,13 +406,20 @@ def exercise(adapter: Adapter, report: Report, args):
                               prefix=adapter.fixture_prefix, app_profile=adapter.app_profile)
             report.stage(phase, 'passed', 'Normal quit closed the API; recording files fully decoded')
             retained = {str(path.relative_to(adapter.profile)): digest(path) for path in
-                        [adapter.profile/'runtime.json', *(adapter.profile/'recordings').rglob('*')]
-                        if path.is_file() and (path.name == 'runtime.json' or path.suffix in {'.mp4', '.ts'})}
+                        [adapter.profile/'runtime.json', *(adapter.profile/'recordings').rglob('*'),
+                         *(adapter.profile/'event-recordings').rglob('*')]
+                        if path.is_file() and (path.name in {'runtime.json', 'manifest.json'}
+                                               or path.suffix in {'.mp4', '.ts'})}
             selection = json.loads((report.output/'browser/download-selection.json').read_text(encoding='utf-8'))
             selected = str(Path('recordings')/selection['relativePath'])
             downloaded = report.output/'browser'/selection['savedName']
             if selected not in retained or digest(downloaded) != retained[selected]:
                 raise AssertionError(f'Browser download differs from the selected recording: {selected}')
+            if archive_folder:
+                event = json.loads((report.output/'browser/event-selection.json').read_text(encoding='utf-8'))
+                saved = str(Path('event-recordings')/event['event_id']/f"{event['clip_index']}.mp4")
+                if digest(report.output/'browser/event-download.mp4') != retained.get(saved):
+                    raise AssertionError('Browser event download differs from the archived recording')
             phase = 'uninstall'
             adapter.uninstall(); report.stage(phase, 'passed', 'Program removed; accounts/config/recordings retained')
             adapter.sync_profile()
@@ -424,7 +435,7 @@ def exercise(adapter: Adapter, report: Report, args):
                 if not (adapter.profile/name).is_file() or digest(adapter.profile/name) != expected:
                     raise AssertionError('Reinstall changed a finalized recording: '+name)
             browser_check(url, adapter.profile, report.output/'retained', args.release, args.commit, fixture,
-                          retained=True, synthetic_uvc=args.synthetic_uvc, onvif_url=onvif)
+                          retained=True, synthetic_uvc=args.synthetic_uvc, onvif_url=onvif, archive_folder=archive_folder)
             adapter.quit(); adapter.uninstall()
             report.stage(phase, 'passed', 'retained/browser.json; existing credentials, config and recordings reused')
     except BaseException as exc:

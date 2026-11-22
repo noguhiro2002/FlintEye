@@ -56,6 +56,7 @@ def seed_runtime(profile: Path, app_profile: str, media: str, *, prefix: list[st
         raise ValueError('Refusing to initialize an unowned test profile')
     profile.mkdir(parents=True, exist_ok=True)
     (profile/'recordings').mkdir(exist_ok=True)
+    (profile/'event-recordings').mkdir(exist_ok=True)
     runtime = profile/'runtime.json'
     if runtime.exists():
         value = json.loads(runtime.read_text(encoding='utf-8'))
@@ -182,7 +183,8 @@ def media_fixture(directory: Path, media: str, ffmpeg: str, *, prefix: list[str]
 
 
 def browser_check(url: str, profile: Path, output: Path, release: str, commit: str,
-                  fixture_url: str, *, retained: bool = False, synthetic_uvc: bool = False, onvif_url: str | None = None) -> None:
+                  fixture_url: str, *, retained: bool = False, synthetic_uvc: bool = False,
+                  onvif_url: str | None = None, archive_folder: str | None = None) -> None:
     output.mkdir(parents=True, exist_ok=True)
     command = ['node', str(ROOT/'frontend/tests/installed.mjs'), '--url', url, '--profile', str(profile),
                '--output', str(output), '--release', release, '--fixture-url', fixture_url]
@@ -190,6 +192,7 @@ def browser_check(url: str, profile: Path, output: Path, release: str, commit: s
     if retained: command += ['--retained']
     if synthetic_uvc: command += ['--synthetic-uvc']
     if onvif_url: command += ['--onvif-url', onvif_url]
+    if archive_folder: command += ['--archive-folder', archive_folder]
     log_path = output/'browser.log'
     with log_path.open('w', encoding='utf-8') as log:
         completed = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, timeout=420)
@@ -239,6 +242,21 @@ def verify_camera_tone(samples: array, relative: Path) -> bool:
     return found
 
 
+def verify_packet_timestamps(packets, tracked_streams, relative: Path) -> None:
+    previous = {}
+    for packet in packets:
+        stream_index = packet.get('stream_index')
+        if stream_index not in tracked_streams:
+            continue
+        dts = packet.get('dts')
+        if type(dts) is not int or (stream_index in previous and dts <= previous[stream_index]):
+            raise AssertionError(f'{relative}: invalid source DTS on stream {stream_index}: '
+                                 f'{previous.get(stream_index)} -> {dts}')
+        previous[stream_index] = dts
+    if set(previous) != tracked_streams:
+        raise AssertionError(f'{relative}: missing source packets')
+
+
 def decode_recordings(profile: Path, ffmpeg: str, output: Path, *, prefix: list[str] | None = None,
                       app_profile: str | None = None) -> None:
     streams = {'qa-camera-1': ('red',), 'qa-camera-2': ('blue',), 'multiview_1': ('red', 'blue')}
@@ -246,72 +264,97 @@ def decode_recordings(profile: Path, ffmpeg: str, output: Path, *, prefix: list[
     checked, audio_enabled = [], []
     verified_tone = False
     ffprobe = str(Path(ffmpeg).with_name('ffprobe.exe' if ffmpeg.endswith('.exe') else 'ffprobe'))
-    with (output/'decode.log').open('w') as log:
-        for path in sorted((profile/'recordings').rglob('*')):
-            if path.suffix not in {'.mp4', '.ts'}:
-                continue
-            relative = path.relative_to(profile)
-            stream = relative.parts[1]
-            if stream not in streams:
-                raise AssertionError(f'Unexpected recording source: {relative}')
-            target = str(Path(app_profile)/relative) if app_profile else str(path)
-            probe = subprocess.run((prefix or [])+[ffprobe, '-v', 'error', '-show_streams', '-of', 'json', target],
-                                   capture_output=True, text=True, timeout=30, check=True)
-            tracks = json.loads(probe.stdout)['streams']
-            if sum(t['codec_type'] == 'video' for t in tracks) != 1:
-                raise AssertionError(f'Expected one video track: {relative}')
-            audio = [t for t in tracks if t['codec_type'] == 'audio']
-            if stream == 'qa-camera-2' and audio:
-                raise AssertionError(f'Audio-off camera recorded audio: {relative}')
-            if stream == 'qa-camera-1' and audio:
-                if len(audio) != 1 or not (audio[0]['codec_name'].startswith('pcm_s16') and
-                                          audio[0]['sample_rate'] == '16000' and audio[0]['channels'] == 1):
-                    raise AssertionError(f'Unexpected Standard recording audio: {relative}')
-                audio_enabled.extend(audio)
-                # The two fixture microphones emit 440 and 880 Hz respectively.
-                # Check complete, audible 100-ms windows; segment edges may be silent.
-                pcm = subprocess.run((prefix or [])+[ffmpeg, '-nostdin', '-v', 'error', '-xerror',
-                                     '-i', target, '-map', '0:a:0', '-t', '1', '-f', 's16le', '-'],
-                                     capture_output=True, check=True, timeout=30)
-                samples = array('h')
-                samples.frombytes(pcm.stdout)
-                if sys.byteorder == 'big':
-                    samples.byteswap()
-                if verify_camera_tone(samples, relative):
-                    verified_tone = True
+    current_path = None
+    try:
+        with (output/'decode.log').open('w') as log:
+            for path in sorted((profile/'recordings').rglob('*')):
+                if path.suffix not in {'.mp4', '.ts'}:
+                    continue
+                current_path = path
+                relative = path.relative_to(profile)
+                stream = relative.parts[1]
+                if stream not in streams:
+                    raise AssertionError(f'Unexpected recording source: {relative}')
+                target = str(Path(app_profile)/relative) if app_profile else str(path)
+                probe = subprocess.run((prefix or [])+[ffprobe, '-v', 'error', '-show_packets',
+                                       '-show_entries', 'stream:packet=stream_index,dts', '-of', 'json', target],
+                                       capture_output=True, text=True, timeout=30, check=True)
+                if probe.stderr:
+                    raise AssertionError(f'{relative}: source probe failed: {probe.stderr}')
+                metadata = json.loads(probe.stdout)
+                tracks = metadata['streams']
+                video = [track for track in tracks if track['codec_type'] == 'video']
+                if len(video) != 1:
+                    raise AssertionError(f'Expected one video track: {relative}')
+                verify_packet_timestamps(metadata.get('packets', ()),
+                                         {track['index'] for track in tracks if track['codec_type'] in ('video', 'audio')},
+                                         relative)
+                timebase = video[0]['time_base'].replace('/', ':')
+                audio = [t for t in tracks if t['codec_type'] == 'audio']
+                if stream == 'qa-camera-2' and audio:
+                    raise AssertionError(f'Audio-off camera recorded audio: {relative}')
+                if stream == 'qa-camera-1' and audio:
+                    if len(audio) != 1 or not (audio[0]['codec_name'].startswith('pcm_s16') and
+                                              audio[0]['sample_rate'] == '16000' and audio[0]['channels'] == 1):
+                        raise AssertionError(f'Unexpected Standard recording audio: {relative}')
+                    audio_enabled.extend(audio)
+                    # The two fixture microphones emit 440 and 880 Hz respectively.
+                    # Check complete, audible 100-ms windows; segment edges may be silent.
+                    pcm = subprocess.run((prefix or [])+[ffmpeg, '-nostdin', '-v', 'error', '-xerror',
+                                         '-i', target, '-map', '0:a:0', '-t', '1', '-f', 's16le', '-'],
+                                         capture_output=True, check=True, timeout=30)
+                    samples = array('h')
+                    samples.frombytes(pcm.stdout)
+                    if sys.byteorder == 'big':
+                        samples.byteswap()
+                    if verify_camera_tone(samples, relative):
+                        verified_tone = True
 
-            # Decode all tracks to completion, and inspect actual video pixels. The center
-            # stripe labels the camera while the moving test pattern around it proves progress.
-            result = subprocess.run((prefix or [])+[ffmpeg, '-nostdin', '-v', 'error', '-xerror', '-i', target,
-                                    '-map', '0:v:0', '-vf', 'scale=32:16', '-pix_fmt', 'rgb24',
-                                    '-threads', '1', '-fps_mode', 'passthrough', '-f', 'rawvideo', 'pipe:1',
-                                    '-map', '0:v', '-map', '0:a?', '-f', 'null', '-'],
-                                    capture_output=True, timeout=60)
-            if result.returncode or result.stderr:
-                raise AssertionError(f'{relative}: {result.stderr.decode(errors="replace")}')
-            size = 32*16*3
-            pixels = result.stdout
-            if not pixels or len(pixels) % size:
-                raise AssertionError(f'No complete video frames: {relative}')
-            first_marked = None
-            for offset in range(0, len(pixels), size):
-                frame = pixels[offset:offset+size]
-                markers = []
-                for x in ([8, 24] if stream == 'multiview_1' else [16]):
-                    i = (8*32+x)*3
-                    r, g, b = frame[i:i+3]
-                    markers.append('red' if r > max(g,b)+80 else 'blue' if b > max(r,g)+80 else None)
-                if tuple(markers) != streams[stream]:
-                    # The compositor draws a placeholder until each camera connects.
-                    if stream == 'multiview_1' and all(m is None or m == want for m, want in zip(markers, streams[stream])):
-                        continue
-                    raise AssertionError(f'Wrong camera marker in {relative}: {markers}')
-                if first_marked is None:
-                    first_marked = frame
-                elif frame != first_marked:
-                    progressing.add(stream)
-            log.write(f'{relative.as_posix()}: {len(pixels)//size} video frames\n')
-            checked.append(relative.as_posix())
+                # Decode all tracks to completion, and inspect actual video pixels. The center
+                # stripe labels the camera while the moving test pattern around it proves progress.
+                result = subprocess.run((prefix or [])+[ffmpeg, '-nostdin', '-v', 'error', '-xerror', '-i', target,
+                                        '-map', '0:v:0', '-vf', 'scale=32:16', '-pix_fmt', 'rgb24',
+                                        '-threads', '1', '-fps_mode:v', 'passthrough', '-enc_time_base:v', timebase,
+                                        '-f', 'rawvideo', 'pipe:1', '-map', '0:v', '-map', '0:a?',
+                                        '-fps_mode:v', 'passthrough', '-enc_time_base:v', timebase, '-f', 'null', '-'],
+                                        capture_output=True, timeout=60)
+                if result.returncode or result.stderr:
+                    raise AssertionError(f'{relative}: {result.stderr.decode(errors="replace")}')
+                size = 32*16*3
+                pixels = result.stdout
+                if not pixels or len(pixels) % size:
+                    raise AssertionError(f'No complete video frames: {relative}')
+                first_marked = None
+                for offset in range(0, len(pixels), size):
+                    frame = pixels[offset:offset+size]
+                    markers = []
+                    for x in ([8, 24] if stream == 'multiview_1' else [16]):
+                        i = (8*32+x)*3
+                        r, g, b = frame[i:i+3]
+                        markers.append('red' if r > max(g,b)+80 else 'blue' if b > max(r,g)+80 else None)
+                    if tuple(markers) != streams[stream]:
+                        # The compositor draws a placeholder until each camera connects.
+                        if stream == 'multiview_1' and all(m is None or m == want for m, want in zip(markers, streams[stream])):
+                            continue
+                        raise AssertionError(f'Wrong camera marker in {relative}: {markers}')
+                    if first_marked is None:
+                        first_marked = frame
+                    elif frame != first_marked:
+                        progressing.add(stream)
+                log.write(f'{relative.as_posix()}: {len(pixels)//size} video frames\n')
+                checked.append(relative.as_posix())
+    except (AssertionError, OSError, ValueError, subprocess.SubprocessError) as error:
+        if current_path is not None and (profile/'.flinteye-qa-owned').is_file():
+            entry = {'recording': current_path.relative_to(profile).as_posix(), 'failure': str(error)}
+            try:
+                if 0 < current_path.stat().st_size <= 32 * 1024 * 1024:
+                    name = 'failed-recording' + current_path.suffix
+                    shutil.copyfile(current_path, output/name)
+                    entry['clip'] = name
+                (output/'recording-check-failure.json').write_text(json.dumps(entry, indent=2)+'\n', encoding='utf-8')
+            except OSError:
+                pass  # Keep the original verification error.
+        raise
     if missing := streams.keys()-progressing:
         raise AssertionError(f'Missing moving footage with expected camera markers: {sorted(missing)}')
     if not audio_enabled or not verified_tone:

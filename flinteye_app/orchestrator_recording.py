@@ -123,7 +123,7 @@ def _looks_like_orchestrator_record_path(value: str | None) -> bool:
     if not value:
         return False
     normalized = value.strip().replace("\\", "/")
-    return normalized.endswith(_ORCHESTRATOR_RECORD_PATH_SUFFIX)
+    return normalized.endswith((_ORCHESTRATOR_RECORD_PATH_SUFFIX, _ORCHESTRATOR_RECORD_PATH_SUFFIX + "_%z"))
 
 
 def _find_existing_orchestrator_recording_paths(lines: list[str]) -> set[str]:
@@ -258,7 +258,9 @@ def apply_recording_config(config: RuntimeConfig, *, workspace_dir: str, before_
                 message="record_root is empty",
             )
         normalized_root = record_root.replace("\\", "/")
-        record_path_value = f"{normalized_root}/%path/%Y-%m-%d/%H-%M-%S-%f"
+        record_path_value = normalized_root + _ORCHESTRATOR_RECORD_PATH_SUFFIX
+        if config.recording.managed_storage:
+            record_path_value += "_%z"
         desired.update(
             {
                 "recordPath": record_path_value,

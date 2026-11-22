@@ -128,6 +128,7 @@ export function MultiviewPage({ api, onConfigure }: MultiviewPageProps): JSX.Ele
         {selectedView && <WebRtcEmbed
           url={selectedView?.webrtc_url ?? null}
           title={selectedView ? `Multiview: ${selectedView.id}` : "Multiview"}
+          unavailableMessage="The selected Multiview output has no playback address. Check its configuration and stream status."
         />}
       </div>
     </div>

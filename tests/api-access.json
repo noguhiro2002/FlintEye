@@ -31,6 +31,8 @@
     "/api/v1/network/guide": "POST",
     "/api/v1/network/renew-trust": "POST",
     "/api/v1/network/rtsps-credential": "POST",
+    "/api/v1/recording-events/settings": "GET PUT",
+    "/api/v1/recording-events/{event_id}/cancel": "POST",
     "/api/v1/recordings/files/{file_id}": "GET",
     "/api/v1/status/listener": "GET",
     "/api/v1/storage/pick-folder": "POST",
@@ -59,6 +61,7 @@
     "/api/v1/multiview/views": "GET",
     "/api/v1/multiview/views/{view_id}/addresses": "GET",
     "/api/v1/multiview/views/{view_id}/snapshot": "GET",
+    "/api/v1/recording-events": "GET",
     "/api/v1/recordings": "GET",
     "/api/v1/recordings/files/{file_id}/playable": "GET",
     "/api/v1/recordings/files/{file_id}/prepare": "POST",
@@ -78,5 +81,9 @@
     "/api/v1/cameras/{camera_id}/ptz/move": "POST",
     "/api/v1/cameras/{camera_id}/ptz/position": "POST",
     "/api/v1/cameras/{camera_id}/ptz/stop": "POST"
+  },
+  "event": {
+    "/api/v1/recording-events": "POST",
+    "/api/v1/recording-events/{event_id}": "GET"
   }
 }

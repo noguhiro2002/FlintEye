@@ -321,12 +321,13 @@ class OrchestratorSupervisor:
                 self.pause_media_publishers()
             yield
 
-    def pause_media_publishers(self, *, deadline: float | None = None):
+    def pause_media_publishers(self, *, deadline: float | None = None) -> bool:
         with self._lock:
-            for proc in self._processes.values():
-                if not proc.key.startswith('mediamtx:'):
-                    self._stop_process(proc, deadline=deadline) if deadline is not None else self._stop_process(proc)
+            publishers = [proc for proc in self._processes.values() if not proc.key.startswith('mediamtx:')]
+            for proc in publishers:
+                self._stop_process(proc, deadline=deadline) if deadline is not None else self._stop_process(proc)
             logger.info('publishers stopped for a planned media configuration change')
+            return all(proc.process is None for proc in publishers)
 
     def _monitor_loop(self) -> None:
         while not self._stop_event.is_set():
@@ -658,13 +659,19 @@ class OrchestratorSupervisor:
             return limit if deadline is None else max(.1, min(limit, deadline - time.monotonic()))
 
         try:
-            if os.name != "nt":
+            if sys.platform == "darwin" and proc.key == "mediamtx:direct":
+                # MediaMTX handles SIGINT on macOS. Let it close segments and
+                # wait for their completion hooks before cleaning up descendants.
+                if process.poll() is None:
+                    process.send_signal(signal.SIGINT)
+            elif os.name != "nt":
                 # terminate process group so child ffmpeg processes are not orphaned
                 _signal_process_group(process.pid, signal.SIGTERM)
             elif process.poll() is None:
                 if not _kill_process_tree_windows(process.pid, timeout=remaining(10)):
                     process.terminate()
-            process.wait(timeout=remaining(5))
+            wait_seconds = 10 if sys.platform == "darwin" and proc.key == "mediamtx:direct" else 5
+            process.wait(timeout=remaining(wait_seconds))
         except (OSError, subprocess.SubprocessError):
             pass  # Escalate below and retain an unreaped process for retry.
         try:

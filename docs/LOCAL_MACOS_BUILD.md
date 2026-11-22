@@ -99,6 +99,15 @@ If a step fails, the helper stops and prints the working directory. Keep its `bu
 
 If video still fails, inspect `orchestrator.log` and `mediamtx.log` under `~/Library/Application Support/FlintEye/logs/`. A fixed startup path does not rule out a camera permission, port conflict or capture-format problem.
 
+To test with a separate profile, quit other FlintEye instances first. Finish macOS app-specific approval. If approval starts the app, quit it before running the command with arguments. Adjust the path to the installed test copy.
+
+```bash
+profile=$(mktemp -d "${TMPDIR:-/tmp}/flinteye-macos-qa.XXXXXX")
+open -n "$HOME/Applications/FlintEye.app" --args --data-dir "$profile" --port 18180 --disable-lan
+```
+
+Check that `runtime.json` appears in the new folder and use `http://127.0.0.1:18180` for the test. For the recording-stop regression, start recording and wait for a clip to appear as recording. Test a direct **Stop monitoring**, then start another clip and test saving Recording off before **Stop monitoring**. Confirm that both clips become playable and that Quit closes the API and media processes.
+
 ## The same Settings design on other installations
 
 Windows, macOS, Linux packages, Docker and source installations use the same `frontend/src` interface. The old oversized panel has been removed there for all platforms. The native bundle builder and Docker builder both rebuild that interface from source.

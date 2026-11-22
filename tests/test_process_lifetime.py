@@ -182,6 +182,24 @@ stop_background_processes()
                     self.assertEqual(kill.call_args_list,
                                      [call(group_id, signal.SIGTERM), call(group_id, signal.SIGKILL)])
 
+    @unittest.skipIf(os.name == 'nt', 'POSIX process groups')
+    def test_macos_direct_recorder_gets_interrupt_before_process_group_cleanup(self):
+        from flinteye_app.orchestrator_supervisor import ManagedProcess, OrchestratorSupervisor
+        process = Mock(pid=4321)
+        process.poll.return_value = None
+        process.wait.return_value = 0
+        kill = Mock()
+        calls = Mock()
+        calls.attach_mock(process, 'process')
+        calls.attach_mock(kill, 'kill')
+        recorder = ManagedProcess('mediamtx:direct', 'mediamtx', process=process, desired=True)
+        with (patch('flinteye_app.orchestrator_supervisor.sys.platform', 'darwin'),
+              patch('flinteye_app.orchestrator_supervisor._signal_process_group', kill)):
+            OrchestratorSupervisor.__new__(OrchestratorSupervisor)._stop_process(recorder)
+        self.assertEqual(calls.mock_calls, [call.process.poll(), call.process.send_signal(signal.SIGINT),
+            call.process.wait(timeout=10), call.kill(4321, signal.SIGKILL), call.process.wait(timeout=5)])
+        self.assertIsNone(recorder.process)
+
     def test_desktop_force_quit_stops_children_even_with_open_stream_client(self):
         # Windows keeps logging files open until the launcher process exits.
         # Own the profile outside that process and require ordinary removal.

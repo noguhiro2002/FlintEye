@@ -1,4 +1,5 @@
 import { CameraAudioSettings } from "../components/CameraAudioSettings";
+import { EventRecordingOptions } from "../components/EventRecordings";
 import { StartupSettings } from "../components/StartupSettings";
 import { NetworkAccess } from '../components/NetworkAccess';
 import { useConfirmChanges } from "../components/ConfirmChanges";
@@ -33,6 +34,7 @@ interface SettingsPageProps {
   api: ApiClient;
   onUiConfigChanged?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
+  onSaveStarted?: () => (saved: boolean) => void;
 }
 
 interface IpCameraDraft {
@@ -581,7 +583,7 @@ function retentionDays(value: string): number {
   return Number(match[1]) * seconds[match[2]] / 86400;
 }
 
-export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange }: SettingsPageProps): JSX.Element {
+export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange, onSaveStarted }: SettingsPageProps): JSX.Element {
   const { ask, confirmation } = useConfirmChanges();
   // Keep this editor's revision separate from onboarding and branding requests.
   const api = useMemo(() => sharedApi.configSession(), [sharedApi]);
@@ -1331,6 +1333,8 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
     ) {
       return;
     }
+    const finishSave = onSaveStarted?.();
+    let saved = false;
     setLoading(true);
     try {
       const paths = [...cameras.filter(c => c.type !== "ip").map(c => c.path.trim()), ...ipDrafts.map(c => c.path.trim())];
@@ -1464,10 +1468,12 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
       setError("");
       onUiConfigChanged?.();
       await loadAll(true);
+      saved = true;
     } catch (e) {
       saveError(e, "Failed to save settings");
     } finally {
       setLoading(false);
+      finishSave?.(saved);
     }
   };
 
@@ -1482,6 +1488,8 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
     ) {
       return;
     }
+    const finishSave = onSaveStarted?.();
+    let saved = false;
     setLoading(true);
     try {
       const parsed = JSON.parse(runtimeJsonText) as Record<string, unknown>;
@@ -1497,9 +1505,10 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
       setError("");
       onUiConfigChanged?.();
       await loadAll(true);
+      saved = true;
     } catch (e) {
       saveError(e, "Failed to apply runtime JSON");
-    } finally { setLoading(false); }
+    } finally { setLoading(false); finishSave?.(saved); }
   };
 
   return (
@@ -2501,6 +2510,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
               Recording Enabled controls the `record: yes/no` flag for the resolved MediaMTX recording paths.
               Unselected orchestrator-managed paths are now forced to `record: no`.
             </div>
+            <EventRecordingOptions api={api} onSaveStarted={onSaveStarted} />
           </div>
 
           <div className="section settings-section settings-section-multiview">
@@ -3554,7 +3564,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
             <div className="section-head">
               <div>
                 <h3>IP Cameras</h3>
-                <p className="form-help">Inspect ONVIF capabilities and measured RTSP timing before publishing each camera.</p>
+                <p className="form-help">{runtime.recording?.enabled ? "Recording is enabled for the selected recording streams." : "Recording is off."} Inspect camera uses the ONVIF discovery setting shown for that camera.</p>
               </div>
               <button type="button" className="icon-text-button" onClick={onAddIpDraft}>
                 <PlusIcon aria-hidden="true" />

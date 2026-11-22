@@ -7,6 +7,7 @@ import json
 import math
 import os
 from pathlib import Path
+import shutil
 import sqlite3
 import time
 
@@ -20,10 +21,31 @@ def database(root: Path, *, timeout=5):
             indexed INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(session, path))''')
         db.execute('''CREATE TABLE IF NOT EXISTS completed_files (
             path TEXT PRIMARY KEY, size INTEGER, mtime INTEGER, started REAL, ended REAL, duration REAL)''')
+        db.execute('''CREATE TABLE IF NOT EXISTS recovered_files (
+            path TEXT PRIMARY KEY, size INTEGER, mtime INTEGER)''')
         with db:
             yield db
     finally:
         db.close()
+
+
+def segment_started_at(path: Path) -> float | None:
+    # New names retain the recorder's UTC offset. Legacy names use local time.
+    name = path.parent.name + '_' + path.stem
+    for pattern in ('%Y-%m-%d_%H-%M-%S-%f_%z', '%Y-%m-%d_%H-%M-%S-%f'):
+        try:
+            return datetime.strptime(name, pattern).timestamp()
+        except ValueError:
+            continue
+    return None
+
+
+def media_bins(config) -> tuple[str, str]:
+    ffmpeg = config.multiview.ffmpeg_bin.strip() or 'ffmpeg'
+    resolved = shutil.which(ffmpeg)
+    probe_name = 'ffprobe.exe' if os.name == 'nt' else 'ffprobe'
+    ffprobe = Path(resolved).with_name(probe_name) if resolved else None
+    return ffmpeg, str(ffprobe) if ffprobe and ffprobe.is_file() else probe_name
 
 
 def record_event(root: Path, segment: Path, *, complete: bool, session: str | None = None) -> None:
@@ -63,14 +85,11 @@ def record_event(root: Path, segment: Path, *, complete: bool, session: str | No
                     duration = float(os.environ.get('MTX_SEGMENT_DURATION', 'nan'))
                     if not math.isfinite(duration) or duration <= 0: duration = None
                 except ValueError: duration = None
-                started = None
-                # The filename is created by our managed recorder in local time.
-                try:
-                    started = datetime.strptime(path.parent.name + '_' + path.stem, '%Y-%m-%d_%H-%M-%S-%f').timestamp()
-                except ValueError: pass
+                started = segment_started_at(path)
                 db.execute('INSERT OR REPLACE INTO completed_files VALUES (?, ?, ?, ?, ?, ?)',
                            (str(path), stat.st_size, stat.st_mtime_ns, started,
                             started + duration if started is not None and duration is not None else None, duration))
+                db.execute('DELETE FROM recovered_files WHERE path=?', (str(path),))
         if stat is not None:
             # Preserve the recorder's completion evidence even if the index is
             # temporarily locked or the volume disappears before registration.
@@ -99,20 +118,95 @@ def retry_completed(root: Path, session: str, deadline: float) -> None:
         _index_completed(root, session, Path(path), (size, mtime), timeout=min(.2, remaining))
 
 
+def recover_closed(root: Path, session: str, config, *, deadline: float, cancelled) -> dict[str, int]:
+    """Inspect tracked files after the owner has stopped the recorder and publishers."""
+    import subprocess
+    from flinteye_app.flinteye_storage import locations, register_segment
+    from flinteye_app.process_lifetime import run_background
+    from flinteye_app.subprocess_utils import background_process_options
+
+    results = {'recovered': 0, 'unreadable': 0, 'unavailable': 0}
+    with database(root, timeout=.2) as db:
+        paths = [Path(row[0]) for row in db.execute(
+            'SELECT path FROM events WHERE session=? AND completed IS NULL', (session,))]
+    roots = [location for location, _, _ in locations(config, str(root))]
+    ffmpeg, ffprobe = media_bins(config)
+    for path in paths:
+        if cancelled.is_set() or time.monotonic() >= deadline:
+            break
+        if (path.suffix not in {'.mp4', '.ts'} or path.resolve() != path
+                or not any(path.is_relative_to(location) for location in roots)):
+            results['unavailable'] += 1
+            continue
+        try:
+            before = path.stat()
+            fingerprint = before.st_size, before.st_mtime_ns
+            if not before.st_size:
+                results['unreadable'] += 1
+                continue
+            probe = run_background(
+                [ffprobe, '-v', 'error', '-show_entries', 'format=duration:stream=codec_type',
+                 '-of', 'json', str(path)], capture_output=True, check=True, text=True,
+                timeout=max(.1, deadline - time.monotonic()), **background_process_options())
+            details = json.loads(probe.stdout)
+            duration = float(details.get('format', {}).get('duration', 0))
+            if (not math.isfinite(duration) or duration <= 0
+                    or not any(track.get('codec_type') == 'video' for track in details.get('streams', []))):
+                raise ValueError('Recording has no complete video')
+            decode = run_background(
+                [ffmpeg, '-nostdin', '-v', 'error', '-xerror', '-i', str(path), '-map', '0:v:0',
+                 '-map', '0:a?', '-fps_mode:v', 'passthrough', '-enc_time_base:v', 'demux',
+                 '-f', 'null', '-'], capture_output=True, check=True,
+                timeout=max(.1, deadline - time.monotonic()), **background_process_options())
+            if probe.stderr or decode.stderr:
+                raise ValueError('Recording reported a decode error')
+            after = path.stat()
+            if cancelled.is_set() or (after.st_size, after.st_mtime_ns) != fingerprint:
+                continue
+            if not register_segment(root, path, expected=fingerprint, timeout=.2):
+                continue
+            started = segment_started_at(path)
+            with database(root, timeout=.2) as db:
+                updated = db.execute('UPDATE events SET completed=?, indexed=1 '
+                                     'WHERE session=? AND path=? AND completed IS NULL',
+                                     (time.time(), session, str(path)))
+                if not updated.rowcount:
+                    continue  # A delayed completion hook already supplied better evidence.
+                db.execute('INSERT OR REPLACE INTO completed_files VALUES (?, ?, ?, ?, ?, ?)',
+                           (str(path), *fingerprint, started,
+                            started + duration if started is not None else None, duration))
+                db.execute('INSERT OR REPLACE INTO recovered_files VALUES (?, ?, ?)',
+                           (str(path), *fingerprint))
+            results['recovered'] += 1
+        except OSError:
+            results['unavailable'] += 1
+        except (ValueError, subprocess.SubprocessError):
+            results['unreadable'] += 1
+    return results
+
+
 def file_evidence(root: Path, paths: list[Path]) -> dict:
     """Read once per list. An unfinished tracked file never becomes stable by age."""
     if not (root/'recording-events.sqlite3').is_file(): return {}
     with database(root, timeout=.5) as db:
         events = {row[0]: (row[1], row[2]) for row in db.execute('SELECT path, MAX(completed), MAX(indexed) FROM events GROUP BY path')}
         completed = {row[0]: row[1:] for row in db.execute('SELECT path,size,mtime,started,ended,duration FROM completed_files')}
+        recovered = {row[0]: row[1:] for row in db.execute('SELECT path,size,mtime FROM recovered_files')}
     result = {}
     for path in paths:
         key = str(path.resolve())
         if key not in events: continue
-        stat = path.stat()
+        try:
+            stat = path.stat()
+        except OSError:
+            result[key] = {'is_stable': False, 'completion_state': 'unavailable'}
+            continue
         record = completed.get(key)
         matches = bool(events[key][1] and record and record[0] == stat.st_size and record[1] == stat.st_mtime_ns)
-        result[key] = {'is_stable': matches, 'completion_state': 'complete' if matches else 'pending',
+        state = 'pending'
+        if matches:
+            state = 'recovered' if recovered.get(key) == (stat.st_size, stat.st_mtime_ns) else 'complete'
+        result[key] = {'is_stable': matches, 'completion_state': state,
                        'started_at': record[2] if matches else None, 'ended_at': record[3] if matches else None,
                        'duration_sec': record[4] if matches else None}
     return result

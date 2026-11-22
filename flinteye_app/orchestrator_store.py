@@ -657,6 +657,7 @@ class RuntimeStore:
             replacement = self._preserve_recording_history(copy.deepcopy(replacement))
             candidate = RuntimeConfig.model_validate(replacement)
             self._validate_camera_paths(candidate)
+            self._check_archive_folders(candidate)
             self._save_runtime_file(replacement)
             self._runtime_raw = copy.deepcopy(replacement)
             return self.get_effective()
@@ -678,6 +679,8 @@ class RuntimeStore:
             )
             if 'cameras' in patch:
                 self._validate_camera_paths(candidate)
+            if 'recording' in patch:
+                self._check_archive_folders(candidate)
             self._save_runtime_file(merged_runtime)
             self._runtime_raw = merged_runtime
             return self.get_effective()
@@ -687,6 +690,16 @@ class RuntimeStore:
         paths = [camera.path.casefold() for camera in config.cameras]
         if len(set(paths)) != len(paths):
             raise ValueError('Camera paths must be unique.')
+
+    def _check_archive_folders(self, config: RuntimeConfig) -> None:
+        from flinteye_app.flinteye_storage import locations
+        from flinteye_app.recording_archive import configured_folders
+
+        data = Path(self.runtime_file).resolve().parent
+        archives = configured_folders(data)
+        if any(folder.is_relative_to(loop) or loop.is_relative_to(folder)
+               for loop, _, _ in locations(config, str(data)) for folder in archives):
+            raise ValueError('Loop recording folders must be separate from event recording folders.')
 
     def replace_camera(self, camera_id: str, camera_payload: dict[str, Any]) -> RuntimeConfig:
         with self._lock, runtime_file_lock(Path(self.runtime_file)):

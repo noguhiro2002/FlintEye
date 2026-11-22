@@ -93,7 +93,8 @@ class ReleaseTests(unittest.TestCase):
 
     def write_lifecycle(self, value):
         from lifecycle_report import (Report, STAGES, required_matrix, BROWSER_CHECKS, RETAINED_CHECKS,
-                                      NEW_BROWSER_CHECKS, NEW_RETAINED_CHECKS, requires_preview_7_checks)
+                                      NEW_BROWSER_CHECKS, NEW_RETAINED_CHECKS, requires_preview_7_checks,
+                                      EVENT_BROWSER_CHECKS, EVENT_RETAINED_CHECKS, requires_preview_8_checks)
         if self.lifecycle.exists(): shutil.rmtree(self.lifecycle)
         for method, runner, arch in required_matrix():
             report = Report(self.lifecycle/f'{method}-{runner}', method=method, release=value, commit=self.commit)
@@ -105,6 +106,8 @@ class ReleaseTests(unittest.TestCase):
                 checks = BROWSER_CHECKS if name == 'browser' else RETAINED_CHECKS
                 if requires_preview_7_checks(value):
                     checks = checks | (NEW_BROWSER_CHECKS if name == 'browser' else NEW_RETAINED_CHECKS)
+                if requires_preview_8_checks(value):
+                    checks = checks | (EVENT_BROWSER_CHECKS if name == 'browser' else EVENT_RETAINED_CHECKS)
                 if name == 'browser' and method == 'source' and runner.startswith('ubuntu'):
                     checks = checks | {'synthetic-USB-and-IP-live-multiview-and-removal',
                                        'desktop-browser-one-use-setup-handoff'}
@@ -121,8 +124,13 @@ class ReleaseTests(unittest.TestCase):
             selection = {'relativePath': 'qa-camera-1/test.mp4', 'savedName': 'recording-download.mp4'}
             (report.output/'browser/download-selection.json').write_text(json.dumps(selection))
             (report.output/'browser/recording-download.mp4').write_bytes(b'qa video')
-            (report.output/'retained-files.json').write_text(json.dumps({
-                'recordings/qa-camera-1/test.mp4': hashlib.sha256(b'qa video').hexdigest()}))
+            retained = {'recordings/qa-camera-1/test.mp4': hashlib.sha256(b'qa video').hexdigest()}
+            if requires_preview_8_checks(value):
+                event_id = 'e'*32
+                (report.output/'browser/event-selection.json').write_text(json.dumps({'event_id': event_id, 'clip_index': 0}))
+                (report.output/'browser/event-download.mp4').write_bytes(b'qa event video')
+                retained[f'event-recordings/{event_id}/0.mp4'] = hashlib.sha256(b'qa event video').hexdigest()
+            (report.output/'retained-files.json').write_text(json.dumps(retained))
             (report.output/'decode.log').write_text('')
             (report.output/'recording-audio.json').write_text('{"enabled_camera":[{"codec_name":"pcm_s16be"}],"disabled_camera":[]}')
 

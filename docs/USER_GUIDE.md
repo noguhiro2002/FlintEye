@@ -39,6 +39,15 @@ An unavailable disk makes recordings inaccessible until it is reconnected.
 FlintEye pauses recording if it cannot maintain its free-space reserve.
 A banner explains the condition. See the [storage details](DISTRIBUTION.md#recording-lifecycle) for cleanup timing and imported files.
 
+<a id="event-recordings"></a>
+## Keep the video leading up to an equipment event
+
+1. As an administrator, open **Settings → Recording → Event recordings**. Enable the feature and enter an existing, writable folder on the FlintEye server outside the current and previous loop recording folders. For Docker, use a path inside a persistent mount.
+2. Save the settings and copy the event token. Set the maximum lookback if the default of 600 seconds is insufficient. Camera recording must already be enabled for the relevant cameras.
+3. Send the camera IDs and lookback from the equipment. If you omit the event timestamp, FlintEye uses the time it receives the request. [Equipment API example](advanced/API.md#equipment-recording-events)
+
+Open **Recordings → Event recordings** to see what was saved. If the requested interval overlaps an open segment, FlintEye waits for it to close normally. With 10-minute segments, this can take several minutes. If footage is missing, the list shows the available portions. Loop retention leaves the saved event clips in the event folder.
+
 ## Viewer access and other devices
 
 Set the `viewer` password in **Settings → Runtime & access** before sharing access. Save or discard other pending changes first. Updating the password signs everyone out; sign in again as administrator afterward. Viewers can watch but cannot change configuration.

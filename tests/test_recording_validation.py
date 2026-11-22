@@ -7,7 +7,20 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'packaging'))
-from lifecycle_common import decode_recordings
+from lifecycle_common import decode_recordings, verify_packet_timestamps
+
+
+class PacketTimestampTests(unittest.TestCase):
+    def test_packet_dts_must_increase_per_track(self):
+        relative = Path('synthetic.mp4')
+        packets = [{'stream_index': 0, 'dts': -9000}, {'stream_index': 1, 'dts': 0},
+                   {'stream_index': 0, 'dts': -8999}, {'stream_index': 1, 'dts': 380}]
+        verify_packet_timestamps(packets, {0, 1}, relative)
+        for invalid in (-9000, -9001, None):
+            with self.subTest(dts=invalid), self.assertRaisesRegex(AssertionError, 'invalid source DTS'):
+                verify_packet_timestamps([*packets[:2], {'stream_index': 0, 'dts': invalid}], {0, 1}, relative)
+        with self.assertRaisesRegex(AssertionError, 'missing source packets'):
+            verify_packet_timestamps(packets[:1], {0, 1}, relative)
 
 
 @unittest.skipUnless(shutil.which('ffmpeg') and shutil.which('ffprobe'), 'FFmpeg and FFprobe needed')
@@ -47,3 +60,16 @@ class RecordingValidationTests(unittest.TestCase):
         self.clip('multiview_1', ['-f', 'lavfi', '-i', f'{red},split[a][b];[a][b]hstack'])
         with self.assertRaisesRegex(AssertionError, 'Wrong camera marker'):
             decode_recordings(self.root, self.ffmpeg, self.root)
+
+    def test_close_valid_video_timestamps_survive_full_decode(self):
+        path = self.root/'recordings/qa-camera-1/2026-01-01/clip.mp4'
+        path.parent.mkdir(parents=True)
+        source = 'testsrc2=s=160x90:r=10,drawbox=x=0:y=ih/3:w=iw:h=ih/3:color=red:t=fill'
+        subprocess.run([self.ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', source,
+                        '-vf', r'settb=1/90000,setpts=if(eq(N\,3)\,18100\,N*9000)',
+                        '-frames:v', '30', '-c:v', 'libx264', '-threads', '1',
+                        '-bf', '0', '-fps_mode:v', 'passthrough', '-enc_time_base:v', '1:90000',
+                        '-video_track_timescale', '90000', str(path)], check=True, timeout=20)
+        with self.assertRaisesRegex(AssertionError, 'Missing moving footage.*qa-camera-2'):
+            decode_recordings(self.root, self.ffmpeg, self.root)
+        self.assertIn('30 video frames', (self.root/'decode.log').read_text())

@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import secrets
 import sqlite3
+import sys
 import threading
 import time
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
@@ -187,6 +188,7 @@ class MonitoringController:
                     raise MonitoringConflict('Finish or retry the pending recording stop first')
                 self.busy = True
                 self.active_action = action
+                retrying_stop = self.phase == 'finalizing'
                 already_stopped = self.phase == 'stopped' and not self.desired and self.clean_stop and not self.error
                 self.error = ''
                 if self.phase == 'stopped' and not self.desired and not self.clean_stop and action in {'stop', 'quit'} and not force:
@@ -216,7 +218,7 @@ class MonitoringController:
                     result = {'ok': True, 'message': 'Monitoring was already stopped', 'pending_segments': 0}
                     recording_events.write_stop_result(self.root, ok=True, pending=0, forced=False, reason=result['message'])
                 else:
-                    result = self._stop(force=force)
+                    result = self._stop(force=force, retry=retrying_stop)
                 if not result['ok'] and not force:
                     return result
                 if action == 'quit':
@@ -273,23 +275,29 @@ class MonitoringController:
             self.active_action = None
             self.operation.release()
 
-    def _stop(self, *, force=False) -> dict:
+    def _stop(self, *, force=False, retry=False) -> dict:
         if self.stop_config is None:
             self.stop_config = self.context.store.get_effective()
         config = self.stop_config
         force = force or self.force_quit_requested.is_set()
         deadline = time.monotonic() + (FORCE_STOP_SECONDS if force else FINALIZE_SECONDS)
         self.context.supervisor.set_monitoring_enabled(False)
-        self.context.supervisor.pause_media_publishers(deadline=deadline)
+        publishers_closed = self.context.supervisor.pause_media_publishers(deadline=deadline)
         with self.lock:
             self.phase = 'finalizing'
             self.finalization_issue = None
+        recorder_closed = False
+        if (not force and not self.force_quit_requested.is_set() and publishers_closed
+                and config.mediamtx.control_mode == 'direct' and (sys.platform == 'darwin' or retry)):
+            # A direct recorder can still own a segment after relays go away.
+            recorder_closed = bool(self.context.supervisor.mediamtx_stop(config, deadline=deadline).get('ok'))
         # Allow separately launched hook processes to enter the ledger. File
         # evidence also covers a callback that is delayed or could not start.
         quiet_until = time.monotonic() + (2.0 if self.started else 0)
         pending = self.pending_segments
         error = ''
         issue = None
+        recovery = None
         while True:
             force = force or self.force_quit_requested.is_set()
             if force:
@@ -303,6 +311,10 @@ class MonitoringController:
                 pending = evidence['pending_segments']
                 if pending:
                     recording_events.retry_completed(self.root, self.session, deadline)
+                    pending = recording_events.summary(self.root, self.session, timeout=timeout)['pending_segments']
+                if pending and retry and recorder_closed and recovery is None and time.monotonic() >= quiet_until:
+                    recovery = recording_events.recover_closed(
+                        self.root, self.session, config, deadline=deadline, cancelled=self.force_quit_requested)
                     pending = recording_events.summary(self.root, self.session, timeout=timeout)['pending_segments']
                 pending = max(pending, self._unindexed_files(config, deadline=deadline))
                 expects_recording = config.recording.enabled and (
@@ -334,9 +346,15 @@ class MonitoringController:
                 break
         ok = pending == 0 and not error
         message = 'Monitoring stopped' if ok else error or f'{pending} recording segment(s) have not finished. Choose Retry Stop.'
+        if ok and recovery and recovery['recovered']:
+            message += f'. Recovered {recovery["recovered"]} playable recording(s).'
+        elif not ok and not error and recovery and recovery['unavailable']:
+            message = 'Some recording files are unavailable. Reconnect storage and choose Retry Stop.'
+        elif not ok and not error and recovery and recovery['unreadable']:
+            message = 'Some recordings could not be decoded. Check the recording files and logs before retrying.'
         if not ok and issue is None:
             issue = 'pending_segments'
-        if ok or force:
+        if (ok or force) and not recorder_closed:
             stop_options = {'deadline': time.monotonic() + FORCE_STOP_SECONDS} if force else {}
             result = self.context.supervisor.mediamtx_stop(config, **stop_options)
             ok = ok and bool(result.get('ok'))

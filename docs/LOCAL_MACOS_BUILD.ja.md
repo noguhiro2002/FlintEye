@@ -105,6 +105,15 @@ shasum -a 256 -c SHA256SUMS
 
 それでも映像が表示されない場合は、`~/Library/Application Support/FlintEye/logs/` 配下の `orchestrator.log` および `mediamtx.log` を確認してください。起動パスが修正されても、カメラの権限、ポートの競合、キャプチャフォーマットの問題が解決されたとは限りません。
 
+別のプロファイルで試す場合は、起動中の FlintEye を終了し、macOS でテスト用アプリの起動を許可します。許可操作でアプリが開いたら、もう一度終了してください。インストール先に合わせて、次のアプリのパスを変えます。
+
+```bash
+profile=$(mktemp -d "${TMPDIR:-/tmp}/flinteye-macos-qa.XXXXXX")
+open -n "$HOME/Applications/FlintEye.app" --args --data-dir "$profile" --port 18180 --disable-lan
+```
+
+新しいフォルダーに `runtime.json` ができたことを確認し、`http://127.0.0.1:18180` を開きます。録画停止の確認では、録画中に **Stop monitoring** を押します。次にもう一度録画を始め、録画をオフにして保存してから **Stop monitoring** を押します。両方の映像を再生でき、Quit で API とメディアプロセスが終了することを確認してください。
+
 <a id="the-same-settings-design-on-other-installations"></a>
 ## 他のインストール環境における同じ Settings のデザイン
 

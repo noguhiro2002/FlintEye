@@ -124,7 +124,7 @@ def select_setup_network():
               wraplength=460).pack(anchor='w')
     choice = ttk.Combobox(frame, values=options, state='readonly', width=49)
     choice.pack(fill='x', pady=8)
-    choice.current(1 if len(candidates) == 1 else 0)
+    choice.current(0)
     if not candidates:
         ttk.Label(frame, text='No eligible private network was detected. Start locally and set a network later.',
                   wraplength=460).pack(anchor='w')
@@ -594,7 +594,7 @@ def main() -> int:
                            webrtcAdditionalHosts=['127.0.0.1'])
         if options != config.mediamtx.managed.global_:
             store.patch_runtime({'mediamtx': {'managed': {'global': options}}})
-    if not args.headless:
+    if not args.headless and root == default_data_dir().resolve():
         enable_autostart()
     from flinteye_app.orchestrator_api import app, AppContext, set_app_context
     from flinteye_app.orchestrator_auth import local_auth_is_configured
@@ -696,6 +696,10 @@ def main() -> int:
 
 
 def entrypoint() -> None:
+    if (sys.platform.startswith('linux') and not getattr(sys, 'frozen', False)
+            and sys.getfilesystemencoding() == 'ascii' and os.environ.get('PYTHONUTF8') != '1'):
+        # Decode argv and subprocess paths as UTF-8, including under LC_ALL=C.
+        os.execve(sys.executable, sys.orig_argv, {**os.environ, 'PYTHONUTF8': '1'})
     try:
         raise SystemExit(main())
     except Exception as error:
