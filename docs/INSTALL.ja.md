@@ -5,7 +5,7 @@
 
 [Documentation](README.ja.md)
 
-**UNDER DEVELOPMENT.** [Quick Install](../README.ja.md#quick-install) または [該当するリリース](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.2.0-preview.7) から **1.2.0-preview.7** をインストールしてください。どちらの方法でも、同じテスト済みアプリケーションが使用されます。正確なプレビュー版とソースコミットについては、**Information → System** を確認してください。自動パッケージチェックは合格しましたが、実機での検証は現在進行中です。以前にダウンロードした 1.1.3 インストーラーやスクリプトは、その旧バージョンに固定されたままです。[Source setup](MANUAL_INSTALL.ja.md)、[local M1 DMG builds](LOCAL_MACOS_BUILD.ja.md)、および [development Docker](DOCKER.ja.md#build-the-development-image) は引き続き利用可能です。
+**UNDER DEVELOPMENT.** [Quick Install](../README.ja.md#quick-install) または [該当するリリース](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.2.0-preview.8) から **1.2.0-preview.8** をインストールしてください。どちらの方法でも、同じテスト済みアプリケーションが使用されます。正確なプレビュー版とソースコミットについては、**Information → System** を確認してください。自動パッケージチェックは合格しましたが、実機での検証は現在進行中です。以前にダウンロードした 1.1.3 インストーラーやスクリプトは、その旧バージョンに固定されたままです。[Source setup](MANUAL_INSTALL.ja.md)、[local M1 DMG builds](LOCAL_MACOS_BUILD.ja.md)、および [development Docker](DOCKER.ja.md#build-the-development-image) は引き続き利用可能です。
 
 <a id="choose-a-package"></a>
 ## パッケージの選択
@@ -75,7 +75,7 @@ Finder が **ファイルが見つかりません** と報告しても `Contents
 正確なプレビューリリースからインストーラーまたはコマンドスクリプトをダウンロードします。プレビューリリースは GitHub の `releases/latest` URL では返されません。
 
 そのリリースから `install.sh` または `install.ps1` をダウンロードして、ローカルで実行します。
-生成される各スクリプトは、自身のリリースバージョンを固定します。オプションの `--version 1.2.0-preview.7`（シェル）または `-Version 1.2.0-preview.7`（PowerShell）によってその正確な開発リリースが選択され、`X.Y.Z` によって利用可能な場合に安定版リリースが選択されます。タグにはプレビューサフィックスが含まれますが、インストーラーのファイル名には数値のアプリケーションバージョン（`1.2.0`）が使用されます。`--no-start` / `-NoStart` は、アプリケーションを起動せずにインストールします。
+生成される各スクリプトは、自身のリリースバージョンを固定します。オプションの `--version 1.2.0-preview.8`（シェル）または `-Version 1.2.0-preview.8`（PowerShell）によってその正確な開発リリースが選択され、`X.Y.Z` によって利用可能な場合に安定版リリースが選択されます。タグにはプレビューサフィックスが含まれますが、インストーラーのファイル名には数値のアプリケーションバージョン（`1.2.0`）が使用されます。`--no-start` / `-NoStart` は、アプリケーションを起動せずにインストールします。
 
 パッケージには、アプリケーションランタイムとメディアツールが含まれています。Linux デスクトップパッケージでは、必要なデスクトップライブラリをインストールするようにシステムのパッケージマネージャーに要求することもあります。
 

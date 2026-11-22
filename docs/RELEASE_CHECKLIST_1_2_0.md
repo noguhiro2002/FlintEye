@@ -6,7 +6,7 @@
 
 For preview.8, 28 of 36 lifecycle cases passed all seven stages. The tests included the API, the browser UI and event recording playback and download after reinstalling. The 8 macOS package cases awaiting first-launch approval passed install, integrity and removal. See QA-RESULTS.json for individual results. Physical-device acceptance is pending.
 
-For preview.7, twelve of the 14 public download cases passed all seven stages, including Windows x64 and ARM64, Linux DEB and RPM with and without administrator privileges, and both GHCR architectures. Both macOS script cases passed installation, integrity and removal and await first-launch approval. [Public installation results](https://github.com/noguhiro2002/FlintEye/actions/runs/44995453064)
+12 of the 14 preview.8 public download cases passed all seven stages. They covered the Windows script, Linux DEB and RPM with and without administrator privileges, and both GHCR architectures. 2 macOS script cases passed install, integrity and removal and await first-launch approval. [Public installation results](https://github.com/noguhiro2002/FlintEye/actions/runs/45034872890)
 
 During preview.7, a Linux source test received two physical USB cameras and one IP camera in the same session. Live View and Multiview showed advancing video, 44 recordings decoded, and Quit released the listeners and USB devices. The test preserved the existing profile and recordings. Physical PTZ operation, packaged camera tests and the 24-hour run are pending.
 
