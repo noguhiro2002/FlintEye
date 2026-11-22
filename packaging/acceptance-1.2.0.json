@@ -1,6 +1,6 @@
 {
   "version": "1.2.0",
-  "commit": "6894bf3dc1eac12b19d988c9ca593c7258fcb2b8",
+  "commit": "08e78312508912293376e88d9badfde5f0b13d2b",
   "cases": {
     "windows-owner-startup": {
       "status": "pending",
@@ -24,7 +24,7 @@
     },
     "physical-cameras-and-long-run": {
       "status": "pending",
-      "evidence": "Two USB cameras, reconnect, sleep and 24 hours"
+      "evidence": "An isolated preview 7 source test on Linux received two real USB cameras and one IP stream, verified browser playback and decoded 44 test clips including Multiview. The original profile and recordings were retained. Packaged real-device and 24-hour checks are pending."
     },
     "linux-native-and-docker": {
       "status": "pending",
@@ -36,7 +36,7 @@
     },
     "all-native-architectures": {
       "status": "passed",
-      "evidence": "https://github.com/noguhiro2002/FlintEye/actions/runs/44934063230 built all eight preview 6 installers and both container architectures from the tested commit. 24 of 32 required lifecycle cases passed all seven stages. The eight macOS installer cases passed install, integrity and removal. OS first-launch approval, installed API and browser behavior, Quit and retained-data reinstall still require macOS device testing. All eight real-device gates are pending."
+      "evidence": "https://github.com/noguhiro2002/FlintEye/actions/runs/44989522412 built all eight installers and both container architectures from 08e78312508912293376e88d9badfde5f0b13d2b. 28 of 36 lifecycle cases passed all seven stages. 8 macOS installer cases require first-launch OS approval. See QA-RESULTS.json. The Windows x64 script case passed on a same-build retry after an initial DTS check failed."
     }
   }
 }

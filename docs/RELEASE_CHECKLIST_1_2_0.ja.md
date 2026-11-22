@@ -4,15 +4,15 @@
 
 **1.2.0 の安定版公開には、以下の実機確認8項目と、同じコミットの全 OS・両 CPU 向け自動検証が必要です。** いずれかが未実施または不合格の場合は安定版への昇格をブロックします。開発中のパブリックプレビュー版では、実機確認が未完了であることを開示した上で合格済みのビルドをテスト用に配布できますが、その場合でも Latest タグを付けてはなりません。
 
-プレビュー6の自動検証は32件中24件が全段階に合格しました。macOSのDMG・スクリプト8件はインストール、整合性、削除まで確認済みです。初回起動にOSの承認が必要なため、パッケージ導入後のAPI・GUI、終了、データを保持した再インストールは実機で確認します。各段階の結果は `QA-RESULTS.json` にあります。実機確認は8項目とも未完了です。
+プレビュー7の自動検証は36件中28件が全段階に合格しました。macOSの8件はインストール、整合性、削除まで合格し、初回起動のOS承認待ちです。各段階の結果は `QA-RESULTS.json` で確認できます。実機での受入確認8項目は進行中です。
 
 ## 正確なQAビルドを使用すること
 
 | 項目 | 必要な値または記録 |
 | --- | --- |
-| リリース / アプリケーション | `v1.2.0-preview.6` / `1.2.0` |
-| テスト対象のコミット | `6894bf3dc1eac12b19d988c9ca593c7258fcb2b8` |
-| ビルド | [Build release 44934063230](https://github.com/noguhiro2002/FlintEye/actions/runs/44934063230) · [release-bundle](https://github.com/noguhiro2002/FlintEye/actions/runs/44934063230/artifacts/14720893580) |
+| リリース / アプリケーション | `v1.2.0-preview.7` / `1.2.0` |
+| テスト対象のコミット | `08e78312508912293376e88d9badfde5f0b13d2b` |
+| ビルド | [Build release 44989522412](https://github.com/noguhiro2002/FlintEye/actions/runs/44989522412) · [release-bundle](https://github.com/noguhiro2002/FlintEye/actions/runs/44989522412/artifacts/14742716953) |
 | パッケージの同一性 | パッケージファイル名と一致する`SHA256SUMS`値を記録し、`build-manifest.json`とアプリのInformation画面の情報が一致していることを確認する |
 | 環境 | 日付、テスター、デバイス、OS/ビルド、CPU、ブラウザ/バージョン、インストール方法、インストール/データパス、実際のAPIアドレス/ポート、カメラモデル/解像度/fps |
 | 結果 | 各操作について、期待される動作、観察された動作、合格／不合格／未実施、および証拠リファレンスを記録する |
@@ -23,21 +23,23 @@
 
 単体インストーラーとワンコマンド版は、同じ成果物で試してください。コンテナは対応する `containers/container-amd64.tar.gz` または `containers/container-arm64.tar.gz` を読み込み、開発ガイドに記載したローカルイメージタグを使います。[コンテナを公開前に検証する手順](DEVELOPMENT_1_2_0.ja.md)
 
-## WindowsとM1 Macでプレビュー6を試す
+## WindowsとM1 Macでプレビュー7を試す
 
-`release-bundle` を展開し、`public` 内の `SHA256SUMS` を照合します。Windows x64では `FlintEye-1.2.0-windows-amd64-setup.exe`、M1 Macでは `FlintEye-1.2.0-macos-arm64.dmg` を使います。起動後、**Information → System** の版が `1.2.0-preview.6` で、コミットがビルドと一致することを確認します。
+`release-bundle` を展開し、`public` 内の `SHA256SUMS` を照合します。Windows x64では `FlintEye-1.2.0-windows-amd64-setup.exe`、M1 Macでは `FlintEye-1.2.0-macos-arm64.dmg` を使います。起動後、**Information → System** の版が `1.2.0-preview.7` で、コミットがビルドと一致することを確認します。
 
-OS別の成果物にもインストーラー、スクリプト、`SHA256SUMS` が入っています。展開先で、Windowsは `.\install.ps1 -PackageDirectory .`、Macは `bash ./install.sh --package-directory .` を実行できます。[Windows x64の成果物](https://github.com/noguhiro2002/FlintEye/actions/runs/44934063230/artifacts/14720561579) · [M1 Macの成果物](https://github.com/noguhiro2002/FlintEye/actions/runs/44934063230/artifacts/14720070590)
+OS別の成果物にもインストーラー、スクリプト、`SHA256SUMS` が入っています。展開先で、Windowsは `.\install.ps1 -PackageDirectory .`、Macは `bash ./install.sh --package-directory .` を実行できます。[Windows x64の成果物](https://github.com/noguhiro2002/FlintEye/actions/runs/44989522412/artifacts/14742586242) · [M1 Macの成果物](https://github.com/noguhiro2002/FlintEye/actions/runs/44989522412/artifacts/14741617608)
 
 `public` が入っているディレクトリで、付属のインストールスクリプトも確認します。
 
-- Windows PowerShell · `.\public\install.ps1 -Version 1.2.0-preview.6 -PackageDirectory .\public`
-- macOS Terminal · `bash public/install.sh --version 1.2.0-preview.6 --package-directory public`
+- Windows PowerShell · `.\public\install.ps1 -Version 1.2.0-preview.7 -PackageDirectory .\public`
+- macOS Terminal · `bash public/install.sh --version 1.2.0-preview.7 --package-directory public`
 
 - [ ] 新規プロファイルで起動し、ブラウザで管理者パスワードを設定できる。途中で閉じても、**Open FlintEye** やアプリの再起動から再開できる。既存のプロファイルでは同じアカウントでサインインできる。Docker・systemdでは、トークンの取得場所が画面に表示される。
 - [ ] LAN・VPN上の別端末から、表示されたHTTPSアドレスを開く。CAを信頼した後に証明書の警告が消える。再起動待ちと、範囲外で拒否された接続元IPが確認できる。専用のテスト環境でポート競合時の `10048` の案内も確認する。
 - [ ] 対応するUSBカメラを1080p・30 fps・MJPEGで追加し、映像とカメラごとの音声設定を確認する。LAN経由の管理者画面でIPカメラを追加し、再読み込みしても設定が残ることを確認する。ウィンドウを狭めても設定項目が枠内に収まる。
 - [ ] Live Viewで各カメラ、Multiviewで両方の映像が出る。片方ずつ削除してももう片方が表示され、再追加できる。音声をオンにした録画も再生・ダウンロードできる。
+- [ ] ONVIF PTZ対応の試験用カメラを **Inspect camera** で検出し、操作を有効にする。カメラが動き、操作を離すと止まることを確認する。USB・IPカメラの表示名を日本語に変えてから、同じ映像や変更前の録画を再生できることを確かめる。
+- [ ] **Stop** と **Retry Stop** の実行中、デスクトップメニューとDashboardの表示が一致する。試験用の録画先をいったん切断し、復旧後に監視を再開できることを確認する。完了待ちの間に **Force quit** を選び、FlintEyeと子プロセスが終了することも確かめる。
 - [ ] **Quit FlintEye** でAPI・子プロセス・カメラのランプが止まる。削除後に同じデータで再インストールし、既存の設定と録画を使える。MacではScreen Recordingの許可ダイアログが出ないことと、FinderとDockのFlintEyeアイコンも確認する。
 
 ## ゲート概要

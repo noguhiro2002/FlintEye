@@ -4,15 +4,15 @@
 
 **Stable distribution of 1.2.0 requires all eight device gates below and a passing build for every OS and CPU on the same commit.** A failed or untested gate blocks stable promotion. A public UNDER DEVELOPMENT preview may distribute the passing build for testing while physical cases are pending; it must disclose those pending results and must not become Latest.
 
-Of the 32 preview 6 lifecycle cases, 24 passed all seven stages. The eight macOS DMG and script cases passed install, integrity and removal. First-launch OS approval, installed API and browser behavior, Quit and retained-data reinstall still need a person on macOS. See `QA-RESULTS.json`. All eight real-device gates are pending.
+Of the 36 preview 7 lifecycle cases, 28 passed all seven stages. The 8 macOS package cases awaiting first-launch approval passed install, integrity and removal. Use QA-RESULTS.json for per-case results. The eight real-device gates are pending.
 
 ## Use the exact QA build
 
 | Field | Required value or record |
 | --- | --- |
-| Release / application | `v1.2.0-preview.6` / `1.2.0` |
-| Tested application commit | `6894bf3dc1eac12b19d988c9ca593c7258fcb2b8` |
-| Build | [Build release run 44934063230](https://github.com/noguhiro2002/FlintEye/actions/runs/44934063230) · [release-bundle](https://github.com/noguhiro2002/FlintEye/actions/runs/44934063230/artifacts/14720893580) |
+| Release / application | `v1.2.0-preview.7` / `1.2.0` |
+| Tested application commit | `08e78312508912293376e88d9badfde5f0b13d2b` |
+| Build | [Build release run 44989522412](https://github.com/noguhiro2002/FlintEye/actions/runs/44989522412) · [release-bundle](https://github.com/noguhiro2002/FlintEye/actions/runs/44989522412/artifacts/14742716953) |
 | Package identity | Record the package filename and its matching `SHA256SUMS` value; confirm `build-manifest.json` and Information agree |
 | Environment | Date, tester, device, OS/build, CPU, browser/version, install method, install/data paths, actual API address/port, camera model/resolution/fps |
 | Results | For each operation, record expected behavior, observed behavior, Pass / Fail / Not tested, and an evidence reference |
@@ -23,19 +23,21 @@ The required desktop device coverage includes Windows x64, an M1 Mac and Linux x
 
 Test both the standalone package and the one-command installer using these same files. Before GHCR publication, load the matching verified `containers/container-amd64.tar.gz` or `containers/container-arm64.tar.gz` and use the local image tag described in the [development guide](DEVELOPMENT_1_2_0.md).
 
-## Preview 6 on Windows and M1 Mac
+## Preview 7 on Windows and M1 Mac
 
-Extract `release-bundle` and verify the checksums in its `public` folder. Use `FlintEye-1.2.0-windows-amd64-setup.exe` on Windows x64 and `FlintEye-1.2.0-macos-arm64.dmg` on the M1 Mac. Confirm **Information → System** shows `1.2.0-preview.6` and the manifest commit. To test the supplied scripts, use the directory containing `public`.
+Extract `release-bundle` and verify the checksums in its `public` folder. Use `FlintEye-1.2.0-windows-amd64-setup.exe` on Windows x64 and `FlintEye-1.2.0-macos-arm64.dmg` on the M1 Mac. Confirm **Information → System** shows `1.2.0-preview.7` and the manifest commit. To test the supplied scripts, use the directory containing `public`.
 
-Each smaller OS-specific artifact includes its installer, script and `SHA256SUMS`. In its extracted directory, use `.\install.ps1 -PackageDirectory .` on Windows or `bash ./install.sh --package-directory .` on macOS. [Windows x64 artifact](https://github.com/noguhiro2002/FlintEye/actions/runs/44934063230/artifacts/14720561579) · [M1 Mac artifact](https://github.com/noguhiro2002/FlintEye/actions/runs/44934063230/artifacts/14720070590)
+Each smaller OS-specific artifact includes its installer, script and `SHA256SUMS`. In its extracted directory, use `.\install.ps1 -PackageDirectory .` on Windows or `bash ./install.sh --package-directory .` on macOS. [Windows x64 artifact](https://github.com/noguhiro2002/FlintEye/actions/runs/44989522412/artifacts/14742586242) · [M1 Mac artifact](https://github.com/noguhiro2002/FlintEye/actions/runs/44989522412/artifacts/14741617608)
 
-- Windows PowerShell · `.\public\install.ps1 -Version 1.2.0-preview.6 -PackageDirectory .\public`
-- macOS Terminal · `bash public/install.sh --version 1.2.0-preview.6 --package-directory public`
+- Windows PowerShell · `.\public\install.ps1 -Version 1.2.0-preview.7 -PackageDirectory .\public`
+- macOS Terminal · `bash public/install.sh --version 1.2.0-preview.7 --package-directory public`
 
 - [ ] On a fresh desktop profile, choose the administrator password directly in the browser. Close that tab before setup completes and resume with **Open FlintEye** or by launching the app again. Confirm manual guidance on a Docker/systemd setup. Confirm that a retained profile still signs in.
 - [ ] From a separate LAN or VPN device, use the active HTTPS address and verify the connection after trusting the CA. Verify the restart message and the displayed source IP when a client is outside the allowed ranges. Check error `10048` with a disposable port conflict and remove that conflict before continuing.
 - [ ] Add a real USB camera using 1080p/30 fps MJPEG when supported. Confirm its video and that USB audio options appear by its own settings. From the LAN administrator session, add a separate IP camera, reload Settings, and confirm it is saved. At a narrow window width, reach all IP-camera controls.
 - [ ] Open each camera in Live View and confirm both appear together in Multiview. Remove and re-add each camera while observing the other stream. Play and download a recording, including one with audio enabled.
+- [ ] Inspect a device with ONVIF PTZ and enable the detected controls. Check movement and release on a test camera. Change the USB and IP camera display names using Japanese text, then confirm the same streams and existing recordings still play.
+- [ ] Compare the desktop menu and Dashboard during Stop and Retry Stop. With test data, interrupt recording storage and recover it, then verify Start resumes monitoring. Confirm Force quit stops FlintEye and its child processes while completion is pending.
 - [ ] Quit and verify that the API, child processes and camera indicator stop. Uninstall and confirm a retained-profile reinstall can still use the account, settings and recordings. Check for macOS Screen Recording prompts and verify the FlintEye icon in Finder and the Dock.
 
 ## Gate summary
