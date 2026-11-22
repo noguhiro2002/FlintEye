@@ -8,11 +8,11 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'packaging'))
 from lifecycle import Adapter, owned_profile, remove_owned_profile
-from lifecycle_common import seed_runtime
+from lifecycle_common import application_ports, free_port, seed_runtime
 from lifecycle_report import Report, STAGES, validate, collect, required_matrix
 from verify_macos import verify_structure
 from public_install_inputs import validate_manifest, verify_public_tag
@@ -144,9 +144,18 @@ class LifecycleTests(unittest.TestCase):
             port = seed_runtime(profile, str(profile), '/owned/media/mediamtx')
             runtime = json.loads((profile/'runtime.json').read_text())
             self.assertEqual(runtime['api']['port'], port)
+            self.assertEqual(len(application_ports(profile)), 5)
             self.assertEqual(runtime['cameras'], [])
             self.assertNotEqual(runtime['mediamtx']['rtsp_base_url'], 'rtsp://127.0.0.1:8554')
             self.assertEqual(seed_runtime(profile, str(profile), '/owned/media/mediamtx'), port)
+
+    def test_camera_fixture_skips_a_port_configured_for_a_stopped_listener(self):
+        assigned = MagicMock()
+        assigned.__enter__.return_value = assigned
+        assigned.getsockname.side_effect = [('127.0.0.1', 33805), ('127.0.0.1', 33806)]
+        with patch('lifecycle_common.socket.socket', return_value=assigned) as sockets:
+            self.assertEqual(free_port(excluded={33805}), 33806)
+            self.assertEqual(sockets.call_count, 2)
 
     def test_macos_declared_executable_and_link_resolution(self):
         with tempfile.TemporaryDirectory() as directory:

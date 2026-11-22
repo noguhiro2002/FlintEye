@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from array import array
+from collections.abc import Collection
 from contextlib import contextmanager
 import json
 import math
@@ -17,10 +18,22 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def free_port(*, udp: bool = False) -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM if udp else socket.SOCK_STREAM) as listener:
-        listener.bind(('127.0.0.1', 0))
-        return listener.getsockname()[1]
+def free_port(*, udp: bool = False, excluded: Collection[int] = ()) -> int:
+    for _ in range(32):
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM if udp else socket.SOCK_STREAM) as listener:
+            listener.bind(('127.0.0.1', 0))
+            port = listener.getsockname()[1]
+            if port not in excluded:
+                return port
+    raise RuntimeError('Could not allocate a distinct loopback QA port')
+
+
+def application_ports(profile: Path) -> set[int]:
+    config = json.loads((profile/'runtime.json').read_text(encoding='utf-8'))
+    listeners = config['mediamtx']['managed']['global']
+    media_ports = {int(listeners[key].rsplit(':', 1)[1])
+                   for key in ('rtspAddress', 'webrtcAddress', 'apiAddress', 'webrtcLocalUDPAddress')}
+    return media_ports | {config['api']['port']}
 
 
 def wait_http(url: str, process=None, seconds: int = 90) -> None:
@@ -61,7 +74,10 @@ def seed_runtime(profile: Path, app_profile: str, media: str, *, prefix: list[st
     if runtime.exists():
         value = json.loads(runtime.read_text(encoding='utf-8'))
         return value['api']['port']
-    port, rtsp, web, api, rtc = free_port(), free_port(), free_port(), free_port(), free_port(udp=True)
+    ports = []
+    for udp in (False, False, False, False, True):
+        ports.append(free_port(udp=udp, excluded=ports))
+    port, rtsp, web, api, rtc = ports
     # Full config defaults are applied by the actual installed application.
     value = {
         'api': {'host': '127.0.0.1', 'port': port},
@@ -132,12 +148,12 @@ def stage_fixture_tools(directory: Path, media: str, ffmpeg: str, *, prefix=None
 
 @contextmanager
 def media_fixture(directory: Path, media: str, ffmpeg: str, *, prefix: list[str] | None = None,
-                  app_directory: str | None = None):
+                  app_directory: str | None = None, excluded_ports: Collection[int] = ()):
     """Two independent RTSP publishers; they are not owned by the application."""
     prefix = prefix or []
     app_directory = app_directory or str(directory)
     media, ffmpeg = stage_fixture_tools(directory, media, ffmpeg, prefix=prefix, app_directory=app_directory)
-    port = free_port()
+    port = free_port(excluded=excluded_ports)
     config = directory/'fixture.yml'
     config.write_text(f'rtspAddress: 127.0.0.1:{port}\nrtspTransports: [tcp]\n'
                       'api: no\nhls: no\nwebrtc: no\nrtmp: no\nsrt: no\nmoq: no\nplayback: no\n'

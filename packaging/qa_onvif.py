@@ -54,7 +54,7 @@ def _profiles(mode, include_config, *, media2):
 
 
 @contextmanager
-def onvif_fixture(rtsp_url, receipt: Path | None = None):
+def onvif_fixture(rtsp_url, receipt: Path | None = None, *, excluded_ports=()):
     events = []
     lock = threading.Lock()
 
@@ -157,7 +157,9 @@ def onvif_fixture(rtsp_url, receipt: Path | None = None):
                     return ''
             return None
 
-    with ThreadingHTTPServer(('127.0.0.1', 0), Camera) as server:
+    from lifecycle_common import free_port
+    port = free_port(excluded=excluded_ports) if excluded_ports else 0
+    with ThreadingHTTPServer(('127.0.0.1', port), Camera) as server:
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:

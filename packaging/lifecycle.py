@@ -20,7 +20,7 @@ import tempfile
 import time
 import venv
 
-from lifecycle_common import (ROOT, browser_check, decode_recordings, media_fixture,
+from lifecycle_common import (ROOT, application_ports, browser_check, decode_recordings, media_fixture,
                               request_quit, seed_runtime, stop_process, wait_closed, wait_http)
 from lifecycle_report import LINUX_USER_METHODS, Report, requires_preview_7_checks, requires_preview_8_checks
 from qa_onvif import onvif_fixture
@@ -385,14 +385,17 @@ def exercise(adapter: Adapter, report: Report, args):
         report.stage(phase, 'passed', 'Normal installed entry point started the real API')
         phase = 'api_gui'
         fixture_dir = adapter.directory/'fixture'; fixture_dir.mkdir()
+        adapter.sync_profile()
+        reserved = application_ports(adapter.profile)
         with ExitStack() as resources:
             fixture = resources.enter_context(media_fixture(fixture_dir, adapter.media, adapter.ffmpeg,
-                                              prefix=adapter.fixture_prefix, app_directory=adapter.fixture_app_directory))
-            onvif = (resources.enter_context(onvif_fixture(fixture, fixture_dir/'onvif-operations.json'))
+                                              prefix=adapter.fixture_prefix, app_directory=adapter.fixture_app_directory,
+                                              excluded_ports=reserved))
+            onvif = (resources.enter_context(onvif_fixture(fixture, fixture_dir/'onvif-operations.json',
+                                                          excluded_ports=reserved))
                      if requires_preview_7_checks(args.release) else None)
             archive_folder = (str(Path(adapter.app_profile)/'event-recordings')
                               if requires_preview_8_checks(args.release) else None)
-            adapter.sync_profile()
             browser_check(url, adapter.profile, report.output/'browser', args.release, args.commit, fixture,
                           synthetic_uvc=args.synthetic_uvc, onvif_url=onvif, archive_folder=archive_folder)
             report.stage(phase, 'passed', 'browser/browser.json; real API; browser video/trace/screenshots')
