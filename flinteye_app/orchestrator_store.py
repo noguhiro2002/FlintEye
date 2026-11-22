@@ -656,6 +656,7 @@ class RuntimeStore:
                 replacement = self._protect_credentials(replacement, replace=True)
             replacement = self._preserve_recording_history(copy.deepcopy(replacement))
             candidate = RuntimeConfig.model_validate(replacement)
+            self._validate_camera_paths(candidate)
             self._save_runtime_file(replacement)
             self._runtime_raw = copy.deepcopy(replacement)
             return self.get_effective()
@@ -675,9 +676,17 @@ class RuntimeStore:
             candidate = RuntimeConfig.model_validate(
                 _deep_merge(env_to_runtime_defaults(self._load_env_values()), merged_runtime)
             )
+            if 'cameras' in patch:
+                self._validate_camera_paths(candidate)
             self._save_runtime_file(merged_runtime)
             self._runtime_raw = merged_runtime
             return self.get_effective()
+
+    @staticmethod
+    def _validate_camera_paths(config: RuntimeConfig) -> None:
+        paths = [camera.path.casefold() for camera in config.cameras]
+        if len(set(paths)) != len(paths):
+            raise ValueError('Camera paths must be unique.')
 
     def replace_camera(self, camera_id: str, camera_payload: dict[str, Any]) -> RuntimeConfig:
         with self._lock, runtime_file_lock(Path(self.runtime_file)):

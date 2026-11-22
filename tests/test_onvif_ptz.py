@@ -1,14 +1,22 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
+import sys
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from fastapi import HTTPException
 from starlette.requests import Request
 
 from flinteye_app.orchestrator_api import _authorized_ptz_camera, require_ptz_identity
 from flinteye_app.orchestrator_auth import AuthIdentity
-from flinteye_app.orchestrator_ip_camera_probe import _probe_media_profiles, probe_ptz_profiles
+from flinteye_app.orchestrator_ip_camera_probe import (
+    _probe_media_profiles,
+    iter_onvif_clients,
+    probe_onvif,
+    probe_ptz_profiles,
+)
 from flinteye_app.orchestrator_models import CameraConfig, RuntimeConfig
 from flinteye_app.orchestrator_onvif_ptz import (
     OnvifPtzController,
@@ -16,6 +24,22 @@ from flinteye_app.orchestrator_onvif_ptz import (
     PtzCacheEntry,
     PtzRateLimitError,
 )
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'packaging'))
+from qa_onvif import onvif_fixture, USERNAME, PASSWORD
+
+
+class OnvifDiscoveryTests(unittest.TestCase):
+    def test_tapo_onvif_port_is_used_when_multicast_cannot_discover_camera(self):
+        with patch('flinteye_app.orchestrator_ip_camera_probe._discovered_candidates', return_value=[]), \
+             patch('flinteye_app.orchestrator_ip_camera_probe._tcp_open', side_effect=lambda host, port: port == 2020), \
+             patch('flinteye_app.orchestrator_ip_camera_probe._create_onvif_client') as create:
+            candidates = list(iter_onvif_clients('rtsp://camera.example:554/stream1'))
+        self.assertEqual(len(candidates), 1)
+        _, address = candidates[0]
+        self.assertEqual(address['resolved_address'], 'http://camera.example:2020/onvif/device_service')
+        self.assertEqual(create.call_args.kwargs['host'], 'camera.example')
+        self.assertEqual(create.call_args.kwargs['port'], 2020)
 
 
 def axis_space(*, x=(-1.0, 1.0), y=None):
@@ -51,9 +75,9 @@ class FakeMedia:
         self.name = name
         self.calls = 0
 
-    def GetProfiles(self):
+    def GetProfiles(self, *, Type=None):
         self.calls += 1
-        return [
+        profiles = [
             {
                 "token": f"{self.name}-profile",
                 "Name": self.name,
@@ -67,6 +91,9 @@ class FakeMedia:
                 },
             }
         ]
+        if self.name == "Media2" and Type != ["All"]:
+            return [{"token": item["token"], "Name": item["Name"]} for item in profiles]
+        return profiles
 
     def GetStreamUri(self, **kwargs):
         return {"Uri": f"rtsp://camera.local/{self.name.lower()}"}
@@ -176,6 +203,7 @@ class ProbeCapabilityTests(unittest.TestCase):
         self.assertEqual({p["media_service"] for p in profiles}, {"Media", "Media2"})
         self.assertEqual(media1.calls, 1)
         self.assertEqual(media2.calls, 1)
+        self.assertEqual(profiles[0]["ptz_configuration_token"], "Media2-ptz")
 
     def test_supported_spaces_detect_pt_only_zoom_only_and_modes(self):
         profiles = [
@@ -204,6 +232,28 @@ class ProbeCapabilityTests(unittest.TestCase):
         profiles = [{"token": "none", "name": "None", "ptz_configuration_token": "cfg"}]
         result = probe_ptz_profiles(FakeClient(ptz=FakePtz({"cfg": {}})), profiles, "rtsp://camera.local/x")
         self.assertFalse(result["supported"])
+
+    def test_loopback_onvif_exchanges_real_soap_and_requires_media2_configuration(self):
+        source = 'rtsp://127.0.0.1:8995'
+        with onvif_fixture(source) as url:
+            for mode, pan_tilt, zoom in (('full', True, True), ('media1', True, True),
+                                         ('pan', True, False), ('zoom', False, True), ('fixed', False, False)):
+                with self.subTest(mode=mode):
+                    result = probe_onvif(source+'/qa-input-1', mode='manual', address=f'{url}/{mode}/device',
+                                         username=USERNAME, password=PASSWORD)
+                    self.assertEqual(result['status'], 'connected', result)
+                    self.assertEqual(result['media_service'], 'Media' if mode == 'media1' else 'Media2')
+                    self.assertEqual(len(result['profiles']), 2)
+                    self.assertEqual(result['profiles'][0]['stream_uri'], source+'/qa-input-1')
+                    self.assertEqual(result['ptz']['pan_tilt'], pan_tilt, result)
+                    self.assertEqual(result['ptz']['zoom'], zoom, result)
+            result = probe_onvif(source+'/qa-input-1', mode='manual', address=url+'/full/device',
+                                 username=USERNAME, password='wrong-fixture-password')
+            self.assertEqual(result['status'], 'authentication_failed', result)
+            self.assertNotIn('wrong-fixture-password', str(result))
+        result = probe_onvif(source+'/qa-input-1', mode='manual', address=url+'/full/device',
+                             username=USERNAME, password=PASSWORD, timeout_sec=.2)
+        self.assertEqual(result['status'], 'unreachable', result)
 
 
 class ControllerTests(unittest.TestCase):

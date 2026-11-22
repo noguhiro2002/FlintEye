@@ -678,4 +678,6 @@ export interface MonitoringStatusResponse {
   counts: { configured: number; targets: number; receiving: number; recording: number };
   cameras: Array<{ id: string; receiving: boolean; last_received_at: number | null; reason: string }>;
   pending_segments?: number; previous_incomplete_segments?: number;
+  finalization_issue?: string | null;
+  controls?: { start: boolean; stop: boolean; restart: boolean; retry_stop: boolean };
 }

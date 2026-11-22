@@ -92,7 +92,8 @@ class ReleaseTests(unittest.TestCase):
         self.write_lifecycle(release.release_identity()[0])
 
     def write_lifecycle(self, value):
-        from lifecycle_report import Report, STAGES, required_matrix, BROWSER_CHECKS, RETAINED_CHECKS
+        from lifecycle_report import (Report, STAGES, required_matrix, BROWSER_CHECKS, RETAINED_CHECKS,
+                                      NEW_BROWSER_CHECKS, NEW_RETAINED_CHECKS, requires_preview_7_checks)
         if self.lifecycle.exists(): shutil.rmtree(self.lifecycle)
         for method, runner, arch in required_matrix():
             report = Report(self.lifecycle/f'{method}-{runner}', method=method, release=value, commit=self.commit)
@@ -102,12 +103,19 @@ class ReleaseTests(unittest.TestCase):
             for name in ('browser', 'retained'):
                 target = report.output/name; target.mkdir()
                 checks = BROWSER_CHECKS if name == 'browser' else RETAINED_CHECKS
+                if requires_preview_7_checks(value):
+                    checks = checks | (NEW_BROWSER_CHECKS if name == 'browser' else NEW_RETAINED_CHECKS)
                 if name == 'browser' and method == 'source' and runner.startswith('ubuntu'):
                     checks = checks | {'synthetic-USB-and-IP-live-multiview-and-removal',
                                        'desktop-browser-one-use-setup-handoff'}
                 (target/'browser.json').write_text(json.dumps({'result': 'passed', 'apiMocked': False,
                     'stages': sorted(checks),
                     'realApiRequests': ['POST /api/v1/setup'], 'identity': {'release': value, 'commit': self.commit, 'dirty': False}}))
+            if requires_preview_7_checks(value):
+                fixture = report.output/'fixture'; fixture.mkdir()
+                (fixture/'onvif-operations.json').write_text(json.dumps([
+                    {'endpoint': 'ptz', 'operation': operation, 'profile': 'qa-main'}
+                    for operation in ('ContinuousMove', 'Stop')]))
             (report.output/'decoded-recordings.json').write_text(json.dumps(
                 [f'recordings/{stream}/test.mp4' for stream in ('qa-camera-1', 'qa-camera-2', 'multiview_1')]))
             selection = {'relativePath': 'qa-camera-1/test.mp4', 'savedName': 'recording-download.mp4'}

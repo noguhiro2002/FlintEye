@@ -27,6 +27,11 @@ Use `ghcr.io/noguhiro2002/flinteye:@IMAGE_VERSION@` for `linux/amd64` or `linux/
 
 ## Changes in this version
 
+- **Inspect camera** checks Media1 and Media2 profiles for PTZ capabilities. Auto discovery checks TCP 2020 for Tapo cameras when discovery over the network fails. The inspection result distinguishes unreachable endpoints, rejected credentials and TLS certificate failures.
+- The desktop menu and Dashboard share monitoring status and available actions. **Retry Stop** can index completed recordings after storage recovers. On macOS, the **Force quit** confirmation appears after the menu closes, and confirmed force quit interrupts an outstanding stop.
+- USB and IP camera display names can be edited in Settings. Changes to a MediaMTX path update explicit recording and Multiview source selections while previously recorded clips remain at their original paths.
+- Linux users can install and remove FlintEye in their own account using `install.sh --user`. The removal command retains settings and recordings. [Installation and removal](INSTALL.md)
+- The API suite checks access and permitted behavior for every registered operation. A Settings inventory records inputs, limits and choices. Installed tests use synthetic streams and ONVIF endpoints to verify camera changes, Live View, Multiview, recordings and PTZ operations. [Reading the Actions results](testing/CI_ACCEPTANCE.md)
 - The Windows, macOS and Linux desktop launchers open first-time setup in the browser and pass one-use authorization. Choose an administrator password to continue. The browser provides instructions for manual setup after expiry or on a server installation.
 - **Runtime & access** explains how to enable access from other devices on a LAN or VPN. It shows the active HTTPS address, pending restarts, the last rejected source and a more specific message for an occupied port. The certificate guide covers browser trust and `ERR_SSL_PROTOCOL_ERROR`.
 - USB camera startup probes FFmpeg encoders separately from capture on Windows. The supervisor logs worker failures. Camera settings show USB audio alongside the selected managed USB camera, and IP camera controls fit a narrower browser window.

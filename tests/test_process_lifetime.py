@@ -175,15 +175,14 @@ stop_background_processes()
                         supervisor._stop_process(managed)
                         self.assertIsNone(managed.process)
                     else:
-                        with self.assertRaises(PermissionError):
+                        with self.assertLogs('orchestrator.supervisor', level='ERROR'):
                             supervisor._stop_process(managed)
                         self.assertIs(managed.process, process)
                     self.assertFalse(managed.desired)
                     self.assertEqual(kill.call_args_list,
                                      [call(group_id, signal.SIGTERM), call(group_id, signal.SIGKILL)])
 
-    @unittest.skipIf(os.name == 'nt', 'Requires the full API test environment')
-    def test_desktop_quit_stops_children_even_with_open_stream_client(self):
+    def test_desktop_force_quit_stops_children_even_with_open_stream_client(self):
         self.isolated('''
 import asyncio, socket, sys, tempfile, time, urllib.request
 from pathlib import Path
@@ -204,7 +203,7 @@ def desktop(url,server,root,monitoring,open_browser):
     children.append(popen_background([sys.executable,'-c','import time;time.sleep(60)']))
     connections.append(urllib.request.urlopen(url+'/test-long-stream',timeout=10))
     assert connections[0].readline()==b'ready\\n'
-    server.should_exit=True
+    flinteye_desktop.DesktopActions(monitoring,server).submit('quit',force=True)
 cli.desktop_available=lambda: True
 cli.enable_autostart=lambda: None
 flinteye_desktop.run_desktop=desktop

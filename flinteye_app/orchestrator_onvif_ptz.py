@@ -601,7 +601,7 @@ class OnvifPtzController:
             numeric = float(value)
         except (TypeError, ValueError) as exc:
             raise PtzConfigurationError(f"{name} must be numeric") from exc
-        if numeric < -1 or numeric > 1:
+        if not -1 <= numeric <= 1:
             raise PtzConfigurationError(f"{name} must be in range -1..1")
         return numeric
 
@@ -611,7 +611,7 @@ class OnvifPtzController:
             numeric = float(value)
         except (TypeError, ValueError) as exc:
             raise PtzConfigurationError(f"{name} must be numeric") from exc
-        if numeric < 0 or numeric > 1:
+        if not 0 <= numeric <= 1:
             raise PtzConfigurationError(f"{name} must be in range 0..1")
         return numeric
 

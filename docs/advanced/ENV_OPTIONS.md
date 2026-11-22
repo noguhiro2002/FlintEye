@@ -306,8 +306,8 @@ The Settings > IP Cameras screen adds per-camera runtime settings that are store
 - `cfr_fps`
   - Target frame rate used when `timestamp_mode` resolves to `cfr`
 - `onvif_mode`
-  - `auto`: use WS-Discovery and DNS/IP-aware Source URL host matching, with standard
-    HTTP(S) ports as a best-effort fallback
+  - `auto`: use WS-Discovery and match the Source URL host. If discovery fails, try
+    common HTTP(S) ports on the camera, including TCP 2020 for Tapo.
   - `manual`: use the complete configured ONVIF Device Service URL, including a
     non-default port or path when required
   - `disabled`: skip ONVIF inspection and only measure RTSP timing

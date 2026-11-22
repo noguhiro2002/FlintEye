@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import time
 
 STAGES = ('install', 'integrity', 'os_launch', 'api_gui', 'quit', 'uninstall', 'retained_reinstall')
@@ -20,6 +21,15 @@ BROWSER_CHECKS = {
 }
 RETAINED_CHECKS = {'retained-administrator-login', 'real-api-build-identity-and-authentication',
                    'retained-config-audio-and-recording-inventory', 'all-six-main-screens'}
+NEW_BROWSER_CHECKS = {'GUI-settings-save-and-effective-values', 'GUI-ONVIF-inspect-and-PTZ-movement',
+                      'GUI-camera-rename-preserves-stream-and-recordings', 'GUI-rejects-duplicate-and-migrates-paths'}
+NEW_RETAINED_CHECKS = {'retained-branding-rename-and-PTZ'}
+
+
+def requires_preview_7_checks(release: str) -> bool:
+    version, _, preview = release.partition('-preview.')
+    return tuple(map(int, version.split('.'))) > (1, 2, 0) or (
+        version == '1.2.0' and (not preview or int(preview) >= 7))
 
 
 class Report:
@@ -134,12 +144,22 @@ def collect(directory: Path, *, release: str, commit: str) -> dict:
                 if proof.get('identity', {}).get('release') != release or proof['identity'].get('commit') != commit:
                     raise ValueError('Browser tested another application build')
                 expected_checks = BROWSER_CHECKS if name.startswith('browser/') else RETAINED_CHECKS
+                if requires_preview_7_checks(release):
+                    expected_checks = expected_checks | (NEW_BROWSER_CHECKS if name.startswith('browser/') else NEW_RETAINED_CHECKS)
                 if name.startswith('browser/') and key[0] == 'source' and expected_os == 'linux':
                     expected_checks = expected_checks | {'synthetic-USB-and-IP-live-multiview-and-removal',
                                                         'desktop-browser-one-use-setup-handoff'}
                 if not expected_checks.issubset(proof.get('stages', [])) or proof['identity'].get('dirty') is not False:
                     raise ValueError('Incomplete browser checks or dirty application build')
                 proofs[name] = hashlib.sha256(proof_path.read_bytes()).hexdigest()
+            if requires_preview_7_checks(release):
+                onvif = path.parent/'fixture/onvif-operations.json'
+                requests = json.loads(onvif.read_text())
+                for operation in ('ContinuousMove', 'Stop'):
+                    if not any(row['endpoint'] == 'ptz' and row['operation'] == operation
+                               and row['profile'] == 'qa-main' for row in requests):
+                        raise ValueError(f'Missing real ONVIF {operation} evidence for {key}')
+                proofs['fixture/onvif-operations.json'] = hashlib.sha256(onvif.read_bytes()).hexdigest()
             decoded = json.loads((path.parent/'decoded-recordings.json').read_text())
             if not isinstance(decoded, list) or not decoded: raise ValueError('No decoded recording evidence')
             sources = {Path(name).parts[:2] for name in decoded}

@@ -21,9 +21,14 @@ from flinteye_app import recording_events
 logger = logging.getLogger(__name__)
 STALL_SECONDS = 15.0
 FINALIZE_SECONDS = 30.0
+FORCE_STOP_SECONDS = 3.0
 
 
 class MonitoringConflict(Exception):
+    pass
+
+
+class RecordingVerificationError(Exception):
     pass
 
 
@@ -109,6 +114,10 @@ class MonitoringController:
         self.busy = False
         self.active_action = None
         self.quitting = False
+        self.force_quit_requested = threading.Event()
+        self.pending_segments = 0
+        self.finalization_issue = None
+        self.stop_config = None
         self.started = False
         self.tracking_configured = False
         self.started_mono = time.monotonic()
@@ -184,7 +193,7 @@ class MonitoringController:
                     self.error = 'Previous recording completion is unknown after an interrupted stop. Check recordings before explicitly forcing quit, or start a new monitoring session.'
                     recording_events.write_stop_result(self.root, ok=False, pending=1, forced=False, reason=self.error)
                     return {'ok': False, 'message': self.error, 'pending_segments': 1}
-                if not already_stopped:
+                if not already_stopped and not force:
                     self.clean_stop = False
                     self._save()
                 if action in {'start', 'stop'}:
@@ -217,7 +226,18 @@ class MonitoringController:
                 config = self.context.store.get_effective()
                 if config.auth.provider == 'local' and not local_auth_is_configured(config.auth):
                     raise MonitoringConflict('Complete administrator setup before starting monitoring')
+                if self.quitting:
+                    raise MonitoringConflict('FlintEye is shutting down')
+                if already_stopped or self.clean_stop or self.previous_stop_unknown:
+                    with self.lock:
+                        self.session = secrets.token_hex(16)
+                        self.session_started = time.time()
+                        self.context.supervisor.media_environment['FLINTEYE_RECORDING_SESSION'] = self.session
+                        self.clean_stop = False
+                        self._save()
                 applied = _apply_mediamtx_config(self.context, config)
+                if self.quitting:
+                    raise MonitoringConflict('FlintEye is shutting down')
                 self.started = True
                 self.previous_stop_unknown = False
                 self.context.supervisor.set_monitoring_enabled(True)
@@ -254,49 +274,91 @@ class MonitoringController:
             self.operation.release()
 
     def _stop(self, *, force=False) -> dict:
-        config = self.context.store.get_effective()
-        deadline = time.monotonic() + FINALIZE_SECONDS
+        if self.stop_config is None:
+            self.stop_config = self.context.store.get_effective()
+        config = self.stop_config
+        force = force or self.force_quit_requested.is_set()
+        deadline = time.monotonic() + (FORCE_STOP_SECONDS if force else FINALIZE_SECONDS)
         self.context.supervisor.set_monitoring_enabled(False)
         self.context.supervisor.pause_media_publishers(deadline=deadline)
-        self.phase = 'finalizing'
+        with self.lock:
+            self.phase = 'finalizing'
+            self.finalization_issue = None
         # Allow separately launched hook processes to enter the ledger. File
         # evidence also covers a callback that is delayed or could not start.
         quiet_until = time.monotonic() + (2.0 if self.started else 0)
-        pending = 0
+        pending = self.pending_segments
         error = ''
+        issue = None
         while True:
+            force = force or self.force_quit_requested.is_set()
+            if force:
+                pending = max(pending, 1)
+                issue = 'forced'
+                error = 'FlintEye was forced to quit before recording completion could be verified.'
+                break
             try:
-                evidence = recording_events.summary(self.root, self.session, timeout=max(0, min(.2, deadline-time.monotonic())))
-                pending = max(evidence['pending_segments'], self._unindexed_files(config, deadline=deadline))
+                timeout = max(0, min(.2, deadline - time.monotonic()))
+                evidence = recording_events.summary(self.root, self.session, timeout=timeout)
+                pending = evidence['pending_segments']
+                if pending:
+                    recording_events.retry_completed(self.root, self.session, deadline)
+                    pending = recording_events.summary(self.root, self.session, timeout=timeout)['pending_segments']
+                pending = max(pending, self._unindexed_files(config, deadline=deadline))
                 expects_recording = config.recording.enabled and (
                     any(camera.enabled for camera in config.cameras) or config.multiview.enabled
                     or config.recording.record_paths or evidence['observed_segments'])
                 if expects_recording and self.started and (
                     not self.tracking_configured or config.mediamtx.control_mode == 'external'):
-                    raise ValueError('External recording lifecycle cannot be verified')
-                error = ''
-            except (OSError, ValueError, sqlite3.Error):
-                # SQLite/disk failures must not be reported as completed writes.
-                error = 'Recording completion could not be verified. Reconnect storage and retry.'
+                    issue = 'untracked_recorder'
+                    error = 'Recording completion is unavailable for this media server configuration. Check the recorder before quitting.'
+                else:
+                    issue, error = None, ''
+            except (sqlite3.Error, ValueError):
+                issue = 'recording_index'
+                error = 'The recording index could not be read or updated. Choose Retry Stop after it becomes available.'
+            except (RecordingVerificationError, OSError) as exc:
+                issue = 'inventory_timeout' if isinstance(exc, RecordingVerificationError) else 'storage'
+                error = (str(exc) if isinstance(exc, RecordingVerificationError) else
+                         'The recording folder could not be read. Reconnect storage and choose Retry Stop.')
+            if issue:
                 pending = max(pending, 1)
+            with self.lock:
+                self.pending_segments = pending
             if not pending and time.monotonic() >= quiet_until:
                 break
-            if time.monotonic() >= deadline or force:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
                 break
-            time.sleep(.2)
+            if not self.force_quit_requested.wait(min(.2, remaining)) and time.monotonic() >= deadline:
+                break
         ok = pending == 0 and not error
-        message = 'Monitoring stopped' if ok else error or f'{pending} recording segment(s) have not finished. Retry Stop, or explicitly force quit.'
+        message = 'Monitoring stopped' if ok else error or f'{pending} recording segment(s) have not finished. Choose Retry Stop.'
+        if not ok and issue is None:
+            issue = 'pending_segments'
         if ok or force:
-            result = self.context.supervisor.mediamtx_stop(config)
+            stop_options = {'deadline': time.monotonic() + FORCE_STOP_SECONDS} if force else {}
+            result = self.context.supervisor.mediamtx_stop(config, **stop_options)
             ok = ok and bool(result.get('ok'))
             if not result.get('ok'):
+                issue = 'media_stop'
                 message = 'Media server did not stop. Open logs and retry.'
+        with self.lock:
             self.phase = 'stopped' if ok or force else 'finalizing'
-        self.error = '' if ok else message
-        recording_events.write_stop_result(self.root, ok=ok, pending=pending, forced=force and not ok, reason=message)
+            self.pending_segments = pending
+            self.finalization_issue = issue
+            self.error = '' if ok else message
+        try:
+            recording_events.write_stop_result(self.root, ok=ok, pending=pending, forced=force, reason=message)
+        except OSError:
+            if not force:
+                raise
+            logger.exception('Could not save the forced shutdown receipt')
         if ok:
-            self.clean_stop = True
-            self._save()
+            with self.lock:
+                self.clean_stop = True
+                self.stop_config = None
+                self._save()
         return {'ok': ok, 'message': message, 'pending_segments': pending}
 
     def _unindexed_files(self, config, *, deadline=None) -> int:
@@ -314,37 +376,47 @@ class MonitoringController:
                 continue
             for file in root.glob('*/*/*'):
                 if deadline is not None and time.monotonic() >= deadline:
-                    raise OSError('Recording inventory verification timed out')
+                    raise RecordingVerificationError('Checking recording files took too long. Choose Retry Stop.')
+                if self.force_quit_requested.is_set():
+                    raise RecordingVerificationError('Recording verification was interrupted by Force quit.')
                 if file.suffix not in {'.mp4', '.ts'} or file.is_symlink() or not file.is_file():
                     continue
-                stat = file.stat()
+                try:
+                    stat = file.stat()
+                except FileNotFoundError:
+                    continue  # Retention can remove an indexed segment during the scan.
                 if stat.st_mtime >= self.session_started and known.get((str(root), file.relative_to(root).as_posix())) != (stat.st_size, stat.st_mtime_ns):
                     count += 1
         return count
+
+    def request_force_quit(self):
+        self.quitting = True
+        self.force_quit_requested.set()
 
     def close(self):
         # OS signals/uninstallation cannot leave an invisible service behind.
         # Try the same bounded finalization first and persist any forced outcome.
         self.quitting = True
-        if not self.started:
-            self.context.supervisor.set_monitoring_enabled(False)
-            if not self.previous_stop_unknown:
-                recording_events.write_stop_result(self.root, ok=True, pending=0, forced=False,
-                                                  reason='Monitoring was not started; no recording publishers were launched.')
-            self.done.set()
-            if self.thread:
-                self.thread.join(timeout=2)
-            return
-        with self.operation:
-            if self.phase != 'stopped':
-                result = self._stop()
-                if not result['ok']:
-                    self._stop(force=True)
-            elif not self.error and self.clean_stop:
-                recording_events.write_stop_result(self.root, ok=True, pending=0, forced=False, reason='Monitoring was already stopped')
         self.done.set()
-        if self.thread and self.thread is not threading.current_thread():
-            self.thread.join(timeout=2)
+        try:
+            with self.operation:
+                force = self.force_quit_requested.is_set()
+                if force and (self.phase != 'stopped' or self.previous_stop_unknown):
+                    self._stop(force=True)
+                elif not self.started:
+                    self.context.supervisor.set_monitoring_enabled(False)
+                    if not self.previous_stop_unknown:
+                        recording_events.write_stop_result(self.root, ok=True, pending=0, forced=False,
+                            reason='Monitoring was not started; no recording publishers were launched.')
+                elif self.phase != 'stopped':
+                    result = self._stop()
+                    if not result['ok'] and self.phase != 'stopped':
+                        self._stop(force=True)
+                elif not self.error and self.clean_stop:
+                    recording_events.write_stop_result(self.root, ok=True, pending=0, forced=False, reason='Monitoring was already stopped')
+        finally:
+            if self.thread and self.thread is not threading.current_thread():
+                self.thread.join(timeout=2)
 
     def _poll_loop(self):
         while not self.done.is_set():
@@ -373,6 +445,10 @@ class MonitoringController:
                     media_running = self.context.supervisor.mediamtx_status(config).get('running', False)
         paths = {item.get('name'): item for item in (items or [])}
         cameras = []
+        try:
+            evidence = recording_events.summary(self.root, self.session, timeout=.2)
+        except (sqlite3.Error, OSError):
+            evidence = {'active_streams': [], 'previous_incomplete_segments': self._snapshot.get('previous_incomplete_segments', 0)}
         with self.lock:
             for camera in targets:
                 path = paths.get(camera.path, {})
@@ -402,7 +478,6 @@ class MonitoringController:
                 cameras.append({'id': camera.id, 'receiving': receiving, 'last_received_at': last_reception,
                                 'reason': reason, 'audio_receiving': bool(ready and audio)})
             receiving = sum(item['receiving'] for item in cameras)
-            evidence = recording_events.summary(self.root, self.session)
             active = set(evidence.pop('active_streams'))
             recording = sum(camera.path in active and item['receiving'] for camera, item in zip(targets, cameras))
             counts = {'configured': configured, 'targets': len(targets), 'receiving': receiving, 'recording': recording}
@@ -441,6 +516,11 @@ class MonitoringController:
                 result.update(state='unknown', color='amber', label='Status unavailable', message='Waiting for a fresh health check.')
             if self.busy or self.phase == 'finalizing':
                 result.update(state=self.phase, color='amber', label='Finishing recordings' if self.phase == 'finalizing' else 'Starting' if self.phase == 'starting' else 'Stopping', message=self.error or 'Please wait.')
+                if self.phase in {'stopping', 'finalizing'}:
+                    result['counts'].update(receiving=0, recording=0)
+                if self.phase == 'finalizing':
+                    result['pending_segments'] = self.pending_segments
+                    result['finalization_issue'] = self.finalization_issue
             elif self.phase == 'stopped':
                 # Stop takes effect immediately, even between health polls.
                 result['counts'].update(receiving=0, recording=0)
@@ -450,6 +530,12 @@ class MonitoringController:
                     result.update(state='warning', color='amber', label='Action needed', message=self.error)
                 else:
                     result.update(state='stopped', color='gray', label='Stopped', message='Monitoring is stopped. Settings remain available.' + (' No cameras are configured.' if not result['counts']['configured'] else ''))
+            can_manage = not self.busy and not self.quitting and self.started
+            finalizing = self.phase == 'finalizing'
             result.update(desired_running=self.desired, busy=self.busy, phase=self.phase,
-                          resume_on_startup=self.resume_on_startup)
+                          resume_on_startup=self.resume_on_startup,
+                          controls={'start': can_manage and not self.desired and not finalizing,
+                                    'stop': can_manage and (self.desired or finalizing),
+                                    'restart': can_manage and self.desired and not finalizing,
+                                    'retry_stop': finalizing and can_manage})
             return result

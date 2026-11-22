@@ -9,6 +9,7 @@ const { values } = parseArgs({ options: {
   url: { type: 'string' }, profile: { type: 'string' }, output: { type: 'string' },
   release: { type: 'string' }, commit: { type: 'string' }, retained: { type: 'boolean', default: false },
   'fixture-url': { type: 'string' }, 'synthetic-uvc': { type: 'boolean', default: false },
+  'onvif-url': { type: 'string' },
 }});
 assert(values.url && values.profile && values.output && values.release);
 const origin = new URL(values.url);
@@ -17,6 +18,11 @@ const output = resolve(values.output);
 await mkdir(output, { recursive: true });
 const password = 'FlintEye-synthetic-QA-admin-174';
 const viewerPassword = 'FlintEye-synthetic-QA-viewer-174';
+const onvif = values['onvif-url'] && new URL(values['onvif-url']);
+if (onvif) assert.equal(onvif.hostname, '127.0.0.1');
+const renamedIp = '入口 IP – QA';
+const renamedSecond = '作業台 カメラ – QA';
+const branding = { app_title: 'FlintEye QA – 設定', sidebar_title: 'QA Cameras', footer_text: 'QA fixture footer' };
 const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
 const context = await browser.newContext({ viewport: { width: 1440, height: 1000 },
   recordVideo: { dir: join(output, 'video') }, acceptDownloads: true });
@@ -82,8 +88,15 @@ async function addIpCamera(index) {
   const card = page.locator('.ip-camera-card').last();
   await card.getByLabel('Display Name', { exact: true }).fill(`QA camera ${index}`);
   await card.getByLabel('MediaMTX Path', { exact: true }).fill(`qa-camera-${index}`);
-  await card.getByRole('combobox', { name: /^ONVIF discovery/ }).selectOption('disabled');
+  const discover = card.getByRole('combobox', { name: /^ONVIF discovery/ });
+  await discover.selectOption(onvif && index === 1 ? 'manual' : 'disabled');
+  if (onvif && index === 1) {
+    await card.getByLabel(/^ONVIF device service address/).fill(new URL('/full/device', onvif).href);
+    await card.getByLabel(/^ONVIF Username/).fill('qa-camera');
+    await card.getByLabel(/^ONVIF Password/).fill('qa-onvif-password-only');
+  }
   await card.getByLabel('Source URL', { exact: true }).fill(`${values['fixture-url']}/qa-input-${index}`);
+  return card;
 }
 
 function usbDiscovery() {
@@ -98,6 +111,145 @@ async function applyUvcCamera() {
   await usb.getByRole('button', { name: 'Apply Device', exact: true }).click();
   await page.getByText('UVC device applied.', { exact: true }).waitFor();
   await settingsReady();
+}
+
+async function checkBranding() {
+  await until(() => page.title(), title => title === branding.app_title, 'Saved browser tab title');
+  assert.equal(await page.locator('.topbar-title').innerText(), branding.app_title);
+  assert.match(await page.locator('.sidebar').innerText(), /QA Cameras/);
+  assert.equal(await page.locator('.app-footer').innerText(), branding.footer_text);
+}
+
+async function configureSettings() {
+  await nav('Settings'); await settingsReady();
+  await category('General');
+  for (const [label, key] of [['App Title', 'app_title'], ['Sidebar Title', 'sidebar_title'], ['Footer Text', 'footer_text']]) {
+    await page.getByRole('textbox', { name: new RegExp('^'+label) }).fill(branding[key]);
+  }
+  await category('Quick settings');
+  await page.getByRole('combobox', { name: 'Log level', exact: true }).selectOption('WARNING');
+  await category('Logging');
+  assert.equal(await page.getByRole('combobox', { name: /^Log Level/ }).inputValue(), 'WARNING');
+  await page.getByRole('combobox', { name: /^Log Level/ }).selectOption('INFO');
+  await category('Quick settings');
+  assert.equal(await page.getByRole('combobox', { name: 'Log level', exact: true }).inputValue(), 'INFO');
+  await category('Runtime & access');
+  await page.getByLabel(/^Session TTL/).fill('7200');
+  await page.getByText('Advanced runtime options', { exact: true }).click();
+  await page.getByLabel(/^Thumbnail Refresh Interval/).fill('2');
+  await category('Recording');
+  await page.getByRole('checkbox', { name: 'Recording Enabled', exact: true }).check();
+  await page.getByRole('checkbox', { name: 'Record all configured cameras', exact: true }).uncheck();
+  await page.getByRole('checkbox', { name: 'Include multiview paths', exact: true }).check();
+  await page.getByLabel(/^Additional Record Paths/).fill('qa-camera-1\nqa-camera-2');
+  await page.getByLabel(/^Segment Duration/).fill('2s');
+  await page.getByLabel(/^Record Part Duration/).fill('200ms');
+  await saveCameraForm();
+  const config = await json('/api/v1/config/effective');
+  for (const [key, value] of Object.entries(branding)) assert.equal(config.ui[key], value);
+  assert.equal(config.logging.level, 'INFO');
+  assert.equal(config.auth.session_ttl_sec, 7200);
+  assert.equal(config.snapshot.thumbnail_refresh_interval_sec, 2);
+  assert.deepEqual(config.recording.record_paths, ['qa-camera-1', 'qa-camera-2']);
+  assert.equal(config.recording.record_segment_duration, '2s');
+  assert.equal(config.recording.record_part_duration, '200ms');
+  assert.equal(config.recording.include_multiview, true);
+  await checkBranding();
+}
+
+async function configureMultiview() {
+  await category('Multiview');
+  await page.getByRole('checkbox', { name: /^Multiview Enabled/ }).check();
+  await page.getByRole('combobox', { name: /^Source Mode/ }).selectOption('env');
+  for (const index of [1, 2]) await page.getByRole('checkbox', { name: new RegExp(`^QA camera ${index}`) }).check();
+  await page.getByLabel(/^Tile Count/).fill('2');
+  await page.getByRole('spinbutton', { name: /^FPS\b/ }).fill('5');
+  await page.getByLabel(/^Encoder/).fill('libx264');
+  await page.getByRole('combobox', { name: /^Quality Preset/ }).selectOption('low');
+  await saveCameraForm();
+  const { multiview: config } = await json('/api/v1/config/effective');
+  assert.deepEqual(config.source_paths, ['qa-camera-1', 'qa-camera-2']);
+  assert.equal(config.enabled, true);
+  assert.equal(config.tile_count, 2);
+  assert.equal(config.quality.fps, 5);
+  assert.equal(config.quality.encoder, 'libx264');
+  assert.equal(config.quality.quality_preset, 'low');
+}
+
+async function verifyPtzMovement() {
+  const pan = page.getByRole('button', { name: 'Pan right', exact: true });
+  await pan.focus();
+  await page.keyboard.down('Enter');
+  const events = async () => (await context.request.get(new URL('/events', onvif).href)).json();
+  const match = (rows, op) => rows.some(row => row.operation === op && row.profile === 'qa-main');
+  try {
+    await until(events, rows => match(rows, 'ContinuousMove'), 'Physical-command SOAP received by loopback fixture', 15);
+  } finally {
+    await page.keyboard.up('Enter');
+  }
+  await until(events, rows => match(rows, 'Stop'), 'Release sent a PTZ Stop to the fixture', 15);
+  stages.push('GUI-ONVIF-inspect-and-PTZ-movement');
+}
+
+async function renameCameras() {
+  const before = (await json('/api/v1/viewer/cameras')).items;
+  const clipIds = (await json('/api/v1/recordings?status=stable&limit=100')).items.map(clip => clip.file_id);
+  assert(clipIds.length > 0, 'Camera rename must run with existing finalized clips');
+  await nav('Settings'); await category('Cameras'); await settingsReady();
+  const ip = page.locator('.ip-camera-card').filter({hasText: 'QA camera 1'});
+  await ip.getByLabel('Display Name', { exact: true }).fill(renamedIp);
+  if (!values['synthetic-uvc']) {
+    await page.locator('.ip-camera-card').filter({hasText: 'QA camera 2'}).getByLabel('Display Name', { exact: true }).fill(renamedSecond);
+  }
+  await saveCameraForm();
+  if (values['synthetic-uvc']) {
+    const usb = usbDiscovery();
+    await usb.getByRole('row', { name: /QA camera 2/ }).getByRole('button', { name: 'Select Device' }).click();
+    await usb.getByLabel('Camera Name', { exact: true }).fill(renamedSecond);
+    await usb.getByRole('button', { name: 'Apply Device', exact: true }).click();
+    await page.getByText('UVC device applied.', { exact: true }).waitFor();
+    await settingsReady();
+  }
+  const after = (await json('/api/v1/viewer/cameras')).items;
+  for (const [index, label, marker] of [[1, renamedIp, 'red'], [2, renamedSecond, 'blue']]) {
+    const item = after.find(camera => camera.id === `qa-camera-${index}`);
+    assert.equal(item.label, label);
+    assert.deepEqual(item.addresses, before.find(camera => camera.id === item.id).addresses);
+    await nav('Live View');
+    await page.getByRole('button', { name: 'View '+label, exact: true }).click();
+    await videoProgress('Renamed camera still shows its original video', { markers: [marker] });
+  }
+  await nav('Information');
+  await page.getByText(renamedIp, { exact: true }).first().waitFor();
+  await page.getByText(renamedSecond, { exact: true }).first().waitFor();
+  const afterClips = (await json('/api/v1/recordings?status=stable&limit=5000')).items;
+  assert(clipIds.every(id => afterClips.some(clip => clip.file_id === id)), 'Renaming hid previously finalized clips');
+  stages.push('GUI-camera-rename-preserves-stream-and-recordings');
+}
+
+async function verifyPathChange() {
+  // Run while monitoring is stopped so this case does not create a second
+  // stream in the recording/hash acceptance check.
+  await nav('Settings'); await category('Cameras'); await settingsReady();
+  const path = page.locator('.ip-camera-card').filter({hasText: renamedIp}).getByLabel('MediaMTX Path', { exact: true });
+  await path.fill('qa-camera-2');
+  await header.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await page.getByText(/Camera paths must be unique/).waitFor();
+  assert.deepEqual((await json('/api/v1/config/effective')).recording.record_paths, ['qa-camera-1', 'qa-camera-2']);
+  for (const replacement of ['qa-changed-path', 'qa-camera-1']) {
+    await path.fill(replacement);
+    await saveCameraForm();
+    const config = await json('/api/v1/config/effective');
+    const camera = config.cameras.find(camera => camera.id === replacement);
+    assert.equal(camera.display_name, renamedIp);
+    assert.equal(camera.audio.enabled, true);
+    assert.equal(camera.ip.ptz.enabled, true);
+    assert.deepEqual(config.recording.record_paths, [replacement, 'qa-camera-2']);
+    assert.deepEqual(config.multiview.source_paths, [replacement, 'qa-camera-2']);
+    const addresses = await json(`/api/v1/cameras/${replacement}/addresses`);
+    assert(addresses.webrtc_url?.includes(replacement), JSON.stringify(addresses));
+  }
+  stages.push('GUI-rejects-duplicate-and-migrates-paths');
 }
 
 async function videoProgress(label, { audio = false, markers = [] } = {}) {
@@ -188,10 +340,20 @@ try {
   if (!values.retained) {
     // Pin recording policy so camera removal can be checked without a
     // separate recording configuration change that requires a media restart.
-    await patch({ recording: { enabled: true, record_all_cameras: false, record_paths: ['qa-camera-1', 'qa-camera-2'], record_segment_duration: '2s', record_part_duration: '200ms', include_multiview: true },
+    if (onvif) await configureSettings();
+    else await patch({ recording: { enabled: true, record_all_cameras: false, record_paths: ['qa-camera-1', 'qa-camera-2'], record_segment_duration: '2s', record_part_duration: '200ms', include_multiview: true },
       snapshot: { thumbnail_refresh_interval_sec: 2 }, multiview: { enabled: false } });
     await nav('Settings'); await category('Cameras');
-    await addIpCamera(1);
+    const ptzCamera = await addIpCamera(1);
+    if (onvif) {
+      const toggle = ptzCamera.getByRole('checkbox', { name: 'Enable PTZ', exact: true });
+      assert(await toggle.isDisabled());
+      await ptzCamera.getByRole('button', { name: 'Inspect camera', exact: true }).click();
+      await ptzCamera.getByText('PTZ is available on 2 media profile(s)', { exact: true }).waitFor({ timeout: 60_000 });
+      assert.equal(await toggle.isChecked(), false);
+      await toggle.check();
+      await ptzCamera.locator('.ip-ptz-panel').getByRole('combobox', { name: /^ONVIF media profile/ }).selectOption('qa-main');
+    }
     if (!values['synthetic-uvc']) await addIpCamera(2);
     await saveCameraForm();
     if (values['synthetic-uvc']) await applyUvcCamera();
@@ -200,7 +362,11 @@ try {
     const cameras = effective.cameras;
     assert.equal(cameras.find(c => c.id === 'qa-camera-2').type, values['synthetic-uvc'] ? 'uvc' : 'ip');
     assert(cameras.every(c => c.audio?.enabled !== true), 'Camera audio must default off');
-    await patch({ multiview: { enabled: true, source_mode: 'env', source_paths: ['qa-camera-1', 'qa-camera-2'], tile_count: 2,
+    if (onvif) {
+      assert.equal(cameras.find(c => c.id === 'qa-camera-1').ip.ptz.enabled, true);
+      await configureMultiview();
+      stages.push('GUI-settings-save-and-effective-values');
+    } else await patch({ multiview: { enabled: true, source_mode: 'env', source_paths: ['qa-camera-1', 'qa-camera-2'], tile_count: 2,
         input_rtsp_base_url: effective.mediamtx.internal_rtsp_base_url || effective.mediamtx.rtsp_base_url,
         output_rtsp_base_url: effective.mediamtx.internal_rtsp_base_url || effective.mediamtx.rtsp_base_url,
         mtx_api_url: effective.multiview.mtx_api_url,
@@ -225,6 +391,17 @@ try {
     assert.equal(monitoring.resume_on_startup, false, 'Startup preference was not retained');
     assert.equal(monitoring.desired_running, true, 'The last Start intent was not retained');
     stages.push('retained-config-audio-and-recording-inventory');
+    if (onvif) {
+      assert.equal(config.cameras.find(camera => camera.id === 'qa-camera-1').display_name, renamedIp);
+      assert.equal(config.cameras.find(camera => camera.id === 'qa-camera-2').display_name, renamedSecond);
+      assert.equal(config.cameras.find(camera => camera.id === 'qa-camera-1').ip.ptz.profile_token, 'qa-main');
+      await checkBranding();
+      await nav('Live View');
+      await page.getByRole('button', { name: 'View '+renamedIp, exact: true }).click();
+      await videoProgress('Retained renamed camera receives its original video', {markers: ['red']});
+      assert.equal((await json('/api/v1/cameras/qa-camera-1/ptz/capabilities')).supported, true);
+      stages.push('retained-branding-rename-and-PTZ');
+    }
   }
   // Every main screen is served by the installed application, not Vite or a mock.
   for (const name of ['Dashboard', 'Information', 'Settings', 'Live View', 'Multiview', 'Recordings']) {
@@ -238,6 +415,7 @@ try {
     for (const [i, marker] of [[1, 'red'], [2, 'blue']]) {
       await page.getByRole('button', { name: 'View QA camera '+i, exact: true }).click();
       await videoProgress('Live camera '+i, { audio: i === 1, markers: [marker] });
+      if (onvif && i === 1) await verifyPtzMovement();
     }
     stages.push('both-live-cameras-show-their-own-marker');
     await page.screenshot({ path: join(output, 'Live-View-playing.png') });
@@ -308,6 +486,7 @@ try {
     await page.getByRole('button', { name: 'Logout', exact: true }).click();
     await login('admin', password);
     stages.push('viewer-login-and-real-API-write-denial');
+    if (onvif) await renameCameras();
     await nav('Dashboard');
     await page.getByRole('button', { name: 'Stop monitoring', exact: true }).click();
     await until(() => json('/api/v1/status/monitoring'), value => value.desired_running === false && value.phase === 'stopped' && !value.busy, 'GUI monitoring Stop', 90);
@@ -317,6 +496,10 @@ try {
     assert.equal((await json('/api/v1/status/mediamtx')).running, false);
     assert((await json('/api/v1/status/processes')).items?.every(p => p.status !== 'running' && p.pid === null) ?? false, 'Owned publishers survived Stop');
     stages.push('GUI-stop-keeps-API-and-saved-settings-cannot-restart-monitoring');
+    if (onvif) {
+      await verifyPathChange();
+      await nav('Dashboard');
+    }
     const resumedAfter = Date.now() / 1000;
     await page.getByRole('button', { name: 'Start monitoring', exact: true }).click();
     const expectedStreams = ['qa-camera-1', 'qa-camera-2', 'multiview_1'];

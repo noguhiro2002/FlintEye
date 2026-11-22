@@ -70,6 +70,8 @@ def seed_runtime(profile: Path, app_profile: str, media: str, *, prefix: list[st
         'recording': {'record_root': str(Path(app_profile)/'recordings'), 'managed_storage': True,
                       'max_bytes': 1_000_000_000, 'min_free_bytes': 100_000_000},
         'multiview': {'enabled': False, 'mtx_api_url': f'http://127.0.0.1:{api}/v3/paths/list',
+                      'layout': {'canvas_width': 640, 'canvas_height': 360, 'grid_columns': 2},
+                      'quality': {'gop': 5},
                       'input_rtsp_base_url': f'rtsp://127.0.0.1:{rtsp}', 'output_rtsp_base_url': f'rtsp://127.0.0.1:{rtsp}',
                       'status_file': str(Path(app_profile)/'logs/multiview.json')},
         'mediamtx': {'control_mode': 'direct', 'rtsp_base_url': f'rtsp://127.0.0.1:{rtsp}',
@@ -180,13 +182,14 @@ def media_fixture(directory: Path, media: str, ffmpeg: str, *, prefix: list[str]
 
 
 def browser_check(url: str, profile: Path, output: Path, release: str, commit: str,
-                  fixture_url: str, *, retained: bool = False, synthetic_uvc: bool = False) -> None:
+                  fixture_url: str, *, retained: bool = False, synthetic_uvc: bool = False, onvif_url: str | None = None) -> None:
     output.mkdir(parents=True, exist_ok=True)
     command = ['node', str(ROOT/'frontend/tests/installed.mjs'), '--url', url, '--profile', str(profile),
                '--output', str(output), '--release', release, '--fixture-url', fixture_url]
     if commit: command += ['--commit', commit]
     if retained: command += ['--retained']
     if synthetic_uvc: command += ['--synthetic-uvc']
+    if onvif_url: command += ['--onvif-url', onvif_url]
     log_path = output/'browser.log'
     with log_path.open('w', encoding='utf-8') as log:
         completed = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, timeout=420)

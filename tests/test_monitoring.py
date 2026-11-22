@@ -2,6 +2,7 @@
 from contextlib import ExitStack
 import json
 import os
+import sqlite3
 from pathlib import Path
 import tempfile
 import threading
@@ -11,6 +12,7 @@ from unittest.mock import Mock, patch
 
 from flinteye_app import cli, recording_events
 from flinteye_app.monitoring import MonitoringConflict
+from flinteye_app.flinteye_desktop import DesktopActions, status_text
 from flinteye_app.orchestrator_api import AppContext, _apply_running_media_config
 from flinteye_app.orchestrator_auth import hash_password
 from flinteye_app.orchestrator_models import RuntimeConfig
@@ -251,6 +253,70 @@ class MonitoringTests(unittest.TestCase):
         self.assertTrue(receipt['forced'])
         self.assertFalse(receipt['ok'])
         self.assertTrue(self.controller.quitting)
+
+    def test_four_unindexed_completions_recover_on_retry_without_rerecording(self):
+        self.controller.started = True
+        self.controller.tracking_configured = True
+        for index in range(4):
+            file = self.complete_file(f'00-00-0{index}-000000', complete=False)
+            with patch('flinteye_app.flinteye_storage.register_segment', side_effect=sqlite3.OperationalError('database is locked')):
+                with self.assertRaises(sqlite3.OperationalError):
+                    recording_events.record_event(self.root, file, complete=True, session=self.controller.session)
+                self.assertFalse(recording_events.file_evidence(self.root, [file])[str(file)]['is_stable'])
+        with patch('flinteye_app.monitoring.FINALIZE_SECONDS', .7), \
+             patch('flinteye_app.flinteye_storage.register_segment', side_effect=sqlite3.OperationalError('database is locked')):
+            self.assertFalse(self.controller.perform('stop')['ok'])
+        status = self.controller.status()
+        self.assertEqual(status['finalization_issue'], 'recording_index')
+        self.assertEqual(status['pending_segments'], 4)
+        self.assertIn('4 awaiting completion', status_text(status))
+        self.assertEqual(status['controls'], {'start': False, 'stop': True, 'restart': False, 'retry_stop': True})
+        with self.assertRaises(MonitoringConflict):
+            self.controller.perform('start')
+        with patch('flinteye_app.monitoring.FINALIZE_SECONDS', 3):
+            self.assertTrue(self.controller.perform('stop')['ok'])
+        self.assertTrue(self.controller.status()['controls']['start'])
+        session = self.controller.session
+        with patch.object(self.context.supervisor, 'mediamtx_start', return_value={'ok': True}):
+            self.assertTrue(self.controller.perform('start')['ok'])
+        self.assertNotEqual(self.controller.session, session)
+        self.assertTrue(recording_events.file_evidence(self.root, [file])[str(file)]['is_stable'])
+
+    def test_retry_does_not_index_a_file_modified_after_its_completion_callback(self):
+        file = self.complete_file(complete=False)
+        with patch('flinteye_app.flinteye_storage.register_segment', side_effect=sqlite3.OperationalError):
+            with self.assertRaises(sqlite3.OperationalError):
+                recording_events.record_event(self.root, file, complete=True, session=self.controller.session)
+        file.write_bytes(b'changed-length')
+        self.assertFalse(self.controller.perform('stop')['ok'])
+        self.assertFalse(recording_events.file_evidence(self.root, [file])[str(file)]['is_stable'])
+
+    def test_desktop_force_quit_interrupts_an_in_progress_stop(self):
+        self.controller.started = True
+        self.controller.tracking_configured = True
+        self.complete_file(complete=False)
+        waiting = threading.Event()
+        original_summary = recording_events.summary
+        server = Mock(should_exit=False)
+        actions = DesktopActions(self.controller, server)
+
+        def signal_summary(*args, **kwargs):
+            waiting.set()
+            return original_summary(*args, **kwargs)
+
+        with patch('flinteye_app.monitoring.FINALIZE_SECONDS', 10), \
+             patch.object(recording_events, 'summary', side_effect=signal_summary):
+            actions.submit('stop')
+            self.assertTrue(waiting.wait(3))
+            self.assertTrue(actions.lock.locked())
+            actions.submit('quit', force=True)
+            self.assertTrue(server.should_exit)
+            self.assertTrue(actions.lock.acquire(timeout=2))
+            actions.lock.release()
+        self.controller.close()
+        receipt = json.loads((self.root/'last-monitoring-stop.json').read_text())
+        self.assertTrue(receipt['forced'])
+        self.assertFalse(receipt['ok'])
 
     def test_create_after_complete_cannot_reopen_segment(self):
         file = self.complete_file()

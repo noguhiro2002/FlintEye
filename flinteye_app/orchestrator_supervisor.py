@@ -651,44 +651,41 @@ class OrchestratorSupervisor:
 
     def _stop_process(self, proc: ManagedProcess, *, deadline: float | None = None) -> None:
         proc.desired = False
-        if proc.process is None:
+        process = proc.process
+        if process is None:
             return
+        def remaining(limit):
+            return limit if deadline is None else max(.1, min(limit, deadline - time.monotonic()))
+
         try:
             if os.name != "nt":
                 # terminate process group so child ffmpeg processes are not orphaned
-                _signal_process_group(proc.process.pid, signal.SIGTERM)
-                proc.process.wait(timeout=5 if deadline is None else max(0, min(5, deadline - time.monotonic())))
-            elif proc.process.poll() is None:
-                if not _kill_process_tree_windows(proc.process.pid, timeout=10 if deadline is None else max(.1, min(10, deadline - time.monotonic()))):
-                    proc.process.terminate()
-                proc.process.wait(timeout=5 if deadline is None else max(0, min(5, deadline - time.monotonic())))
-        except Exception:  # noqa: BLE001
-            try:
-                if proc.process and proc.process.poll() is None and os.name != "nt":
-                    _signal_process_group(proc.process.pid, signal.SIGKILL)
-                elif proc.process and not _kill_process_tree_windows(proc.process.pid, timeout=1 if deadline is not None else 10):
-                    proc.process.kill()
-            except Exception:  # noqa: BLE001
-                pass
-        finally:
-            if proc.process is not None and os.name != "nt":
+                _signal_process_group(process.pid, signal.SIGTERM)
+            elif process.poll() is None:
+                if not _kill_process_tree_windows(process.pid, timeout=remaining(10)):
+                    process.terminate()
+            process.wait(timeout=remaining(5))
+        except (OSError, subprocess.SubprocessError):
+            pass  # Escalate below and retain an unreaped process for retry.
+        try:
+            if os.name != "nt":
                 # The leader exiting does not prove its process group is empty.
                 # Escalate for descendants that ignored TERM or outlived it.
-                _signal_process_group(proc.process.pid, signal.SIGKILL)
-                try:
-                    proc.process.wait(timeout=5 if deadline is None else max(.1, min(5, deadline - time.monotonic())))
-                except subprocess.TimeoutExpired:
-                    logger.error("process group did not stop: %s", proc.key)
-            if proc.process is not None:
-                proc.last_exit_code = proc.process.poll()
-            proc.process = None
-            proc.started_at = None
-            proc.maintenance_next_at = None
-            proc.restart_pending_at = None
-            proc.restart_pending_reason = None
-            proc.healthcheck_next_at = None
-            proc.healthcheck_failures = 0
-            proc.output_thread = None
+                _signal_process_group(process.pid, signal.SIGKILL)
+            elif process.poll() is None:
+                process.kill()
+            proc.last_exit_code = process.wait(timeout=remaining(5))
+        except (OSError, subprocess.TimeoutExpired):
+            logger.exception("Owned process could not be reaped: %s", proc.key)
+            return
+        proc.process = None
+        proc.started_at = None
+        proc.maintenance_next_at = None
+        proc.restart_pending_at = None
+        proc.restart_pending_reason = None
+        proc.healthcheck_next_at = None
+        proc.healthcheck_failures = 0
+        proc.output_thread = None
 
     def _ensure_process(
         self,
@@ -1311,9 +1308,10 @@ class OrchestratorSupervisor:
         ready, _ = _probe_rtsp_listener(f'rtsps://{network.address}:{PORT}', timeout_sec=.25)
         return 'ready' if ready else 'unavailable'
 
-    def _run_control_command(self, cmd: list[str]) -> tuple[int, str, str]:
+    def _run_control_command(self, cmd: list[str], *, timeout=15) -> tuple[int, str, str]:
         try:
-            result = run_background(cmd, **background_process_options(), check=False, capture_output=True, text=True)
+            result = run_background(cmd, **background_process_options(), check=False, capture_output=True,
+                                    text=True, timeout=timeout)
             return result.returncode, result.stdout.strip(), result.stderr.strip()
         except FileNotFoundError as e:
             return 127, "", str(e)
@@ -1407,25 +1405,28 @@ class OrchestratorSupervisor:
             return {"ok": False, "stdout": "", "stderr": f"external mode: start manually ({detail})"}
         return {"ok": False, "stdout": "", "stderr": f"unsupported control_mode: {mode}"}
 
-    def mediamtx_stop(self, config: RuntimeConfig) -> dict[str, Any]:
+    def mediamtx_stop(self, config: RuntimeConfig, *, deadline: float | None = None) -> dict[str, Any]:
         mode = config.mediamtx.control_mode
         service_name = config.mediamtx.service_name
+        options = {'timeout': max(.1, deadline - time.monotonic())} if deadline is not None else {}
         if mode == "systemd":
-            code, out, err = self._run_control_command(["systemctl", "stop", service_name])
+            code, out, err = self._run_control_command(["systemctl", "stop", service_name], **options)
             return {"ok": code == 0, "stdout": out, "stderr": err}
         if mode == "launchd":
-            code, out, err = self._run_control_command(["launchctl", "bootout", f"system/{service_name}"])
+            code, out, err = self._run_control_command(["launchctl", "bootout", f"system/{service_name}"], **options)
             return {"ok": code == 0, "stdout": out, "stderr": err}
         if mode == "windows_service":
             code, out, err = self._run_control_command(
-                ["powershell", "-NoProfile", "-Command", f"Stop-Service -Name '{service_name}'"]
+                ["powershell", "-NoProfile", "-Command", f"Stop-Service -Name '{service_name}'"], **options
             )
             return {"ok": code == 0, "stdout": out, "stderr": err}
         if mode == "direct":
             with self._lock:
                 proc = self._processes.get("mediamtx:direct")
                 if proc:
-                    self._stop_process(proc)
+                    self._stop_process(proc, deadline=deadline)
+                    if proc.process is not None:
+                        return {"ok": False, "stdout": "", "stderr": "Owned MediaMTX process is still running"}
             return {"ok": True, "stdout": "", "stderr": ""}
         if mode == "external":
             return {"ok": True, "stdout": "", "stderr": "external mode: stop manually (no-op)"}

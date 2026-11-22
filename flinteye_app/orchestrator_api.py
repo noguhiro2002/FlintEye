@@ -1288,7 +1288,7 @@ def _suggest_for_device(
     if matched:
         default_profile = matched.uvc.profile if matched.uvc else matched.path
         default_path = matched.path
-        default_name = (
+        default_name = matched.display_name or (
             matched.uvc.env.get("CAMERA_NAME")
             if matched.uvc and matched.uvc.env.get("CAMERA_NAME")
             else matched.id
@@ -1362,7 +1362,7 @@ def _suggest_for_device(
         if bitrate is not None and not bitrate_value:
             camera_body["uvc"]["env"].pop("BITRATE", None)
         camera_body["uvc"]["extra_args"] = matched.uvc.extra_args
-        camera_body["display_name"] = matched.display_name
+        camera_body["display_name"] = (suggestion["camera_name"] if camera_name is not None else matched.display_name)
         camera_body["audio"] = matched.audio.model_dump()
     suggestion["matched_camera_id"] = matched.id if matched else None
     return suggestion
@@ -1814,15 +1814,14 @@ def post_uvc_device_apply(
 
     runtime_camera = suggestion["runtime_camera"]
     new_path = runtime_camera["path"].lower()
-    device_keys = _device_keys_for_match(device)
+    matched_id = suggestion["matched_camera_id"]
 
     cameras_payload: list[dict[str, Any]] = []
     for cam in old_cfg.cameras:
-        if cam.type == "uvc":
-            if cam.path.lower() == new_path:
-                continue
-            if _camera_keys_for_match(cam) & device_keys:
-                continue
+        if cam.id == matched_id:
+            continue
+        if cam.path.lower() == new_path:
+            raise HTTPException(409, 'The camera path is already used by another camera.')
         cameras_payload.append(cam.model_dump())
     cameras_payload.append(runtime_camera)
 
@@ -1832,12 +1831,15 @@ def post_uvc_device_apply(
         for item in old_cfg.device_discovery.ignored_uvc_devices
         if item.strip().lower() not in ignored_device_keys
     ]
-    new_cfg = context.store.patch_runtime(
-        {
-            "cameras": cameras_payload,
-            "device_discovery": {"ignored_uvc_devices": ignored_devices},
-        }
-    )
+    update = {"cameras": cameras_payload, "device_discovery": {"ignored_uvc_devices": ignored_devices}}
+    if matched_id and matched_id != runtime_camera['path']:
+        def migrate_paths(paths):
+            return list(dict.fromkeys(runtime_camera['path'] if path.casefold() == matched_id.casefold() else path
+                                      for path in paths))
+
+        update['recording'] = {'record_paths': migrate_paths(old_cfg.recording.record_paths)}
+        update['multiview'] = {'source_paths': migrate_paths(old_cfg.multiview.source_paths)}
+    new_cfg = context.store.patch_runtime(update)
     _restart_affected(context, old_cfg, new_cfg)
 
     return {
@@ -1875,7 +1877,11 @@ def patch_mediamtx_config(request: Request, payload: dict[str, Any]) -> dict[str
     if not patch:
         raise HTTPException(status_code=400, detail="payload must include one of: managed, recording, mediamtx")
 
-    new_cfg = context.store.patch_runtime(patch)
+    _guard_connection_change(request, patch, old_cfg)
+    try:
+        new_cfg = context.store.patch_runtime(patch)
+    except (ValueError, OSError) as error:
+        raise HTTPException(422, str(error)) from error
     _restart_affected(context, old_cfg, new_cfg)
     config_path = resolve_mediamtx_config_path(new_cfg, context.workspace_dir)
     return {
@@ -1942,7 +1948,7 @@ def post_ip_camera_probe(request: Request, payload: dict[str, Any]) -> dict[str,
         probe_duration_sec = float(payload.get("probe_duration_sec") or 6.0)
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail="probe_duration_sec must be numeric") from exc
-    if probe_duration_sec < 2.0 or probe_duration_sec > 15.0:
+    if not 2.0 <= probe_duration_sec <= 15.0:
         raise HTTPException(status_code=422, detail="probe_duration_sec must be in range 2..15")
 
     camera_id = str(payload.get("camera_id") or "").strip()

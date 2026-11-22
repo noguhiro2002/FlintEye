@@ -139,6 +139,11 @@ interface IpCameraProbeState {
   result: IpCameraProbeResult | null;
 }
 
+function ipInspectionKey(ip: IpCameraDraft['ip']): string {
+  return JSON.stringify([ip.source_url.trim(), ip.onvif_mode, ip.onvif_address.trim(),
+    ip.onvif_username.trim(), ip.onvif_password]);
+}
+
 interface SourceOption {
   path: string;
   label: string;
@@ -869,7 +874,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
     setSuggestProfile(matchedCamera?.uvc?.profile?.trim() || device.suggestion?.profile || "cam1");
     setSuggestPath(matchedCamera?.path?.trim() || device.suggestion?.path || "uvc_cam1");
     setSuggestName(
-      (typeof env.CAMERA_NAME === "string" && env.CAMERA_NAME.trim()) ||
+      matchedCamera?.display_name?.trim() || (typeof env.CAMERA_NAME === "string" && env.CAMERA_NAME.trim()) ||
         device.suggestion?.camera_name ||
         device.display_name,
     );
@@ -1204,10 +1209,10 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
     idx: number,
     patch: Partial<Omit<IpCameraDraft, "ip">> & { ip?: Partial<IpCameraDraft["ip"]> },
   ): void => {
-    const id = ipDrafts[idx]?.id;
-    if (id) {
-      probeRequests.current.delete(id);
-      setIpProbeStates(prev => { const next = { ...prev }; delete next[id]; return next; });
+    const draft = ipDrafts[idx];
+    if (draft && patch.ip && ipInspectionKey(draft.ip) !== ipInspectionKey({ ...draft.ip, ...patch.ip })) {
+      probeRequests.current.delete(draft.id);
+      setIpProbeStates(prev => { const next = { ...prev }; delete next[draft.id]; return next; });
     }
     setIpDrafts((prev) =>
       prev.map((item, i) => {
@@ -1236,12 +1241,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
       }));
       return;
     }
-    const requestKey = JSON.stringify({
-      sourceUrl,
-      onvifMode: draft.ip.onvif_mode,
-      onvifAddress: draft.ip.onvif_address.trim(),
-      onvifUsername: draft.ip.onvif_username.trim(),
-    });
+    const requestKey = ipInspectionKey(draft.ip);
     const existing = ipProbeStates[draft.id];
     if (!force && existing?.requestKey === requestKey && existing.result) {
       return;
@@ -1337,6 +1337,16 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
       if (paths.some(path => !path)) throw new Error("Every camera needs a nonempty path.");
       if (new Set(paths.map(path => path.toLowerCase())).size !== paths.length) throw new Error("Camera paths must be unique. Change the duplicate path before saving.");
       const recording = { ...runtime.recording };
+      const renamedPaths = new Map<string, string>();
+      for (const draft of ipDrafts) {
+        const previous = cameras.find(camera => camera.type === 'ip' && camera.id === draft.id);
+        if (previous && previous.path !== draft.path.trim()) renamedPaths.set(previous.path.toLowerCase(), draft.path.trim());
+      }
+      const migratePaths = (values: string[] | undefined) => values && Array.from(new Set(values.map(
+        path => renamedPaths.get(path.toLowerCase()) ?? path)));
+      recording.record_paths = migratePaths(recording.record_paths);
+      const multiview = runtime.multiview && { ...runtime.multiview,
+        source_paths: migratePaths(runtime.multiview.source_paths) };
       if (recording.managed_storage) {
         if (recording.max_bytes != null && (!Number.isFinite(recording.max_bytes) || recording.max_bytes <= 0)) {
           throw new Error("Enter a positive recording capacity.");
@@ -1370,7 +1380,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
         ...(mediamtxChanged ? { mediamtx: runtime.mediamtx } : {}),
         device_discovery: runtime.device_discovery,
         recording,
-        multiview: runtime.multiview,
+        multiview,
         cameras: [
           ...nonIpCameras,
           ...ipDrafts.map((draft) => ({
@@ -1981,7 +1991,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
                 >
                   <option value="legacy_token">legacy_token</option>
                   <option value="local">local</option>
-                  <option value="oidc">oidc (not implemented)</option>
+                  <option value="oidc" disabled>oidc (not implemented)</option>
                 </select>
                 <small className="field-help">Authentication backend used by the system.</small>
               </label>
@@ -2162,7 +2172,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
                   <option value="launchd">launchd</option>
                   <option value="direct">direct</option>
                   <option value="external">external</option>
-                  <option value="docker_compose">docker_compose (not implemented)</option>
+                  <option value="docker_compose" disabled>docker_compose (not implemented)</option>
                 </select>
               </label>
               <label>
@@ -2649,7 +2659,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
                 <input
                   type="number"
                   min={2}
-                  max={128}
+                  max={32}
                   value={runtime.multiview?.max_sources ?? 32}
                   onChange={(e) =>
                     setRuntime((prev) => ({
@@ -3554,8 +3564,11 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
             <div className="ip-camera-list">
               {ipDrafts.map((draft, idx) => {
                 const probeState = ipProbeStates[draft.id];
-                const probe = probeState?.result;
-                const ptzProfiles = (probe?.onvif.profiles ?? []).filter((profile) => profile.ptz?.supported);
+                const probe = probeState?.requestKey === ipInspectionKey(draft.ip) ? probeState.result : null;
+                // Media1 and Media2 may advertise the same profile token.
+                const ptzProfiles = (probe?.onvif.profiles ?? []).filter((profile, index, profiles) =>
+                  profile.token && profile.ptz?.supported &&
+                  profiles.findIndex(item => item.token === profile.token && item.ptz?.supported) === index);
                 const ptzSupported = Boolean(probe?.onvif.ptz?.supported && ptzProfiles.length > 0);
                 const ptzEvidence = ptzSupported || draft.ip.ptz.enabled;
                 const effectiveMultiviewMode = draft.ip.multiview_input.mode === "inherit"
@@ -3630,7 +3643,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
                           value={draft.ip.source_url}
                           onChange={(e) => onUpdateIpDraft(idx, { ip: { source_url: e.target.value } })}
                           onBlur={() => void onInspectIpCamera(idx, false)}
-                          placeholder="rtsp://username:password@10.5.1.145:554/stream1"
+                          placeholder="rtsp://username:password@camera.example:554/stream1"
                           spellCheck={false}
                         />
                       </label>
@@ -3743,7 +3756,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
                           {Boolean(probe.onvif.profiles?.length) && (
                             <div className="ip-profile-list">
                               {probe.onvif.profiles?.map((profile) => (
-                                <div key={profile.token || profile.name}>
+                                <div key={`${profile.media_service}:${profile.token || profile.name}`}>
                                   <strong>{profile.name}</strong>
                                   <span>
                                     {[profile.media_service, profile.encoding, profile.width && profile.height ? `${profile.width}×${profile.height}` : null,
@@ -3767,7 +3780,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange 
                               <h4>ONVIF PTZ</h4>
                               <p>
                                 {probe
-                                  ? probe.onvif.ptz?.message || "This camera did not advertise standard PTZ control."
+                                  ? probe.onvif.ptz?.message || probe.onvif.message
                                   : draft.ip.ptz.enabled
                                     ? "Saved PTZ configuration. Inspect the camera to refresh capabilities."
                                     : "Inspect the camera to detect Pan, Tilt and Zoom support."}

@@ -1,5 +1,7 @@
 import sys
+import tempfile
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -47,6 +49,70 @@ class MacQuitTests(unittest.TestCase):
     def test_native_cocoa_quit_delegate(self):
         import AppKit
         self.check_quit(AppKit)
+
+    @unittest.skipUnless(sys.platform == 'darwin', 'Requires the native NSStatusItem menu')
+    def test_status_menu_dispatches_retry_and_confirmed_force_quit(self):
+        import pystray
+        from PyObjCTools.AppHelper import callLater
+        from flinteye_app.flinteye_desktop import DesktopActions, _run_tray
+
+        snapshot = {'label': 'Finishing recordings', 'message': 'Retry the recording stop.',
+                    'counts': {'receiving':0, 'targets':4, 'recording':0}, 'pending_segments':4,
+                    'state': 'finalizing', 'phase': 'finalizing', 'color': 'amber', 'busy':False,
+                    'controls': {'start':False, 'stop':True, 'restart':False, 'retry_stop':True}}
+        controller = Mock()
+        controller.status.return_value = snapshot
+        controller.perform.return_value = {'ok':False, 'message':'still waiting'}
+        server = SimpleNamespace(should_exit=False)
+        actions = DesktopActions(controller, server)
+        real_icon = pystray.Icon
+        icons, failures = [], []
+
+        def create_icon(*args, **kwargs):
+            icon = real_icon(*args, **kwargs)
+            icons.append(icon)
+            return icon
+
+        def click(title):
+            menu = icons[0]._menu_handle[0]
+            index = menu.indexOfItemWithTitle_(title)
+            self.assertGreaterEqual(index, 0)
+            self.assertTrue(menu.itemAtIndex_(index).isEnabled())
+            menu.performActionForItemAtIndex_(index)
+
+        def drive(step=0):
+            try:
+                if step == 0:
+                    menu = icons[0]._menu_handle[0]
+                    start = menu.itemWithTitle_('Start monitoring')
+                    self.assertIsNotNone(start)
+                    self.assertFalse(start.isEnabled())
+                    click('Retry Stop')
+                elif step == 1:
+                    controller.perform.assert_called_once_with('stop')
+                    click('Force quit (recordings may be incomplete)')
+                elif step == 2:
+                    self.assertFalse(server.should_exit)
+                    controller.request_force_quit.assert_not_called()
+                    click('Force quit (recordings may be incomplete)')
+                else:
+                    self.assertTrue(server.should_exit)
+                    return
+                callLater(.25, drive, step+1)
+            except Exception as error:
+                failures.append(error)
+                server.should_exit = True
+
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(pystray, 'Icon', side_effect=create_icon), \
+             patch('flinteye_app.cli.autostart_status', return_value={'enabled':True,'available':True}), \
+             patch('flinteye_app.flinteye_desktop._confirm_force_quit', side_effect=[False, True]) as confirm:
+            callLater(1, drive)
+            _run_tray(server, Path(directory), controller, actions, Mock())
+        if failures:
+            raise failures[0]
+        self.assertEqual(confirm.call_count, 2)
+        controller.request_force_quit.assert_called_once_with()
 
 
 if __name__ == '__main__':

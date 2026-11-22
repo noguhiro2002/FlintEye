@@ -7,6 +7,7 @@ temporary snapshot. No adapter may delete an existing installation or profile.
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 import json
 import os
 from pathlib import Path
@@ -21,7 +22,8 @@ import venv
 
 from lifecycle_common import (ROOT, browser_check, decode_recordings, media_fixture,
                               request_quit, seed_runtime, stop_process, wait_closed, wait_http)
-from lifecycle_report import LINUX_USER_METHODS, Report
+from lifecycle_report import LINUX_USER_METHODS, Report, requires_preview_7_checks
+from qa_onvif import onvif_fixture
 from release_lib import digest, release_identity, version
 
 
@@ -380,11 +382,14 @@ def exercise(adapter: Adapter, report: Report, args):
         report.stage(phase, 'passed', 'Normal installed entry point started the real API')
         phase = 'api_gui'
         fixture_dir = adapter.directory/'fixture'; fixture_dir.mkdir()
-        with media_fixture(fixture_dir, adapter.media, adapter.ffmpeg,
-                           prefix=adapter.fixture_prefix, app_directory=adapter.fixture_app_directory) as fixture:
+        with ExitStack() as resources:
+            fixture = resources.enter_context(media_fixture(fixture_dir, adapter.media, adapter.ffmpeg,
+                                              prefix=adapter.fixture_prefix, app_directory=adapter.fixture_app_directory))
+            onvif = (resources.enter_context(onvif_fixture(fixture, fixture_dir/'onvif-operations.json'))
+                     if requires_preview_7_checks(args.release) else None)
             adapter.sync_profile()
             browser_check(url, adapter.profile, report.output/'browser', args.release, args.commit, fixture,
-                          synthetic_uvc=args.synthetic_uvc)
+                          synthetic_uvc=args.synthetic_uvc, onvif_url=onvif)
             report.stage(phase, 'passed', 'browser/browser.json; real API; browser video/trace/screenshots')
             phase = 'quit'
             adapter.quit()
@@ -418,7 +423,7 @@ def exercise(adapter: Adapter, report: Report, args):
                 if not (adapter.profile/name).is_file() or digest(adapter.profile/name) != expected:
                     raise AssertionError('Reinstall changed a finalized recording: '+name)
             browser_check(url, adapter.profile, report.output/'retained', args.release, args.commit, fixture,
-                          retained=True, synthetic_uvc=args.synthetic_uvc)
+                          retained=True, synthetic_uvc=args.synthetic_uvc, onvif_url=onvif)
             adapter.quit(); adapter.uninstall()
             report.stage(phase, 'passed', 'retained/browser.json; existing credentials, config and recordings reused')
     except BaseException as exc:
@@ -428,7 +433,8 @@ def exercise(adapter: Adapter, report: Report, args):
         adapter.finish()
         fixture_dir = adapter.directory/'fixture'
         if fixture_dir.is_dir():
-            shutil.copytree(fixture_dir, report.output/'fixture', dirs_exist_ok=True)
+            shutil.copytree(fixture_dir, report.output/'fixture', dirs_exist_ok=True,
+                            ignore=shutil.ignore_patterns('external-camera-tools'))
         report.save()
 
 

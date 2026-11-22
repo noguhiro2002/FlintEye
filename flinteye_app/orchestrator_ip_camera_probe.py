@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import socket
 import statistics
 import subprocess
@@ -41,7 +42,26 @@ def _safe_error(value: object, source_url: str = "") -> str:
     text = str(value).strip()
     if source_url:
         text = text.replace(source_url, '<camera-source>')
-    return text[:1000]
+    return re.sub(r'((?:https?|rtsps?)://)[^/\s@]+@', r'\1***@', text, flags=re.IGNORECASE)[:1000]
+
+
+def _onvif_failure(error: Exception) -> str:
+    from requests.exceptions import ConnectionError, SSLError, Timeout
+
+    # onvif-python chains the underlying HTTP/SOAP exception.
+    while isinstance(error.__cause__, Exception):
+        error = error.__cause__
+    if isinstance(error, SSLError):
+        return 'trust'
+    if isinstance(error, (ConnectionError, Timeout)):
+        return 'unreachable'
+    status = getattr(error, 'status_code', None)
+    if status is None:
+        status = getattr(getattr(error, 'response', None), 'status_code', None)
+    fault = str(error).lower()
+    if status in (401, 403) or any(code in fault for code in ('notauthorized', 'failedauthentication', 'unauthorized')):
+        return 'authentication_failed'
+    return 'not_connected'
 
 
 def _fraction(value: object) -> float | None:
@@ -415,7 +435,7 @@ def _profile_summary(profile_value: Any, media_service_name: str, media_service:
                     ProfileToken=token,
                     StreamSetup={"Stream": "RTP-Unicast", "Transport": {"Protocol": "RTSP"}},
                 )
-            stream_uri = _pick(uri_result, "Uri", "URI")
+            stream_uri = uri_result if isinstance(uri_result, str) else _pick(uri_result, "Uri", "URI")
         except Exception:
             stream_uri = None
     return {
@@ -456,7 +476,9 @@ def _probe_media_profiles(client: Any, source_url: str) -> tuple[list[dict[str, 
     for service_name, factory in candidates:
         try:
             media_service = factory()
-            raw_profiles = media_service.GetProfiles() or []
+            # Media2 returns only names and tokens when Type is omitted.
+            raw_profiles = (media_service.GetProfiles(Type=["All"])
+                            if service_name == "Media2" else media_service.GetProfiles()) or []
             contacted = True
             profiles = [
                 _profile_summary(profile, service_name, media_service)
@@ -589,14 +611,18 @@ def probe_ptz_profiles(client: Any, profiles: list[dict[str, Any]], source_url: 
         results.append(summary)
 
     supported_results = [item for item in results if item.get("supported")]
+    if supported_results:
+        message = f"PTZ is available on {len(supported_results)} media profile(s)"
+    elif not results:
+        message = "No inspected ONVIF media profile has a PTZ configuration. Check the camera's profiles and permissions."
+    elif failures:
+        message = "Could not read PTZ capabilities for the media profiles. Check ONVIF permissions and inspect again."
+    else:
+        message = "PTZ service was found, but no controllable PTZ spaces were advertised"
     return {
         "supported": bool(supported_results),
         "service_available": True,
-        "message": (
-            f"PTZ is available on {len(supported_results)} media profile(s)"
-            if supported_results
-            else "PTZ service was found, but no controllable PTZ spaces were advertised"
-        ),
+        "message": message,
         "pan_tilt": any(bool(item.get("pan_tilt")) for item in supported_results),
         "zoom": any(bool(item.get("zoom")) for item in supported_results),
         "profiles": results,
@@ -665,7 +691,8 @@ def iter_onvif_clients(
         candidates.append((manual_host, port, use_https, resolved, "manual"))
     else:
         candidates.extend(_discovered_candidates(host, min(timeout_sec, 3.0)))
-        for port, use_https in [(80, False), (443, True), (8000, False), (8080, False), (8443, True)]:
+        # Tapo exposes ONVIF on 2020, and multicast discovery may not cross VPNs.
+        for port, use_https in [(80, False), (443, True), (2020, False), (8000, False), (8080, False), (8443, True)]:
             if _tcp_open(host, port):
                 scheme = "https" if use_https else "http"
                 candidates.append(
@@ -707,6 +734,7 @@ def iter_onvif_clients(
                 trace.setdefault("errors", []).append(
                     f"{candidate_host}:{port}: {_safe_error(exc, source_url)}"
                 )
+                trace.setdefault("failures", []).append(_onvif_failure(exc))
             continue
         yield client, {
             "host": candidate_host,
@@ -753,13 +781,14 @@ def probe_onvif(
                     device_info = _serialized(device_service.GetDeviceInformation())
                 except Exception as exc:
                     device_info_error = _safe_error(exc, source_url)
+                    trace.setdefault('failures', []).append(_onvif_failure(exc))
                 service_details = _service_details(client)
                 profiles, media_service_name, media_errors, media_contacted = _probe_media_profiles(
                     client, source_url
                 )
                 ptz = probe_ptz_profiles(client, profiles, source_url)
                 standard_contact = (
-                    getattr(client, "services", None) is not None
+                    bool(service_details)
                     or getattr(client, "capabilities", None) is not None
                     or device_info is not None
                     or media_contacted
@@ -800,6 +829,7 @@ def probe_onvif(
                 trace.setdefault("errors", []).append(
                     f"{candidate_host}:{port}: {_safe_error(exc, source_url)}"
                 )
+                trace.setdefault('failures', []).append(_onvif_failure(exc))
     except ImportError:
         return {
             "status": "unavailable",
@@ -809,12 +839,23 @@ def probe_onvif(
     except IpCameraProbeError as exc:
         return {"status": "error", "supported": False, "message": _safe_error(exc, source_url)}
 
-    if not trace.get("attempts"):
+    failures = trace.get('failures', [])
+    status = 'not_connected'
+    if 'authentication_failed' in failures:
+        status = 'authentication_failed'
+        message = 'ONVIF authentication failed. Check the ONVIF account and inspect again.'
+    elif 'trust' in failures:
+        status = 'trust'
+        message = 'The ONVIF HTTPS certificate could not be verified. Check the camera address and certificate trust.'
+    elif 'unreachable' in failures:
+        status = 'unreachable'
+        message = 'The ONVIF endpoint did not respond. Check the Device Service address, routing, and camera connection.'
+    elif not trace.get("attempts"):
         message = "No ONVIF endpoint was discovered. Select Manual address and enter the device service address."
     else:
-        message = "ONVIF endpoints were found but could not be authenticated or queried."
+        message = "The endpoint did not return an ONVIF response. Check the Device Service address and ONVIF permissions."
     return {
-        "status": "not_connected",
+        "status": status,
         "supported": None,
         "message": message,
         "attempts": int(trace.get("attempts") or 0),

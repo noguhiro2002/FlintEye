@@ -23,9 +23,12 @@ on:
       - packaging/validation_install.py
       - packaging/lifecycle*.py
       - packaging/qa_uvc_source.py
+      - packaging/qa_onvif.py
+      - packaging/qa_settings.py
       - packaging/ci_apt.py
       - packaging/LifecycleLinux.Dockerfile
       - frontend/tests/installed.mjs
+      - frontend/tests/settings-*
       - .github/workflows/build-release.yml
       - .github/workflows/check.yml
   workflow_dispatch:

@@ -324,7 +324,7 @@ Settings > IP Cameras 画面では、環境変数ではなく `runtime.json` に
 - `cfr_fps`
   - `timestamp_mode` が `cfr` に解決されるとき使用されるターゲットフレームレート
 - `onvif_mode`
-  - `auto`: WS-Discovery および DNS/IP認識型ソースURLホストマッチングを使用し、ベストエフォートのフォールバックとして標準のHTTP(S)ポートを使用する
+  - `auto`: WS-DiscoveryでソースURLのホストに一致するカメラを探します。見つからない場合は、Tapo用のTCP 2020を含む一般的なHTTP(S)ポートを同じカメラで試します。
   - `manual`: 必要に応じてデフォルト以外のポートやパスを含む、完全に設定されたONVIFデバイスサービスURLを使用する
   - `disabled`: ONVIFの検査をスキップし、RTSPのタイミングのみを計測する
 - `onvif_address`, `onvif_username`, `onvif_password`

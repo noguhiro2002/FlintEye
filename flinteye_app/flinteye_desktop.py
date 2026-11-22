@@ -68,7 +68,10 @@ def tray_image(status):
 
 def status_text(status):
     counts = status['counts']
-    return f"{status['label']} — {counts['receiving']}/{counts['targets']} receiving, {counts['recording']} recording"
+    text = f"{status['label']} — {counts['receiving']}/{counts['targets']} receiving, {counts['recording']} recording"
+    if status['phase'] == 'finalizing' and status.get('pending_segments'):
+        text += f", {status['pending_segments']} awaiting completion"
+    return text
 
 
 class DesktopActions:
@@ -82,6 +85,12 @@ class DesktopActions:
         return self.lock.locked() or self.controller.status()['busy']
 
     def submit(self, action, *, force=False, startup=None, remove_startup=False):
+        if action == 'quit' and force:
+            # A forced shutdown must be available while Stop is still waiting
+            # for a recorder or its storage. Let the main cleanup own the exit.
+            self.controller.request_force_quit()
+            self.server.should_exit = True
+            return
         if not self.lock.acquire(blocking=False):
             return
         def work():
@@ -93,11 +102,9 @@ class DesktopActions:
                     return
                 if remove_startup:
                     set_autostart(False)
-                result = self.controller.perform(action, force=force)
-                if action == 'quit' and (result['ok'] or force):
+                result = self.controller.perform(action)
+                if action == 'quit' and result['ok']:
                     self.server.should_exit = True
-                elif not result['ok']:
-                    self.message = result['message']
             except Exception as exc:
                 self.message = str(exc)
                 logger.exception('Desktop action failed')
@@ -139,6 +146,8 @@ def _confirm_force_quit():
         alert.setInformativeText_(text)
         alert.addButtonWithTitle_('Cancel')
         alert.addButtonWithTitle_('Force quit')
+        AppKit.NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
+        alert.window().setLevel_(AppKit.NSFloatingWindowLevel)
         return alert.runModal() == AppKit.NSAlertSecondButtonReturn
     if sys.platform == 'win32':
         import ctypes
@@ -162,8 +171,11 @@ def _run_tray(server, root, controller, actions, open_browser):
         from flinteye_app.subprocess_utils import background_process_options
         popen_background(launch_command() + ['--connection-info', '--data-dir', str(root)], **background_process_options())
     def force_quit():
-        if _confirm_force_quit():
-            actions.submit('quit', force=True)
+        def confirm():
+            if not server.should_exit and _confirm_force_quit():
+                actions.submit('quit', force=True)
+        # On macOS open the modal after the menu action returns to AppKit.
+        schedule(confirm)
     icon = pystray.Icon('FlintEye', tray_image(snapshot), 'FlintEye', menu=pystray.Menu(
         pystray.MenuItem(lambda item: status_text(snapshot), None, enabled=False),
         pystray.MenuItem(lambda item: (actions.message or snapshot['message'])[:140], None, enabled=False),
@@ -171,11 +183,11 @@ def _run_tray(server, root, controller, actions, open_browser):
         pystray.MenuItem('Open FlintEye', lambda: open_browser(), default=True),
         pystray.MenuItem('Address and setup assistance', connection_info),
         pystray.MenuItem('Start monitoring', lambda: actions.submit('start'),
-                         enabled=lambda item: not actions.busy and not snapshot['desired_running'] and snapshot['phase'] != 'finalizing'),
-        pystray.MenuItem('Stop monitoring', lambda: actions.submit('stop'),
-                         enabled=lambda item: not actions.busy and (snapshot['desired_running'] or snapshot['phase'] == 'finalizing')),
+                         enabled=lambda item: not actions.busy and snapshot['controls']['start']),
+        pystray.MenuItem(lambda item: 'Retry Stop' if snapshot['controls']['retry_stop'] else 'Stop monitoring',
+                         lambda: actions.submit('stop'), enabled=lambda item: not actions.busy and snapshot['controls']['stop']),
         pystray.MenuItem('Restart monitoring', lambda: actions.submit('restart'),
-                         enabled=lambda item: not actions.busy and snapshot['desired_running'] and snapshot['phase'] != 'finalizing'),
+                         enabled=lambda item: not actions.busy and snapshot['controls']['restart']),
         pystray.MenuItem('Open logs', lambda: webbrowser.open((root / 'logs').as_uri())),
         pystray.MenuItem('Start at login', lambda: actions.submit(None, startup=not startup['enabled']),
                          checked=lambda item: startup['enabled'], enabled=lambda item: not actions.busy and startup['available']),
@@ -184,7 +196,7 @@ def _run_tray(server, root, controller, actions, open_browser):
         pystray.Menu.SEPARATOR,
         pystray.MenuItem('Quit FlintEye', lambda: actions.submit('quit'), enabled=lambda item: not actions.busy),
         pystray.MenuItem('Force quit (recordings may be incomplete)', force_quit,
-                         visible=lambda item: (snapshot['phase'] == 'finalizing' or snapshot.get('previous_stop_unknown')) and not actions.busy)))
+                         enabled=lambda item: not server.should_exit)))
 
     def update():
         nonlocal snapshot, startup, last
@@ -257,7 +269,7 @@ def _run_control_window(url, server, root, controller, actions, open_browser):
     controls = ttk.Frame(frame); controls.pack(fill='x')
     buttons = {}
     for action in ('start', 'stop', 'restart'):
-        buttons[action] = ttk.Button(controls, text=action.capitalize(), command=lambda a=action: actions.submit(a))
+        buttons[action] = ttk.Button(controls, text=f'{action.capitalize()} monitoring', command=lambda a=action: actions.submit(a))
         buttons[action].pack(side='left', padx=(0, 5), pady=4)
     ttk.Button(frame, text='Open logs', command=lambda: webbrowser.open((root / 'logs').as_uri())).pack(fill='x', pady=3)
     startup_value = tk.BooleanVar()
@@ -269,6 +281,7 @@ def _run_control_window(url, server, root, controller, actions, open_browser):
     quit_button.pack(fill='x', pady=3)
     force_button = ttk.Button(frame, text='Force quit (recordings may be incomplete)',
                               command=lambda: actions.submit('quit', force=True) if _confirm_force_quit() else None)
+    force_button.pack(fill='x', pady=3)
     def close_window():
         if messagebox.askyesno('Quit FlintEye?', 'Stop monitoring, finish recordings, and quit FlintEye?', default='no'):
             actions.submit('quit')
@@ -302,17 +315,13 @@ def _run_control_window(url, server, root, controller, actions, open_browser):
         state.configure(text=status_text(status), foreground=COLORS[status['color']])
         message.configure(text=actions.message or status['message'])
         enabled = not actions.busy
-        buttons['start'].configure(state='normal' if enabled and not status['desired_running'] and status['phase'] != 'finalizing' else 'disabled')
-        buttons['stop'].configure(state='normal' if enabled and (status['desired_running'] or status['phase'] == 'finalizing') else 'disabled')
-        buttons['restart'].configure(state='normal' if enabled and status['desired_running'] and status['phase'] != 'finalizing' else 'disabled')
+        for action, button in buttons.items():
+            button.configure(state='normal' if enabled and status['controls'][action] else 'disabled')
+        buttons['stop'].configure(text='Retry Stop' if status['controls']['retry_stop'] else 'Stop monitoring')
         startup = autostart_status()
         startup_value.set(startup['enabled'])
         startup_button.configure(state='normal' if enabled and startup['available'] else 'disabled')
         quit_button.configure(state='normal' if enabled else 'disabled')
-        if (status['phase'] == 'finalizing' or status.get('previous_stop_unknown')) and enabled:
-            force_button.pack(fill='x', pady=3)
-        else:
-            force_button.pack_forget()
         if icon:
             icon.icon = tray_image(status)
             icon.title = 'FlintEye — ' + status_text(status)

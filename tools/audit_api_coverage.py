@@ -23,6 +23,9 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 API_SOURCES = ("flinteye_app/orchestrator_api.py", "flinteye_app/flinteye_routes.py")
+EXPECTED_SERVER_ONLY = {("POST", "/api/v1/setup/renew"): (
+    403, "test_setup_token_renewal_requires_server_access",
+)}
 
 
 def declared_operations():
@@ -143,6 +146,8 @@ def main(argv=None):
                         help="Optional passed installed.mjs browser.json; requests only, no status evidence")
     parser.add_argument("--require-all-operations", action="store_true",
                         help="Fail if any registered operation has no HTTP response in the test run")
+    parser.add_argument("--require-permitted-behavior", action="store_true",
+                        help="Require a successful response or an explicit test of a server-only operation")
     args = parser.parse_args(argv)
     args.output.mkdir(parents=True, exist_ok=True)
     sys.path.insert(0, str(ROOT))
@@ -225,7 +230,7 @@ def main(argv=None):
     finally:
         run.stop()
         run.save()
-    run.json_report(outfile=str(args.output / "line-branch-coverage.json"), show_contexts=True)
+    run.json_report(outfile=str(args.output / "line-branch-coverage.json"))
 
     # Inspect the actual route objects without starting the server or lifespan.
     from flinteye_app import orchestrator_api as api
@@ -293,6 +298,19 @@ def main(argv=None):
 
     inventory.sort(key=lambda item: (item["path"], item["method"]))
     real_http_references(inventory)
+    server_only = {
+        (item["method"], item["path"]) for item in requests
+        if EXPECTED_SERVER_ONLY.get((item["method"], item["path"])) ==
+           (item["status"], item["test"].rsplit(".", 1)[-1])
+        and item["reached_router"] and not item["dependency_overrides"]
+    }
+    success = {
+        (item["method"], item["path"]) for item in requests if item["status"] is not None
+        and 200 <= item["status"] < 400 and item["reached_router"] and not item["dependency_overrides"]
+    }
+    for item in inventory:
+        operation = item["method"], item["path"]
+        item["permitted_behavior_observed"] = operation in success | server_only
     errors = error_sites(run.get_data(), exceptions)
     summary = {
         "source_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
@@ -304,6 +322,7 @@ def main(argv=None):
         "generated_documentation_operations": sum(len(item["methods"]) for item in generated_documentation),
         "observed_operations": sum(bool(item["request_count"]) for item in inventory),
         "operations_with_success_status": sum(any(200 <= code < 300 for code in item["observed_statuses"]) for item in inventory),
+        "operations_with_permitted_behavior": sum(item["permitted_behavior_observed"] for item in inventory),
         "operations_with_error_status": sum(any(code >= 400 for code in item["observed_statuses"]) for item in inventory),
         "explicit_http_error_sites": len(errors),
         "explicit_http_error_sites_with_observed_exception": sum(bool(item["tests"]) for item in errors),
@@ -336,6 +355,11 @@ def main(argv=None):
     missing = [item["method"] + " " + item["path"] for item in inventory if not item["observed_statuses"]]
     if args.require_all_operations and missing:
         print("Missing HTTP response evidence: " + ", ".join(missing), file=sys.stderr)
+        return 1
+    unverified = [item["method"] + " " + item["path"] for item in inventory
+                  if not item["permitted_behavior_observed"]]
+    if args.require_permitted_behavior and unverified:
+        print("Missing permitted behavior evidence: " + ", ".join(unverified), file=sys.stderr)
         return 1
     return int(not result.wasSuccessful())
 
