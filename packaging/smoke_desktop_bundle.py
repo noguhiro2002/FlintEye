@@ -79,10 +79,31 @@ def inventory_count(profile: Path) -> int:
         return connection.execute('select count(*) from segments').fetchone()[0]
 
 
+def wait_for_media(client, rtsp_port):
+    deadline = time.monotonic()+30
+    status = {}
+    while time.monotonic() < deadline:
+        try:
+            status = client.get('/api/v1/status/mediamtx').json()
+            if status.get('running'):
+                with socket.create_connection(('127.0.0.1', rtsp_port), timeout=1):
+                    pass
+                if client.get('/media/bundle-smoke/').status_code == 200:
+                    return
+        except (OSError, httpx.HTTPError):
+            pass
+        time.sleep(.25)
+    raise AssertionError(f'Bundled MediaMTX did not open RTSP and authenticated video: {status}')
+
+
 def check_open_segment_stop(client, ffmpeg, cwd, *, disable_recording):
     settings = client.patch('/api/v1/config/runtime', json={'recording': {
         'enabled': True, 'record_segment_duration': '10m'}})
     assert settings.status_code == 200, settings.text
+    wait_for_media(client, 8554)
+    recordings = '/api/v1/recordings'
+    stream_filter = {'stream_id': 'bundle-smoke'}
+    existing = {item['file_id'] for item in client.get(recordings, params=stream_filter).json()['items']}
     source = subprocess.Popen([str(ffmpeg), '-nostdin', '-v', 'error', '-re',
         '-f', 'lavfi', '-i', 'testsrc2=size=160x90:rate=10', '-t', '30', '-c:v', 'libx264',
         '-threads', '2', '-g', '10', '-f', 'rtsp', 'rtsp://127.0.0.1:8554/bundle-smoke'],
@@ -90,9 +111,9 @@ def check_open_segment_stop(client, ffmpeg, cwd, *, disable_recording):
     try:
         end = time.monotonic()+15
         while time.monotonic() < end:
-            items = client.get('/api/v1/recordings', params={'status': 'recording', 'stream_id': 'bundle-smoke'}).json()['items']
-            if any(item['size_bytes'] > 4096 for item in items):
-                active = next(item for item in items if item['size_bytes'] > 4096)
+            items = client.get(recordings, params={**stream_filter, 'status': 'recording'}).json()['items']
+            active = next((item for item in items if item['file_id'] not in existing and item['size_bytes'] > 4096), None)
+            if active:
                 break
             if source.poll() is not None:
                 raise AssertionError(source.stderr.read().decode(errors='replace'))
@@ -108,7 +129,7 @@ def check_open_segment_stop(client, ffmpeg, cwd, *, disable_recording):
         assert monitoring['phase'] == 'stopped' and monitoring['counts']['recording'] == 0, monitoring
         media = client.get('/api/v1/status/mediamtx').json()
         assert media['running'] is False, media
-        items = client.get('/api/v1/recordings', params={'status': 'stable', 'stream_id': 'bundle-smoke'}).json()['items']
+        items = client.get(recordings, params={**stream_filter, 'status': 'stable'}).json()['items']
         assert any(item['file_id'] == active['file_id'] for item in items), 'The open segment did not finalize'
         assert client.get('/api/v1/recordings/files/'+active['file_id']).status_code == 200
         print(f'PASS: macOS recording {"Off then Stop" if disable_recording else "direct Stop"} finalizes an open long segment')
@@ -169,13 +190,7 @@ def check_application(executable: Path, profile: Path, cwd: Path, *, first_run: 
                 assert result.status_code == 200, result.text
                 page = client.get('/')
                 assert page.status_code == 200 and '<div id="root">' in page.text
-                for _ in range(60):
-                    status = client.get('/api/v1/status/mediamtx').json()
-                    if status.get('running') and client.get('/media/bundle-smoke/').status_code == 200:
-                        break
-                    time.sleep(.25)
-                else:
-                    raise AssertionError(f'Bundled MediaMTX did not serve authenticated video: {status}')
+                wait_for_media(client, 8554)
                 media_bin = (executable.parents[1]/'Frameworks/bin' if sys.platform == 'darwin'
                              else executable.parent/'_internal/bin')
                 ffmpeg = media_bin/('ffmpeg.exe' if os.name == 'nt' else 'ffmpeg')
