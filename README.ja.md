@@ -2,7 +2,7 @@
 
 **FlintEyeは現在開発中です。これは安定版ではなく開発プレビューです。テストには開発プレビューをご利用ください。**
 
-現在の開発プレビュー版は **1.2.0-preview.7** です。以下のクイックインストールコマンドで導入できます。macOSでは初回起動時の承認手順に従ってください。自動テストの結果と残っている実機確認は[プレビュー7の検証一覧](docs/RELEASE_CHECKLIST_1_2_0.ja.md)で確認できます。
+現在の開発プレビュー版は **1.2.0-preview.7** です。以下のクイックインストールコマンドで導入できます。macOSでは初回起動時の承認手順に従ってください。自動テストの結果と実機での確認項目は[開発プレビュー版の検証一覧](docs/RELEASE_CHECKLIST_1_2_0.ja.md)で確認できます。
 
 [既知の問題](docs/KNOWN_ISSUES.ja.md) · [バグを報告する](https://github.com/noguhiro2002/FlintEye/issues) · [質問とアイデア](https://github.com/noguhiro2002/FlintEye/discussions)
 

@@ -2,7 +2,7 @@
 
 **FlintEye is under active development. This is a development preview, not a stable release. Use development previews for testing.**
 
-The current development preview is **1.2.0-preview.7**. Install it with the Quick Install commands below. On macOS, follow the first-launch approval instructions. The [preview.7 validation checklist](docs/RELEASE_CHECKLIST_1_2_0.md) records completed automated checks and remaining real-device tests.
+The current development preview is **1.2.0-preview.7**. Install it with the Quick Install commands below. On macOS, follow the first-launch approval instructions. The [development preview validation checklist](docs/RELEASE_CHECKLIST_1_2_0.md) records completed automated checks and remaining real-device tests.
 
 [Known issues](docs/KNOWN_ISSUES.md) · [Report a bug](https://github.com/noguhiro2002/FlintEye/issues) · [Questions and ideas](https://github.com/noguhiro2002/FlintEye/discussions)
 

@@ -330,12 +330,21 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'embedded release'):
             prepare(self.output, self.root/'wrong-number', self.commit, original['run_id'], 'public-preview', '1')
         selected = self.root/'selected-preview'
-        metadata = prepare(self.output, selected, self.commit, original['run_id'], 'public-preview', '2')
+        publication = 'b'*40
+        metadata = prepare(self.output, selected, self.commit, original['run_id'], 'public-preview', '2',
+                           publication_commit=publication)
         finalize(selected, metadata)
         self.assertEqual(metadata['tag'], 'v'+version()+'-preview.2')
         self.assertIn(version()+'-preview.2', (selected/'install.sh').read_text())
         self.assertIn('UNDER DEVELOPMENT', (selected/'RELEASE-NOTES.en.md').read_text())
         self.assertIn('Real-device acceptance is still in progress', (selected/'RELEASE-NOTES.en.md').read_text())
+        guide = f'https://github.com/noguhiro2002/FlintEye/blob/{publication}/docs/USER_GUIDE'
+        english = (selected/'RELEASE-NOTES.en.md').read_text()
+        japanese = (selected/'RELEASE-NOTES.ja.md').read_text()
+        self.assertIn(f'{guide}.md#event-recordings', english)
+        self.assertIn(f'{guide}.ja.md#event-recordings', japanese)
+        self.assertIn(f'/releases/download/{metadata["tag"]}/RELEASE-NOTES.ja.md', english)
+        self.assertIn(f'/releases/download/{metadata["tag"]}/RELEASE-NOTES.en.md', japanese)
         self.assertTrue(metadata['device_acceptance_pending'])
         self.assertEqual(release.verify(self.output, self.commit), original)
 

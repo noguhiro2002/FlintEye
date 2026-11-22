@@ -5,7 +5,7 @@
 **UNDER DEVELOPMENT. Public 1.1.3-preview.1 is unchanged. This source is not a claim that the reported Windows failures have recovered on the owner's machine.**
 
 Baseline: application build `25718ed3f06833a1f291992753b4f0538d7dc939`, published tag `v1.1.3-preview.1`; implementation starts from main `8e13378`. Input: the owner's QA rev11 dated 2026-11-15 and macOS installer follow-up.
-Use the 1.2.0-preview.7 candidate for the latest fixes. Download the appropriate OS and CPU artifact from the [candidate build](https://github.com/noguhiro2002/FlintEye/actions/runs/44989522412) and record the tested commit and results in the [device checklist](RELEASE_CHECKLIST_1_2_0.md).
+Use the 1.2.0-preview.8 candidate for the latest fixes. Download the appropriate OS and CPU artifact from the [candidate build](https://github.com/noguhiro2002/FlintEye/actions/runs/45028239317) and record the tested commit and results in the [device checklist](RELEASE_CHECKLIST_1_2_0.md).
 
 ## Preview.3: macOS installation follow-up
 

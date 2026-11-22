@@ -1,6 +1,6 @@
 {
   "version": "1.2.0",
-  "commit": "08e78312508912293376e88d9badfde5f0b13d2b",
+  "commit": "b7bb8772e79f897473d5b02ce15d870d706f0778",
   "cases": {
     "windows-owner-startup": {
       "status": "pending",
@@ -36,7 +36,7 @@
     },
     "all-native-architectures": {
       "status": "passed",
-      "evidence": "https://github.com/noguhiro2002/FlintEye/actions/runs/44989522412 built all eight installers and both container architectures from 08e78312508912293376e88d9badfde5f0b13d2b. 28 of 36 lifecycle cases passed all seven stages. 8 macOS installer cases require first-launch OS approval. See QA-RESULTS.json. The Windows x64 script case passed on a same-build retry after an initial DTS check failed."
+      "evidence": "https://github.com/noguhiro2002/FlintEye/actions/runs/45028239317 built all eight installers and both container architectures from b7bb8772e79f897473d5b02ce15d870d706f0778. 28 of 36 lifecycle cases passed all seven stages, including event recording playback and download. 8 macOS package cases passed installation, integrity and removal and require first-launch approval. See QA-RESULTS.json."
     }
   }
 }

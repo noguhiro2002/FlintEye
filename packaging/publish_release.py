@@ -68,6 +68,11 @@ def check_visibility(channel: str, *, require_package: bool = False, staging: bo
     return package
 
 
+def link_release_documentation(text: str, revision: str) -> str:
+    return re.sub(r'\]\(([\w.-][\w./-]*\.md(?:#[^)\s]+)?)\)',
+                  rf'](https://github.com/{REPOSITORY}/blob/{revision}/docs/\1)', text)
+
+
 def prepare(bundle: Path, output: Path, commit: str, run_id: str, channel: str, number: str,
             *, tested: bool = False, publication_commit: str | None = None) -> dict:
     manifest = verify(bundle, commit)
@@ -97,9 +102,7 @@ def prepare(bundle: Path, output: Path, commit: str, run_id: str, channel: str, 
                         release=image_version if channel == 'public-preview' else None)
     for language in ('', '.ja'):
         name = 'ACCEPTANCE' + language + '.md'
-        text = (ROOT / 'docs' / name).read_text()
-        text = re.sub(r'\]\(([^)\s]+\.md(?:#[^)\s]+)?)\)',
-                      lambda m: f'](https://github.com/{REPOSITORY}/blob/{publication_commit or commit}/docs/{m[1]})', text)
+        text = link_release_documentation((ROOT / 'docs' / name).read_text(), publication_commit or commit)
         (output / name).write_text(text)
     # The attached Compose pins this distribution, even for a later preview number.
     compose = (ROOT / 'compose.yaml').read_text()
@@ -124,6 +127,7 @@ def prepare(bundle: Path, output: Path, commit: str, run_id: str, channel: str, 
             raise ValueError('Unresolved release note placeholder')
         text = text.replace('](RELEASE_NOTES.ja.md)', '](https://github.com/' + REPOSITORY + '/releases/download/' + tag + '/RELEASE-NOTES.ja.md)')
         text = text.replace('](RELEASE_NOTES.md)', '](https://github.com/' + REPOSITORY + '/releases/download/' + tag + '/RELEASE-NOTES.en.md)')
+        text = link_release_documentation(text, publication_commit or commit)
         (output / f'RELEASE-NOTES.{language}.md').write_text(text)
     return {'schema':1, 'channel':channel, 'tag':tag, 'application_version':version(),
             'commit':commit, 'build_run_id':run_id, 'build_manifest_sha256':digest(bundle/'build-manifest.json'),

@@ -6,10 +6,7 @@
 
 ## Start and sign in
 
-Open FlintEye from the Start menu (Windows), Applications (macOS), or application launcher (Linux).
-The first-run window asks for an administrator password: 12–1024 characters, entered twice.
-There is no default password. Closing setup postpones it until the next launch.
-The browser opens at http://127.0.0.1:18080; sign in as `admin`.
+Open FlintEye from the Start menu (Windows), Applications (macOS), or application launcher (Linux). On first launch the app opens your browser and authorizes setup. Choose an administrator password of 12–1024 characters and enter it twice. If you close the setup tab, choose **Open FlintEye** in the desktop menu to resume. The local address is normally `http://127.0.0.1:18080`. Use `admin` to sign in after setup. [Server setup for Docker and systemd](LAN_ACCESS.md#initial-ownership-and-everyday-use)
 
 The English getting-started tour introduces cameras and storage.
 You can skip it and reopen it from the application.
@@ -51,7 +48,7 @@ Open **Recordings → Event recordings** to see what was saved. If the requested
 ## Viewer access and other devices
 
 Set the `viewer` password in **Settings → Runtime & access** before sharing access. Save or discard other pending changes first. Updating the password signs everyone out; sign in again as administrator afterward. Viewers can watch but cannot change configuration.
-LAN access requires an HTTPS reverse proxy; follow the [server guide](DISTRIBUTION.md#user-installation).
+For access from another device, enable **Allow access from other devices on LAN or VPN (HTTPS)** in **Settings → Runtime & access**. Save the settings, restart FlintEye and establish trust for the FlintEye CA on each viewing device. [LAN and VPN setup](LAN_ACCESS.md#enable-access)
 Keep the local HTTP and MediaMTX listeners on loopback. Do not expose them directly to the Internet.
 
 ## Stop, update, or uninstall
