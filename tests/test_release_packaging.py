@@ -413,6 +413,86 @@ class ReleaseTests(unittest.TestCase):
             with self.assertRaises(ValueError):release_version('private-test',value)
 
 
+class ContainerDistributionTests(unittest.TestCase):
+    def test_registry_publication_reuses_only_matching_images_and_selects_index_format(self):
+        from unittest.mock import patch
+        from publish_release import DOCKER_MANIFEST, OCI_MANIFEST, distribute_containers
+        from release_lib import ARCHES, IMAGE
+
+        commit = 'a' * 40
+        image = IMAGE + ':1.2.0-preview.7'
+        tags = {arch: image + '-' + arch for arch in ARCHES}
+        image_ids = {arch: 'sha256:' + char * 64 for arch, char in zip(ARCHES, ('1', '2'))}
+        manifest_digests = {arch: 'sha256:' + char * 64 for arch, char in zip(ARCHES, ('3', '4'))}
+        index_digest = 'sha256:' + '5' * 64
+        labels = {
+            'org.opencontainers.image.revision': commit,
+            'org.opencontainers.image.version': version(),
+            'org.opencontainers.image.source': 'https://github.com/' + REPOSITORY,
+        }
+        index = {'manifests': [
+            {'digest': manifest_digests[arch], 'platform': {'architecture': arch, 'os': 'linux'}}
+            for arch in ARCHES
+        ]}
+        for scenario in ('resume-docker', 'resume-index', 'fresh-oci', 'mismatched-architecture'):
+            with self.subTest(scenario=scenario):
+                descriptors = {
+                    arch: {'digest': manifest_digests[arch],
+                           'mediaType': OCI_MANIFEST if scenario == 'fresh-oci' else DOCKER_MANIFEST}
+                    for arch in ARCHES
+                }
+                registry = {tags['amd64']: descriptors['amd64']} if scenario != 'fresh-oci' else {}
+                if scenario == 'resume-index':
+                    registry.update({tags['arm64']: descriptors['arm64'], image: {'digest': index_digest}})
+
+                def read_registry(reference, *, missing=False):
+                    return registry.get(reference) if missing else registry[reference]
+
+                def command_output(*command):
+                    if command[:3] == ('docker', 'image', 'inspect'):
+                        arch = command[-1].rsplit('-', 1)[1]
+                        return json.dumps([{'Architecture': arch, 'Os': 'linux',
+                                            'Config': {'Labels': labels}, 'Id': image_ids[arch]}])
+                    if command == ('docker', 'buildx', 'imagetools', 'inspect', IMAGE + '@' + index_digest, '--raw'):
+                        return json.dumps(index)
+                    arch = next(arch for arch in ARCHES if IMAGE + '@' + manifest_digests[arch] in command)
+                    if command[-1] == '--raw':
+                        config_id = 'sha256:' + '9' * 64 if scenario == 'mismatched-architecture' else image_ids[arch]
+                        return json.dumps({'config': {'digest': config_id}})
+                    return json.dumps({'architecture': arch, 'config': {'Labels': labels}})
+
+                def docker_command(command, *, check):
+                    if command[1] == 'push':
+                        tag = command[-1]
+                        registry[tag] = descriptors[tag.rsplit('-', 1)[1]]
+                    if command[1:4] == ['buildx', 'imagetools', 'create']:
+                        registry[image] = {'digest': index_digest}
+
+                metadata = {'image': image, 'channel': 'public-preview', 'publication_commit': 'b' * 40}
+                with (patch('publish_release.registry_descriptor', side_effect=read_registry),
+                      patch('publish_release.run', side_effect=command_output),
+                      patch('publish_release.subprocess.run', side_effect=docker_command) as docker):
+                    if scenario == 'mismatched-architecture':
+                        with self.assertRaisesRegex(ValueError, 'does not match the tested image ID'):
+                            distribute_containers(Path('/verified-bundle'), metadata, commit, has_package=True)
+                    else:
+                        distribute_containers(Path('/verified-bundle'), metadata, commit, has_package=True)
+                        self.assertEqual(metadata['container_digest'], index_digest)
+                        self.assertEqual({arch: item['image_id'] for arch, item in metadata['container_architectures'].items()},
+                                         image_ids)
+                commands = [call.args[0] for call in docker.call_args_list]
+                pushes = [command[-1] for command in commands if command[1] == 'push']
+                creates = [command for command in commands if command[1:4] == ['buildx', 'imagetools', 'create']]
+                expected_pushes = {'resume-docker': [tags['arm64']], 'fresh-oci': list(tags.values())}
+                self.assertEqual(pushes, expected_pushes.get(scenario, []))
+                if scenario in ('resume-docker', 'fresh-oci'):
+                    self.assertEqual(len(creates), 1)
+                    self.assertEqual('--annotation' in creates[0], scenario == 'fresh-oci')
+                    self.assertEqual(creates[0][-2:], [IMAGE + '@' + manifest_digests[arch] for arch in ARCHES])
+                else:
+                    self.assertEqual(creates, [])
+
+
 @unittest.skipUnless(sys.platform.startswith('linux') and shutil.which('bash'), 'Linux shell installer checks')
 class ShellInstallerTests(unittest.TestCase):
     def setUp(self):

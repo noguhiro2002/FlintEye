@@ -100,7 +100,7 @@ Then continue with [Quick Usage](#quick-usage). To remove an installation later,
 ## Quick Usage
 
 1. **Open the address shown by FlintEye.** On the computer running FlintEye, open the local browser address. Choose a trusted network at first launch; FlintEye shows the HTTPS address when it is ready. On another device, [trust the installation's certificate](docs/LAN_ACCESS.md) before opening that address.
-2. **Create your administrator account.** Enter the one-use code from the setup window or the server's private token file, and set the password in your browser. Sign in as `admin`.
+2. **Create your administrator account.** With a desktop installation, set your password in the browser opened by FlintEye. If you closed it, choose **Open FlintEye** in the app menu to resume. With Docker or a headless server, enter the one-use code from the server's private `setup-token` file. Sign in as `admin`.
 3. **Add a camera in Settings.** Follow the getting-started tour for USB and IP cameras.
 4. **Open Live View.** Enable recording if needed, then open **Recordings** to play saved footage.
 

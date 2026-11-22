@@ -15,6 +15,10 @@ from release_lib import ARCHES, IMAGE, REPOSITORY, ROOT, digest, version
 from check_release_order import check_order
 
 
+DOCKER_MANIFEST = 'application/vnd.docker.distribution.manifest.v2+json'
+OCI_MANIFEST = 'application/vnd.oci.image.manifest.v1+json'
+
+
 def run(*command: str) -> str:
     return subprocess.check_output(command, text=True).strip()
 
@@ -149,14 +153,39 @@ def verify_remote_assets(release_id: int, output: Path) -> None:
     raise ValueError('Uploaded asset names, sizes or SHA-256 digests do not match')
 
 
+def registry_descriptor(reference: str, *, missing: bool = False) -> dict | None:
+    result = subprocess.run(['docker', 'buildx', 'imagetools', 'inspect', reference,
+                             '--format', '{{json .Manifest}}'], capture_output=True, text=True)
+    if result.returncode:
+        if missing and any(term in result.stderr.lower() for term in ('not found', 'manifest unknown')):
+            return None
+        raise RuntimeError(f'Cannot inspect image {reference}: {result.stderr.strip()}')
+    descriptor = json.loads(result.stdout)
+    if not re.fullmatch('sha256:[0-9a-f]{64}', descriptor.get('digest', '')):
+        raise ValueError(f'Invalid registry image digest: {reference}')
+    return descriptor
+
+
+def architecture_receipt(tag: str, descriptor: dict, image_id: str) -> dict:
+    if descriptor.get('mediaType') not in (DOCKER_MANIFEST, OCI_MANIFEST):
+        raise ValueError(f'Architecture tag does not address a single image: {tag}')
+    reference = IMAGE + '@' + descriptor['digest']
+    manifest = json.loads(run('docker', 'buildx', 'imagetools', 'inspect', reference, '--raw'))
+    # Docker image IDs are config digests, which also bind the uncompressed layers.
+    if manifest.get('config', {}).get('digest') != image_id:
+        raise ValueError(f'Architecture tag does not match the tested image ID: {tag}')
+    return {'tag': tag, 'digest': descriptor['digest'], 'image_id': image_id}
+
+
 def verify_container_receipt(metadata: dict, commit: str) -> None:
     architecture_images = metadata['container_architectures']
     if set(architecture_images) != set(ARCHES):
         raise ValueError('Incomplete container architecture receipt')
     reference = IMAGE + '@' + metadata['container_digest']
     index = json.loads(run('docker', 'buildx', 'imagetools', 'inspect', reference, '--raw'))
-    platforms = {m['platform']['architecture']: m for m in index['manifests']}
-    if set(platforms) != set(ARCHES):
+    manifests = index.get('manifests', [])
+    platforms = {m['platform']['architecture']: m for m in manifests}
+    if len(manifests) != len(ARCHES) or set(platforms) != set(ARCHES):
         raise ValueError('Wrong container platforms')
     for arch in ARCHES:
         item = architecture_images[arch]
@@ -166,12 +195,69 @@ def verify_container_receipt(metadata: dict, commit: str) -> None:
         labels = config['config']['Labels']
         if config['architecture'] != arch or labels.get('org.opencontainers.image.revision') != commit or labels.get('org.opencontainers.image.version') != version() or labels.get('org.opencontainers.image.source') != 'https://github.com/'+REPOSITORY:
             raise ValueError('Container receipt source/version mismatch')
-        tag_digest = json.loads(run('docker', 'buildx', 'imagetools', 'inspect', item['tag'], '--format', '{{json .Manifest}}'))['digest']
-        if item['tag'] != metadata['image']+'-'+arch or tag_digest != item['digest']:
+        if item['tag'] != metadata['image']+'-'+arch or registry_descriptor(item['tag'])['digest'] != item['digest']:
             raise ValueError('Versioned architecture tag changed')
-    tagged = json.loads(run('docker', 'buildx', 'imagetools', 'inspect', metadata['image'], '--format', '{{json .Manifest}}'))['digest']
-    if tagged != metadata['container_digest']:
+    if registry_descriptor(metadata['image'])['digest'] != metadata['container_digest']:
         raise ValueError('Versioned image tag changed')
+
+
+def distribute_containers(bundle: Path, metadata: dict, commit: str, *, has_package: bool) -> None:
+    image = metadata['image']
+    tags = {arch: image + '-' + arch for arch in ARCHES}
+    descriptors = {
+        arch: registry_descriptor(tag, missing=True) if has_package else None
+        for arch, tag in tags.items()
+    }
+    index = registry_descriptor(image, missing=True) if has_package else None
+    if index is not None and any(descriptor is None for descriptor in descriptors.values()):
+        raise ValueError('Existing multi-architecture tag has missing architecture tags')
+    if has_package and metadata['channel'] == 'private-test' and registry_descriptor(IMAGE + ':latest', missing=True):
+        raise ValueError('Image tag already exists: ' + IMAGE + ':latest')
+
+    image_ids = {}
+    architecture_images = {}
+    for arch, tag in tags.items():
+        subprocess.run(['docker', 'load', '--input', str(bundle / 'containers' / f'container-{arch}.tar.gz')], check=True)
+        local = 'flinteye:release-' + arch
+        info = json.loads(run('docker', 'image', 'inspect', local))[0]
+        labels = info['Config']['Labels']
+        if (info['Architecture'] != arch or info['Os'] != 'linux'
+                or labels.get('org.opencontainers.image.revision') != commit
+                or labels.get('org.opencontainers.image.version') != version()
+                or labels.get('org.opencontainers.image.source') != 'https://github.com/' + REPOSITORY):
+            raise ValueError('Loaded container identity does not match the tested source and CPU')
+        image_ids[arch] = info['Id']
+        if descriptors[arch] is not None:
+            architecture_images[arch] = architecture_receipt(tag, descriptors[arch], info['Id'])
+
+    for arch, tag in tags.items():
+        if arch in architecture_images:
+            continue
+        subprocess.run(['docker', 'tag', 'flinteye:release-' + arch, tag], check=True)
+        subprocess.run(['docker', 'push', '--platform', 'linux/' + arch, tag], check=True)
+        descriptors[arch] = registry_descriptor(tag)
+        architecture_images[arch] = architecture_receipt(tag, descriptors[arch], image_ids[arch])
+
+    if index is None:
+        command = ['docker', 'buildx', 'imagetools', 'create']
+        # Buildx uses a Docker manifest list when every source is a Docker manifest.
+        if any(descriptor['mediaType'] == OCI_MANIFEST for descriptor in descriptors.values()):
+            description = ('FlintEye UNDER DEVELOPMENT; public preview' if metadata['channel'] == 'public-preview'
+                           else 'FlintEye camera monitoring and recording')
+            url = 'https://github.com/' + REPOSITORY
+            command.extend([
+                '--annotation', 'index:org.opencontainers.image.description=' + description,
+                '--annotation', 'index:org.opencontainers.image.source=' + url,
+                '--annotation', 'index:org.opencontainers.image.documentation=' + url
+                + '/blob/' + metadata['publication_commit'] + '/docs/DOCKER.md',
+            ])
+        references = [IMAGE + '@' + architecture_images[arch]['digest'] for arch in ARCHES]
+        subprocess.run([*command, '-t', image, *references], check=True)
+        index = registry_descriptor(image)
+
+    metadata['container_architectures'] = architecture_images
+    metadata['container_digest'] = index['digest']
+    verify_container_receipt(metadata, commit)
 
 
 def finish_publication(args, metadata: dict, commit: str) -> None:
@@ -240,44 +326,7 @@ def publish(args) -> None:
     if args.channel == 'stable':
         pages=json.loads(run('gh','api','--paginate','--slurp',f'repos/{REPOSITORY}/releases?per_page=100'))
         check_order(version(), [r for page in pages for r in page])
-    references_to_check = [image, *(image+'-'+arch for arch in ARCHES)] if package else []
-    if package and args.channel == 'private-test':
-        references_to_check.append(IMAGE+':latest')
-    for reference in references_to_check:
-        result=subprocess.run(['docker','buildx','imagetools','inspect',reference],capture_output=True,text=True)
-        if not result.returncode:
-            raise ValueError('Image tag already exists: '+reference)
-        if not any(term in result.stderr.lower() for term in ('not found','manifest unknown')):
-            raise RuntimeError('Cannot check image tag: '+result.stderr)
-    architecture_images={}
-    for arch in ARCHES:
-        subprocess.run(['docker','load','--input',str(args.bundle/f'containers/container-{arch}.tar.gz')],check=True)
-        local='flinteye:release-'+arch
-        info=json.loads(run('docker','image','inspect',local))[0]
-        labels=info['Config']['Labels']
-        if info['Architecture']!=arch or info['Os']!='linux' or labels.get('org.opencontainers.image.revision')!=commit or labels.get('org.opencontainers.image.version')!=version() or labels.get('org.opencontainers.image.source')!='https://github.com/'+REPOSITORY:
-            raise ValueError('Loaded container identity does not match the tested source and CPU')
-        remote=image+'-'+arch
-        subprocess.run(['docker','tag',local,remote],check=True)
-        subprocess.run(['docker','push','--platform','linux/'+arch,remote],check=True)
-        details=json.loads(run('docker','buildx','imagetools','inspect',remote,'--format','{{json .Manifest}}'))
-        architecture_images[arch]={'tag':remote,'digest':details['digest'],'image_id':info['Id']}
-    references=[IMAGE+'@'+architecture_images[a]['digest'] for a in ARCHES]
-    description='FlintEye UNDER DEVELOPMENT; public preview' if args.channel=='public-preview' else 'FlintEye camera monitoring and recording'
-    subprocess.run(['docker','buildx','imagetools','create','--annotation','index:org.opencontainers.image.description='+description,
-                    '--annotation','index:org.opencontainers.image.source=https://github.com/'+REPOSITORY,
-                    '--annotation','index:org.opencontainers.image.documentation=https://github.com/'+REPOSITORY+'/blob/'+publication_commit+'/docs/DOCKER.md',
-                    '-t',image,*references],check=True)
-    index=json.loads(run('docker','buildx','imagetools','inspect',image,'--raw'))
-    platforms={m['platform']['architecture']:m for m in index['manifests']}
-    if set(platforms)!=set(ARCHES) or any(platforms[a]['platform']['os']!='linux' or platforms[a]['digest']!=architecture_images[a]['digest'] for a in ARCHES):
-        raise ValueError('Registry index platforms/digests differ from tested containers')
-    for arch in ARCHES:
-        config=json.loads(run('docker','buildx','imagetools','inspect',IMAGE+'@'+architecture_images[arch]['digest'],'--format','{{json .Image}}'))
-        if config['architecture']!=arch or config['config']['Labels'].get('org.opencontainers.image.revision')!=commit:
-            raise ValueError('Remote container configuration differs from the tested commit/CPU')
-    metadata['container_architectures']=architecture_images
-    metadata['container_digest']=json.loads(run('docker','buildx','imagetools','inspect',image,'--format','{{json .Manifest}}'))['digest']
+    distribute_containers(args.bundle, metadata, commit, has_package=package is not None)
     check_visibility(args.channel,require_package=True,staging=True)
     finalize(args.output,metadata)
     body=args.output.parent/(args.output.name+'-body.md')
