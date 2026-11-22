@@ -3,7 +3,7 @@ import { EventRecordingOptions } from "../components/EventRecordings";
 import { StartupSettings } from "../components/StartupSettings";
 import { NetworkAccess } from '../components/NetworkAccess';
 import { useConfirmChanges } from "../components/ConfirmChanges";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowPathIcon,
   ArrowsPointingOutIcon,
@@ -606,6 +606,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
   const [installation, setInstallation] = useState<{ folder_picker: boolean } | null>(null);
   const [viewerPassword, setViewerPassword] = useState("");
   const [networkDirty, setNetworkDirty] = useState(false);
+  const [completedSave, setCompletedSave] = useState<{ finish: (saved: boolean) => void; saved: boolean } | null>(null);
   const [updateMessage, setUpdateMessage] = useState("");
   const [listener, setListener] = useState<{ host?: string; port?: number; source?: string }>({});
 
@@ -759,14 +760,20 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
     (currentRuntimeText !== savedRuntimeText || currentIpDraftsText !== savedIpDraftsText);
   const jsonDirty = Boolean(savedJsonText) && runtimeJsonText !== savedJsonText;
   const hasUnsavedChanges = formDirty || jsonDirty;
-  useEffect(() => {
+  useLayoutEffect(() => {
     onDirtyChange?.(hasUnsavedChanges || networkDirty);
+  }, [hasUnsavedChanges, networkDirty, onDirtyChange]);
+  useLayoutEffect(() => {
+    // Release pending navigation after the saved draft is rendered and reported clean.
+    if (completedSave) completedSave.finish(completedSave.saved);
+  }, [completedSave]);
+  useEffect(() => {
     const beforeUnload = (event: BeforeUnloadEvent) => {
       if (hasUnsavedChanges || networkDirty) { event.preventDefault(); event.returnValue = ""; }
     };
     window.addEventListener("beforeunload", beforeUnload);
     return () => window.removeEventListener("beforeunload", beforeUnload);
-  }, [hasUnsavedChanges, networkDirty, onDirtyChange]);
+  }, [hasUnsavedChanges, networkDirty]);
   useEffect(() => () => { onDirtyChange?.(false); loadRequest.current++; probeRequests.current.clear(); }, [onDirtyChange]);
   const confirmDiscard = async (): Promise<boolean> => !hasUnsavedChanges || await ask("Discard all unsaved settings, including Advanced JSON edits, and reload the saved configuration?");
   const requireSavedDraft = (): boolean => {
@@ -1013,7 +1020,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
     } finally { setLoading(false); }
   };
 
-  const loadAll = async (refreshDevices = false): Promise<void> => {
+  const loadAll = async (refreshDevices = false): Promise<boolean> => {
     const request = ++loadRequest.current;
     probeRequests.current.clear();
     setIpProbeStates({});
@@ -1030,7 +1037,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
         api.getMultiviewStatus().catch(() => ({ updated_at: null, views: [] } as MultiviewStatus)),
         api.getListener().catch(() => ({})),
       ]);
-      if (request !== loadRequest.current) return;
+      if (request !== loadRequest.current) return false;
       setListener(listenerRes);
 
       // Editable cameras must come from the same response as the configuration ETag.
@@ -1126,13 +1133,16 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
         new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(new Date()),
       );
       setError("");
+      return true;
     } catch (e) {
-      if (request !== loadRequest.current) return;
-      setError(e instanceof Error ? e.message : "Failed to load settings");
+      if (request === loadRequest.current) setError(e instanceof Error ? e.message : "Failed to load settings");
+      return false;
     } finally {
       if (request === loadRequest.current) setLoading(false);
     }
   };
+
+  const reloadSettings = async (): Promise<void> => { await loadAll(); };
 
   useEffect(() => {
     void loadAll();
@@ -1467,13 +1477,12 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
       setNotice(restart ? "Basic settings saved and all processes restarted." : "Basic settings saved and applied.");
       setError("");
       onUiConfigChanged?.();
-      await loadAll(true);
-      saved = true;
+      saved = await loadAll(true);
     } catch (e) {
       saveError(e, "Failed to save settings");
     } finally {
       setLoading(false);
-      finishSave?.(saved);
+      if (finishSave) setCompletedSave({ finish: finishSave, saved });
     }
   };
 
@@ -1504,11 +1513,13 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
       );
       setError("");
       onUiConfigChanged?.();
-      await loadAll(true);
-      saved = true;
+      saved = await loadAll(true);
     } catch (e) {
       saveError(e, "Failed to apply runtime JSON");
-    } finally { setLoading(false); finishSave?.(saved); }
+    } finally {
+      setLoading(false);
+      if (finishSave) setCompletedSave({ finish: finishSave, saved });
+    }
   };
 
   return (
@@ -1914,7 +1925,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
           )}
 
           <div className="section settings-section settings-section-runtime">
-            <NetworkAccess api={api} blocked={hasUnsavedChanges} onDirtyChange={setNetworkDirty} onSaved={() => loadAll()} />
+            <NetworkAccess api={api} blocked={hasUnsavedChanges} onDirtyChange={setNetworkDirty} onSaved={reloadSettings} />
             <div className="button-row">
               <a href={api.buildUrl('/api/v1/diagnostics')} download="FlintEye-diagnostics.zip">Save diagnostics (no raw logs or secrets)</a>
               {installation && <button type="button" disabled={loading || hasUnsavedChanges} onClick={() => { if (window.confirm('Use the MediaMTX bundled with this installation? Custom media commands will be replaced; recordings and accounts are preserved.')) void onInstallationAction(async () => {await api.useBundledMedia(); setNotice('Saved bundled MediaMTX. Use Start or Restart on Dashboard to apply it.');}); }}>Repair media command using bundled MediaMTX…</button>}
@@ -3349,7 +3360,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                 <details className="runtime-advanced" key={camera.id}>
                   <summary>{getCameraLabel(camera)} · Camera audio</summary>
                   <CameraAudioSettings api={api} cameraId={camera.id} current={camera.audio}
-                    blocked={loading || formDirty || jsonDirty} saved={loadAll} />
+                    blocked={loading || formDirty || jsonDirty} saved={reloadSettings} />
                 </details>
               ))}
             </div>
@@ -3614,7 +3625,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                     {cameras.some((camera) => camera.id === draft.id && camera.type === "ip") &&
                       <CameraAudioSettings key={draft.id} api={api} cameraId={draft.id}
                         current={cameras.find((camera) => camera.id === draft.id)?.audio}
-                        blocked={loading || formDirty || jsonDirty} saved={loadAll} />}
+                        blocked={loading || formDirty || jsonDirty} saved={reloadSettings} />}
                     <div className="ip-camera-identity-grid">
                       <label>
                         Display Name

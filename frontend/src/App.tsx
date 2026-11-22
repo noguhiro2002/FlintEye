@@ -4,7 +4,7 @@ import { MonitoringStatus } from "./components/MonitoringStatus";
 import { MonitoringProvider } from './hooks/MonitoringContext';
 import { useConfirmChanges } from "./components/ConfirmChanges";
 import { FirstRun } from "./components/FirstRun";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiClient } from "./api/client";
 import { Sidebar, type PageKey } from "./components/Sidebar";
 import { DashboardPage } from "./pages/DashboardPage";
@@ -32,8 +32,9 @@ export default function App(): JSX.Element {
   const [authLoading, setAuthLoading] = useState(true);
   const [showLogin, setShowLogin] = useState(false);
   const [authError, setAuthError] = useState("");
-  const [settingsDirty, setSettingsDirty] = useState(false);
-  const settingsSave = useRef<Promise<boolean> | null>(null);
+  const settingsDirty = useRef(false);
+  const settingsSaves = useRef(new Map<Promise<boolean>, (saved: boolean) => void>());
+  const setSettingsDirty = useCallback((dirty: boolean) => { settingsDirty.current = dirty; }, []);
   const navigationRequest = useRef(0);
   const sessionRequest = useRef(0);
 
@@ -77,6 +78,8 @@ export default function App(): JSX.Element {
 
   useEffect(() => {
     if (!hasAdminAccess && page === "settings") {
+      settingsSaves.current.forEach(finish => finish(false));
+      settingsSaves.current.clear();
       setPage("dashboard");
     }
   }, [hasAdminAccess, page]);
@@ -85,15 +88,19 @@ export default function App(): JSX.Element {
   const onSettingsSaveStarted = (): ((saved: boolean) => void) => {
     let resolveSave: (saved: boolean) => void = () => undefined;
     const save = new Promise<boolean>(resolve => { resolveSave = resolve; });
-    settingsSave.current = save;
+    settingsSaves.current.set(save, resolveSave);
     return saved => {
-      if (settingsSave.current === save) settingsSave.current = null;
+      settingsSaves.current.delete(save);
       resolveSave(saved);
     };
   };
-  const canLeaveSettings = (): Promise<boolean> => settingsSave.current ?? (settingsDirty
-    ? ask("Your changes have not been saved. Discard them to leave Settings.")
-    : Promise.resolve(true));
+  const canLeaveSettings = async (): Promise<boolean> => {
+    while (settingsSaves.current.size) {
+      const results = await Promise.all(settingsSaves.current.keys());
+      if (results.includes(false)) return false;
+    }
+    return !settingsDirty.current || ask("Your changes have not been saved. Discard them to leave Settings.");
+  };
   const navigate = async (next: PageKey): Promise<void> => {
     const request = ++navigationRequest.current;
     if (next === page || !await canLeaveSettings() || request !== navigationRequest.current) return;

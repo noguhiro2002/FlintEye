@@ -8,6 +8,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
 const root = process.cwd();
 let patchMode = 'ok', folderMode = 'cancel', probeMode = 'ok', calls = [];
+let pendingPatch = null;
 const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined, headless: true, args: ['--no-sandbox'] });
 const config = { auth: { provider: 'local', viewer_auth_required: true, local: { admin: { username: 'admin' }, viewer: { username: 'viewer' } } }, ui: { app_title: 'FlintEye', sidebar_title: 'FlintEye', onboarding_done: true }, recording: { enabled: true, managed_storage: true, record_root: '/tmp/Sample recordings', max_bytes: 50e9, record_delete_after: '168h', show_previous: true }, cameras: [], multiview: { enabled: false } };
 const syntheticCameras = [{ id: 'usb1', type: 'uvc', enabled: true, path: 'usb1', display_name: 'Front USB Camera', uvc: { profile: 'usb1', env: { DEVICE: '/dev/video99' }, extra_args: [] }, ip: null, addresses: { rtsp_url: 'rtsp://example.test/usb1', webrtc_url: 'http://example.test/usb1' }, process: null }, { id: 'ipcam1', type: 'ip', enabled: true, path: 'ipcam1', display_name: 'Lobby IP Camera', uvc: null, ip: { source_url: 'rtsp://example.test/stream1' }, addresses: { rtsp_url: 'rtsp://example.test/ipcam1', webrtc_url: 'http://example.test/ipcam1' }, process: null }, { id: 'ipcam2', type: 'ip', enabled: true, path: 'ipcam2', display_name: 'Yard IP Camera', uvc: null, ip: { source_url: 'rtsp://example.test/stream2' }, addresses: { rtsp_url: 'rtsp://example.test/ipcam2', webrtc_url: 'http://example.test/ipcam2' }, process: null }];
@@ -77,6 +78,7 @@ async function context(scenario, width = 1440, height = 900, colorScheme = 'ligh
                 break;
             case '/api/v1/config/effective':
             case '/api/v1/config/runtime':
+                if (req.method() === 'PATCH' && pendingPatch) await pendingPatch;
                 if (req.method() === 'PATCH' && patchMode === 'conflict') {
                     v = { detail: 'Configuration changed. Reload and try again.' };
                     status = 412;
@@ -131,6 +133,45 @@ catch (e) {
     process.exitCode = 1;
 } }
 try {
+    for (const conflict of [false, true]) {
+        await run(conflict ? 'navigation stays after a rejected save' : 'navigation follows a completed save', async () => {
+            const { ctx, p } = await context('admin');
+            const sidebar = p.locator('.sidebar');
+            const dashboard = sidebar.getByRole('button', { name: 'Dashboard', exact: true });
+            const settings = sidebar.getByRole('button', { name: 'Settings', exact: true });
+            const confirmation = p.getByRole('dialog', { name: 'Discard unsaved changes?' });
+            let releasePatch;
+            try {
+                await settings.click();
+                await p.getByRole('complementary', { name: 'Settings categories' }).getByRole('button', { name: 'General', exact: true }).click();
+                const title = p.getByRole('textbox', { name: /^App Title/ });
+                await title.fill('Pending save title');
+                patchMode = conflict ? 'conflict' : 'ok';
+                pendingPatch = new Promise(resolve => { releasePatch = resolve; });
+                const sent = p.waitForRequest(request => request.method() === 'PATCH' && request.url().endsWith('/api/v1/config/runtime'));
+                await p.getByRole('button', { name: 'Save changes', exact: true }).first().click();
+                await sent;
+                await dashboard.click();
+                assert.equal(await settings.getAttribute('aria-current'), 'page');
+                assert.equal(await confirmation.count(), 0);
+                releasePatch();
+
+                if (conflict) {
+                    await p.getByText(/Settings changed in another session/).first().waitFor();
+                    assert.equal(await settings.getAttribute('aria-current'), 'page');
+                    assert.equal(await title.inputValue(), 'Pending save title');
+                } else {
+                    await sidebar.locator('button[aria-current="page"]').filter({ hasText: /^Dashboard$/ }).waitFor();
+                    assert.equal(await confirmation.count(), 0);
+                }
+            } finally {
+                releasePatch?.();
+                pendingPatch = null;
+                patchMode = 'ok';
+                await ctx.close();
+            }
+        });
+    }
     await run('1-refresh', async () => { const { ctx, p } = await context('admin'); await p.locator('.sidebar').getByRole('button', { name: 'Settings', exact: true }).click(); const nav = p.getByRole('complementary', { name: 'Settings categories' }); await nav.getByRole('button', { name: 'General', exact: true }).click(); let title = p.getByRole('textbox', { name: /^App Title/ }); await title.fill('Unsaved test title'); await p.getByRole('button', { name: 'Refresh', exact: true }).first().click(); await p.getByRole('button', { name: 'Continue editing' }).click(); assert.equal(await title.inputValue(), 'Unsaved test title', 'refresh discarded draft'); await p.screenshot({ path: 'dist/terra-webapp-fixes/1-draft.png', fullPage: true }); await ctx.close(); });
     await run('1-navigation', async () => { const { ctx, p } = await context('admin'); await p.locator('.sidebar').getByRole('button', { name: 'Settings', exact: true }).click(); const nav = p.getByRole('complementary', { name: 'Settings categories' }); await nav.getByRole('button', { name: 'General', exact: true }).click(); await p.getByRole('textbox', { name: /^App Title/ }).fill('Unsaved test title'); await p.locator('.sidebar').getByRole('button', { name: 'Dashboard', exact: true }).click(); await p.getByRole('button', { name: 'Continue editing' }).click(); if (await p.getByRole('textbox', { name: /^App Title/ }).count() === 0) {
         await p.locator('.sidebar').getByRole('button', { name: 'Settings', exact: true }).click();
