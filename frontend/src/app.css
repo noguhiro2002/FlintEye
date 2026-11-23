@@ -1870,10 +1870,14 @@ button.recording-thumbnail:disabled {
   cursor: default;
 }
 
-.recording-thumbnail img {
+.recording-thumbnail img,
+.recording-thumbnail-placeholder {
   display: block;
   width: 100%;
   height: 100%;
+}
+
+.recording-thumbnail img {
   object-fit: cover;
   transition: transform 160ms ease;
 }

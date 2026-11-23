@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownIcon,
   ArrowDownTrayIcon,
@@ -14,6 +14,7 @@ import {
 } from "@heroicons/react/24/outline";
 import type { ApiClient } from "../api/client";
 import { EventRecordingList } from "../components/EventRecordings";
+import { createRecordingThumbnailQueue, RecordingThumbnail } from "../components/RecordingThumbnail";
 import type { RecordingItem } from "../types";
 import { usePolling } from '../hooks/usePolling';
 
@@ -214,6 +215,10 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
   const queryKey = JSON.stringify([selectedStream, statusFilter, recordedFrom, recordedTo, timeBasis, sortKey, sortDir, pageIndex, pageSize]);
   const showingPrevious = hasLoaded && (loadedQuery !== queryKey || Boolean(error));
   const [thumbnailErrors, setThumbnailErrors] = useState<Record<string, boolean>>({});
+  const [thumbnailQueue] = useState(createRecordingThumbnailQueue);
+  const markThumbnailUnavailable = useCallback((fileId: string) => {
+    setThumbnailErrors(previous => ({ ...previous, [fileId]: true }));
+  }, []);
 
   const filteredItems = items;
 
@@ -606,14 +611,14 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
                             Preview unavailable
                           </span>
                         ) : (
-                          <img
-                            src={api.getRecordingThumbnailUrl(item.file_id, item.modified_at)}
+                          <RecordingThumbnail
+                            key={item.modified_at}
+                            fileId={item.file_id}
+                            url={api.getRecordingThumbnailUrl(item.file_id, item.modified_at)}
                             alt={`Recorded preview for ${item.stream_id || item.relative_path}`}
-                            loading="lazy"
-                            crossOrigin="use-credentials"
-                            onError={() =>
-                              setThumbnailErrors((previous) => ({ ...previous, [item.file_id]: true }))
-                            }
+                            paused={playbackOpen}
+                            enqueue={thumbnailQueue}
+                            onError={markThumbnailUnavailable}
                           />
                         )}
                         {item.is_stable && (

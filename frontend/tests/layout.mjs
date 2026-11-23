@@ -150,7 +150,66 @@ async function assertIpCameraLayout(card, label) {
     assert.deepEqual(issues, [], label);
 }
 
+async function checkRecordingThumbnails() {
+    const { ctx, p } = await context('admin', 1440, 1000);
+    const { promise: completeThumbnails, resolve: releaseThumbnails } = Promise.withResolvers();
+    const matchingThumbnail = url => url.pathname.endsWith('/thumbnail');
+    const thumbnailRequests = [];
+    const time = Date.now() / 1000;
+    const items = Array.from({ length: 30 }, (_, index) => ({
+        file_id: `sample-${index}`, relative_path: `sample/${index}.mp4`, stream_id: 'sample',
+        size_bytes: 4096, modified_at: time - index, started_at: time - index, is_stable: true,
+    }));
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZ1kAAAAASUVORK5CYII=', 'base64');
+    await ctx.route(url => url.pathname === '/api/v1/recordings', route => route.fulfill({
+        json: { items, total: items.length, limit: 50, offset: 0, record_root: '/tmp/Sample recordings' },
+    }));
+    await ctx.route(matchingThumbnail, async route => {
+        thumbnailRequests.push(route.request());
+        await completeThumbnails;
+        await route.fulfill({ contentType: 'image/png', body: png }).catch(() => {});
+    });
+    await ctx.route(url => url.pathname.endsWith('/prepare'), route => route.fulfill({
+        json: { ok: true, has_audio: false },
+    }));
+    await ctx.route(url => url.pathname.endsWith('/playable'), async route => {
+        await completeThumbnails;
+        await route.fulfill({ status: 204 }).catch(() => {});
+    });
+    try {
+        const firstThumbnail = p.waitForRequest(request => matchingThumbnail(new URL(request.url())));
+        await p.locator('.sidebar').getByRole('button', { name: 'Recordings', exact: true }).click();
+        await firstThumbnail;
+        await p.screenshot({ fullPage: true });
+        assert.equal(thumbnailRequests.length, 2, 'Thumbnail generation filled more than two connections');
+
+        let aborted = 0;
+        const { promise: requestsAborted, resolve: onAborted } = Promise.withResolvers();
+        p.on('requestfailed', request => {
+            if (thumbnailRequests.includes(request) && ++aborted === 2) onAborted();
+        });
+        const playback = p.waitForRequest(request => new URL(request.url()).pathname.endsWith('/playable'));
+        await p.getByRole('button', { name: 'Play sample/0.mp4', exact: true }).last().click();
+        await playback;
+        const timer = setTimeout(() => onAborted(), 5000);
+        await requestsAborted;
+        clearTimeout(timer);
+        assert.equal(aborted, 2, 'Playback should release connections used by pending thumbnails');
+        assert.equal(thumbnailRequests.length, 2, 'Thumbnail requests continued behind the player');
+
+        const nextThumbnail = p.waitForRequest(request => matchingThumbnail(new URL(request.url())));
+        await p.getByRole('button', { name: 'Close player' }).click();
+        await nextThumbnail;
+        releaseThumbnails();
+        await p.locator('.recording-thumbnail img').first().waitFor();
+    } finally {
+        releaseThumbnails();
+        await ctx.close();
+    }
+}
+
 try {
+    await checkRecordingThumbnails();
     for (const width of [1280, 1024, 1201, 1440, 320, 390, 768]) {
         const { ctx, p } = await context('admin', width, 844);
         await p.locator('.sidebar').getByRole('button', { name: 'Settings', exact: true }).click();

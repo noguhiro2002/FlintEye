@@ -20,6 +20,7 @@ from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 import httpx
+from starlette.requests import ClientDisconnect
 
 from flinteye_app import orchestrator_api as core
 from flinteye_app.cli import initialize
@@ -236,6 +237,13 @@ class ApiContractTests(unittest.TestCase):
                     self.assertNotIn('authorization', call.kwargs['headers'])
             upstream.request.side_effect = httpx.ConnectError('fixture media service offline')
             self.assertEqual(client.get('/media/test/whep').status_code, 502)
+
+    def test_media_proxy_handles_client_leaving_during_offer(self):
+        with patch('starlette.requests.Request.body', side_effect=ClientDisconnect), \
+             patch('flinteye_app.flinteye_routes.httpx.AsyncClient') as upstream:
+            response = self.clients['viewer'].post('/media/test/whep', content='incomplete offer')
+        self.assertEqual(response.status_code, 499)
+        upstream.assert_not_called()
 
     def test_whep_audio_falls_back_to_video_and_pins_the_session(self):
         from flinteye_app.camera_audio import live_path

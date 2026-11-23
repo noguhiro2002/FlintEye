@@ -17,6 +17,7 @@ import httpx
 from fastapi import Depends, HTTPException, Request, Response
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.requests import ClientDisconnect
 from flinteye_app.orchestrator_auth import generate_session_secret, hash_password, local_auth_is_configured
 from flinteye_app.flinteye_runtime import application_dir, launch_command
 from flinteye_app.flinteye_storage import suggested_quota
@@ -373,9 +374,12 @@ def install_routes(app, context, *, setup_token: str, desktop: bool):
         headers = {key: value for key, value in request.headers.items()
                    if key.lower() in {'content-type', 'accept', 'if-match'}}
         try:
+            body = await request.body()
+        except ClientDisconnect:
+            return Response(status_code=499)
+        try:
             async with httpx.AsyncClient(timeout=30, trust_env=False) as client:
                 base = f'http://127.0.0.1:{upstream_port}/'
-                body = await request.body()
                 upstream = await client.request(request.method, base + upstream_path, params=query, headers=headers, content=body)
                 # A relay can disappear between the readiness sample and the initial WHEP request.
                 if original and upstream.status_code == 404 and request.method in {'GET', 'HEAD', 'POST'}:
