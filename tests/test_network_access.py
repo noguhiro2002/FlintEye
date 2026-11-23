@@ -144,8 +144,7 @@ class NetworkTests(unittest.TestCase):
                 profile = plistlib.loads((guide/'FlintEye.mobileconfig').read_bytes())
                 certificate = profile['PayloadContent'][0]['PayloadContent']
                 self.assertEqual(hashlib.sha256(certificate).hexdigest(), active['fingerprint'])
-                self.assertTrue(any(f'https://{address}:{port}' in file.read_text()
-                                    for file in guide.glob('*.txt')))
+                self.assertIn(f'https://{address}:{port}', (guide/'connection.txt').read_text(encoding='utf-8'))
                 self.assertEqual(local.post(url+'/renew-trust', json={'confirm': True}).status_code, 200)
                 kept = local.get(url).json()
                 self.assertTrue(kept['restart_required'])
