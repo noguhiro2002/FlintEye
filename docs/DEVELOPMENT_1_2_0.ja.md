@@ -5,7 +5,7 @@
 **UNDER DEVELOPMENT。公開版 1.1.3-preview.1 に変更はありません。本ソースは、報告されているWindowsでの障害が所有者のマシンで回復したことを主張するものではありません。**
 
 ベースライン：アプリケーションビルド `25718ed3f06833a1f291992753b4f0538d7dc939`、公開タグ `v1.1.3-preview.1`。実装は main `8e13378` から開始。入力：2026年11月15日付の所有者によるQA rev11、およびmacOSインストーラーのフォローアップ。
-今回の修正は1.2.0-preview.8で確認します。[候補版のビルド](https://github.com/noguhiro2002/FlintEye/actions/runs/45028239317)から該当するOS・CPUの成果物を取得し、使ったコミットと結果を[実機チェックリスト](RELEASE_CHECKLIST_1_2_0.ja.md)に記録してください。
+今回の修正は1.2.0-preview.9で確認します。[候補版のビルド](https://github.com/noguhiro2002/FlintEye/actions/runs/45229712775)から該当するOS・CPUの成果物を取得し、使ったコミットと結果を[実機チェックリスト](RELEASE_CHECKLIST_1_2_0.ja.md)に記録してください。
 
 ## Preview.3: macOSインストールフォローアップ
 

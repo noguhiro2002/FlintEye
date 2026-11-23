@@ -1,6 +1,6 @@
 {
   "version": "1.2.0",
-  "commit": "b7bb8772e79f897473d5b02ce15d870d706f0778",
+  "commit": "59a0fb29c8587d92d1253654d63413e56bdfa6d8",
   "cases": {
     "windows-owner-startup": {
       "status": "pending",
@@ -36,7 +36,7 @@
     },
     "all-native-architectures": {
       "status": "passed",
-      "evidence": "https://github.com/noguhiro2002/FlintEye/actions/runs/45028239317 built all eight installers and both container architectures from b7bb8772e79f897473d5b02ce15d870d706f0778. 28 of 36 lifecycle cases passed all seven stages, including event recording playback and download. 8 macOS package cases passed installation, integrity and removal and require first-launch approval. See QA-RESULTS.json."
+      "evidence": "https://github.com/noguhiro2002/FlintEye/actions/runs/45229712775 built all eight installers and both container architectures from 59a0fb29c8587d92d1253654d63413e56bdfa6d8. 28 of 36 lifecycle cases passed all seven stages, including both Multiview recording layouts, API key retention and event playback. 8 macOS package cases require first-launch approval. See QA-RESULTS.json."
     }
   }
 }

@@ -4,6 +4,8 @@
 
 **1.2.0 の安定版公開には、以下の実機確認8項目と、同じコミットの全 OS・両 CPU 向け自動検証が必要です。** いずれかが未実施または不合格の場合は安定版への昇格をブロックします。開発中のパブリックプレビュー版では、実機確認が未完了であることを開示した上で合格済みのビルドをテスト用に配布できますが、その場合でも Latest タグを付けてはなりません。
 
+プレビュー9では、36件中28件がインストールから再インストールまでの7段階に合格しました。Multiviewの自動・手動配置を録画から確認し、再インストール後にもイベント録画を再生でき、APIキーの状態が保持されることを確認しました。macOSの8件はインストール・整合性確認・削除に合格しました。初回起動の承認後の動作と実機のカメラ動作は未確認です。[Preview 9のビルド結果](https://github.com/noguhiro2002/FlintEye/actions/runs/45229712775)
+
 プレビュー8では 36 件中 28 件が、インストールから削除・再インストールまでの7段階に合格しました。実API・GUIに加え、再インストール後のイベント録画の再生とダウンロードを確認しました。macOSの 8 件は、インストール・整合性確認・削除まで合格し、初回起動の承認待ちです。検証の内訳は `QA-RESULTS.json` に記録しています。実機の受け入れ確認は継続中です。
 
 プレビュー8の公開URLからの導入は、14件中 12 件が全段階に合格しました。Windowsのワンスクリプト、LinuxのDEB・RPMの管理者権限あり・なし、GHCRの両CPUを確認しました。macOSの 2 件は、インストール・整合性確認・削除まで合格し、初回起動の承認待ちです。 [公開経路の検証結果](https://github.com/noguhiro2002/FlintEye/actions/runs/45034872890)
@@ -14,9 +16,9 @@
 
 | 項目 | 必要な値または記録 |
 | --- | --- |
-| リリース / アプリケーション | `v1.2.0-preview.8` / `1.2.0` |
-| テスト対象のコミット | `b7bb8772e79f897473d5b02ce15d870d706f0778` |
-| ビルド | [Build release 45028239317](https://github.com/noguhiro2002/FlintEye/actions/runs/45028239317) · [release-bundle](https://github.com/noguhiro2002/FlintEye/actions/runs/45028239317/artifacts/14758872175) |
+| リリース / アプリケーション | `v1.2.0-preview.9` / `1.2.0` |
+| テスト対象のコミット | `59a0fb29c8587d92d1253654d63413e56bdfa6d8` |
+| ビルド | [Build release 45229712775](https://github.com/noguhiro2002/FlintEye/actions/runs/45229712775) · [release-bundle](https://github.com/noguhiro2002/FlintEye/actions/runs/45229712775/artifacts/14852939187) |
 | パッケージの同一性 | パッケージファイル名と一致する`SHA256SUMS`値を記録し、`build-manifest.json`とアプリのInformation画面の情報が一致していることを確認する |
 | 環境 | 日付、テスター、デバイス、OS/ビルド、CPU、ブラウザ/バージョン、インストール方法、インストール/データパス、実際のAPIアドレス/ポート、カメラモデル/解像度/fps |
 | 結果 | 各操作について、期待される動作、観察された動作、合格／不合格／未実施、および証拠リファレンスを記録する |
@@ -27,16 +29,16 @@
 
 単体インストーラーとワンコマンド版は、同じ成果物で試してください。コンテナは対応する `containers/container-amd64.tar.gz` または `containers/container-arm64.tar.gz` を読み込み、開発ガイドに記載したローカルイメージタグを使います。[コンテナを公開前に検証する手順](DEVELOPMENT_1_2_0.ja.md)
 
-## WindowsとM1 Macでプレビュー8を試す
+## WindowsとM1 Macでプレビュー9を試す
 
-公開リリースからインストーラーを取得し、SHA-256を照合します。起動後は **Information → System** で版が `1.2.0-preview.8`、コミットがビルドと一致することを確認します。[Windows x64用EXE](https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.8/FlintEye-1.2.0-windows-amd64-setup.exe) · [Apple Silicon用DMG](https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.8/FlintEye-1.2.0-macos-arm64.dmg) · [SHA256SUMS](https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.8/SHA256SUMS)
+公開リリースからインストーラーを取得し、SHA-256を照合します。起動後は **Information → System** で版が `1.2.0-preview.9`、コミットがビルドと一致することを確認します。[Windows x64用EXE](https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.9/FlintEye-1.2.0-windows-amd64-setup.exe) · [Apple Silicon用DMG](https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.9/FlintEye-1.2.0-macos-arm64.dmg) · [SHA256SUMS](https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.9/SHA256SUMS)
 
-OS別の成果物にもインストーラー、スクリプト、`SHA256SUMS` が入っています。展開先で、Windowsは `.\install.ps1 -PackageDirectory .`、Macは `bash ./install.sh --package-directory .` を実行できます。[Windows x64の成果物](https://github.com/noguhiro2002/FlintEye/actions/runs/45028239317/artifacts/14757986508) · [M1 Macの成果物](https://github.com/noguhiro2002/FlintEye/actions/runs/45028239317/artifacts/14756684717)
+OS別の成果物にもインストーラー、スクリプト、`SHA256SUMS` が入っています。展開先で、Windowsは `.\install.ps1 -PackageDirectory .`、Macは `bash ./install.sh --package-directory .` を実行できます。[Windows x64の成果物](https://github.com/noguhiro2002/FlintEye/actions/runs/45229712775/artifacts/14850356779) · [M1 Macの成果物](https://github.com/noguhiro2002/FlintEye/actions/runs/45229712775/artifacts/14848028786)
 
 `public` が入っているディレクトリで、付属のインストールスクリプトも確認します。
 
-- Windows PowerShell · `.\public\install.ps1 -Version 1.2.0-preview.8 -PackageDirectory .\public`
-- macOS Terminal · `bash public/install.sh --version 1.2.0-preview.8 --package-directory public`
+- Windows PowerShell · `.\public\install.ps1 -Version 1.2.0-preview.9 -PackageDirectory .\public`
+- macOS Terminal · `bash public/install.sh --version 1.2.0-preview.9 --package-directory public`
 
 - [ ] 新規プロファイルで起動し、ブラウザで管理者パスワードを設定できる。途中で閉じても、**Open FlintEye** やアプリの再起動から再開できる。既存のプロファイルでは同じアカウントでサインインできる。Docker・systemdでは、トークンの取得場所が画面に表示される。
 - [ ] LAN・VPN上の別端末から、表示されたHTTPSアドレスを開く。CAを信頼した後に証明書の警告が消える。再起動待ちと、範囲外で拒否された接続元IPが確認できる。専用のテスト環境でポート競合時の `10048` の案内も確認する。

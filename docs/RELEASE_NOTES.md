@@ -30,6 +30,7 @@ Use `ghcr.io/noguhiro2002/flinteye:@IMAGE_VERSION@` for `linux/amd64` or `linux/
 - Multiview uses the same sources for its video and camera list. Automatic layouts place two cameras side by side. Set positions for the live and recorded composite in **Settings → Multiview → Camera layout**.
 - Live audio waits for the camera stream to publish an audio track and keeps the main video available. ONVIF checks candidate endpoints and reports connection, trust and authentication failures.
 - Camera audio controls take less space, the active recording tab is highlighted, and the MediaMTX RTSP URL fields align.
+- Slow thumbnails leave room for recording playback requests. Event recordings remain available during brief recording index updates.
 - Issue and revoke REST API keys in **Runtime & access**. The same section guides iPhone users through LAN certificate trust. The Linux and macOS script explains how to retry a download when staging writes fail. [Preview 8 findings and Preview 9 regressions (Japanese)](testing/PREVIEW_8_FINDINGS.ja.md)
 
 - Equipment can preserve the footage leading up to an event by sending a timestamp, lookback and camera IDs to the new API. FlintEye saves the requested interval in a separate folder and shows it in **Recordings → Event recordings**. [Setup and API guide](USER_GUIDE.md#event-recordings)
