@@ -54,7 +54,11 @@ async function until(read, predicate, label, seconds = 90) {
   throw new Error(label+': '+JSON.stringify(value));
 }
 async function api(path, method = 'GET', data) {
-  const response = await context.request.fetch(new URL(path, origin).href, { method, data, headers: { Origin: origin.origin }, timeout: 60_000 });
+  const response = await context.request.fetch(new URL(path, origin).href, {
+    method, data, headers: { Origin: origin.origin }, timeout: 60_000,
+    // Retry a reset connection once for read-only probes.
+    maxRetries: method === 'GET' ? 1 : 0,
+  });
   assert(response.ok(), `${method} ${path}: ${response.status()} ${await response.text()}`);
   return response;
 }

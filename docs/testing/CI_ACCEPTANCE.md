@@ -18,3 +18,5 @@
 | Build release · containers | Scan the exported amd64 and arm64 candidate archives. A fixed-version High or Critical advisory fails the job. Database or scanner errors also fail it. Findings without a published fix are retained for review. | Download `container-advisories-amd64` and `container-advisories-arm64`. These scans cover components identifiable in the Linux images. |
 
 The [installed application test guide](../INSTALLATION_QA.md) explains manual-required results. Use the [device checklist](../RELEASE_CHECKLIST_1_2_0.md) for camera hardware, OS permissions, LAN clients and continuous operation. The Compose upgrade covers a single pinned predecessor. Native upgrade interruptions, remaining failure branches and long-running audio/video synchronization require separate evidence.
+
+The installed-app verifier reconnects once when a read-only HTTP request receives a connection reset. Each settings or control request is sent once per test action.
