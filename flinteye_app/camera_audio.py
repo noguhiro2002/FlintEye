@@ -22,6 +22,13 @@ def live_path(path: str) -> str:
     return f'{LIVE_PREFIX}/{hashlib.sha256(path.encode()).hexdigest()}'
 
 
+def has_audio_track(path: dict) -> bool:
+    return any(
+        str(track).lower() in {'lpcm', 'mpeg-4 audio', 'mpeg4audio', 'aac', 'opus', 'g711', 'g722'}
+        for track in path.get('tracks') or ()
+    )
+
+
 def _usb_parent(path: Path) -> Path | None:
     real_path = path.resolve()
     return next((parent for parent in (real_path, *real_path.parents)

@@ -277,6 +277,14 @@ export interface CameraItem {
   health?: CameraHealth;
 }
 
+export interface ApiKeyItem {
+  id: string;
+  name: string;
+  scope: "read" | "monitor";
+  created_at: number;
+  revoked_at: number | null;
+}
+
 export interface CameraAudioConfig {
   enabled: boolean;
   preset: "standard" | "high" | "middle" | "low" | "custom";
@@ -294,6 +302,7 @@ export interface ViewerCameraItem {
   enabled: boolean;
   audio_enabled?: boolean;
   audio_receiving?: boolean;
+  audio_live_ready?: boolean;
   path: string;
   addresses: {
     rtsp_url: string;
@@ -350,10 +359,12 @@ export interface MultiviewViewItem {
     label: string;
     type: "uvc" | "ip" | "external";
     camera_id?: string;
+    slot?: number;
     health: CameraHealth;
   }>;
   rtsp_url: string;
   webrtc_url: string;
+  status?: MultiviewStatus["views"][number];
 }
 
 export interface MultiviewStatus {
@@ -365,6 +376,7 @@ export interface MultiviewStatus {
     decode_error_count: number;
     inputs: Array<{
       path: string;
+      slot?: number;
       state: "starting" | "buffering" | "healthy" | "holding" | "no_stream" | "reconnecting" | "degraded" | "isolated" | "fallback";
       last_progress_at?: number | null;
       failures: number;
@@ -510,6 +522,7 @@ export interface RuntimeConfigResponse {
       grid_columns?: number | null;
       global_slots?: string | null;
       per_view_slots?: Record<string, string>;
+      source_slots?: (string | null)[][] | null;
     };
     maintenance?: {
       enabled?: boolean;

@@ -431,6 +431,7 @@ class MultiviewLayoutConfig(BaseModel):
     grid_columns: int | None = None
     global_slots: str | None = None
     per_view_slots: dict[str, str] = Field(default_factory=dict)
+    source_slots: list[list[str | None]] | None = None
 
     @field_validator("canvas_width", "canvas_height")
     @classmethod
@@ -538,6 +539,32 @@ class MultiviewConfig(BaseModel):
     maintenance: MultiviewMaintenanceConfig = Field(default_factory=MultiviewMaintenanceConfig)
     input_defaults: MultiviewInputDefaultsConfig = Field(default_factory=MultiviewInputDefaultsConfig)
     sync_buffer: MultiviewSyncBufferConfig = Field(default_factory=MultiviewSyncBufferConfig)
+
+    @model_validator(mode="after")
+    def validate_source_slots(self):
+        from flinteye_app.multiview_layout import is_public_source
+
+        pages = self.layout.source_slots
+        if pages is None:
+            return self
+        if len(pages) > 32 or any(len(page) != self.tile_count for page in pages):
+            raise ValueError("Each Multiview page must contain Tile Count slots")
+        sources: set[str] = set()
+        for page in pages:
+            for index, path in enumerate(page):
+                if path is None:
+                    continue
+                path = path.strip().strip("/")
+                if (not is_public_source(path, self.output_prefix) or len(path) > 256
+                        or any(ch in path for ch in "\r\n,;\\?#") or ".." in path.split("/")):
+                    raise ValueError("Multiview slots require public MediaMTX paths")
+                if path.casefold() in sources:
+                    raise ValueError("Assign each Multiview source to one slot")
+                sources.add(path.casefold())
+                page[index] = path
+        if len(sources) > self.max_sources:
+            raise ValueError("Multiview assignments exceed Max Sources")
+        return self
 
     @field_validator("max_sources", "tile_count")
     @classmethod

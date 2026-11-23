@@ -21,6 +21,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from flinteye_app.camera_audio import has_audio_track, live_path
+from flinteye_app.multiview_layout import is_public_source, public_source, unique_sources
 from flinteye_app.orchestrator_logging import LogManager, infer_line_level, parse_duration_to_seconds
 from flinteye_app.orchestrator_models import CameraConfig, RuntimeConfig
 from flinteye_app.orchestrator_snapshot import SnapshotError, capture_snapshot_jpeg
@@ -89,6 +91,8 @@ class ManagedProcess:
     quarantine_since: float | None = None
     quarantine_reason: str | None = None
     output_thread: threading.Thread | None = None
+    audio_source: str | None = None
+    audio_failures: int = 0
 
     def is_running(self) -> bool:
         return self.process is not None and self.process.poll() is None
@@ -220,6 +224,28 @@ def _multiview_effective_sources(config: RuntimeConfig) -> list[str]:
     return _configured_multiview_sources(config)
 
 
+def _plan_multiview(config: RuntimeConfig, discovered: list[str]) -> tuple[list[str], list[list[str | None]] | None]:
+    mv = config.multiview
+    internal = {
+        camera.path.casefold(): f"__mv_input/{camera.path}"
+        for camera in config.cameras if _multiview_input_mode(config, camera) != "primary"
+    }
+    if mv.layout.source_slots is not None:
+        pages = [[internal.get(path.casefold(), path) if path else None for path in page]
+                 for page in mv.layout.source_slots]
+        return [path for page in pages for path in page if path], pages
+    sources = []
+    if mv.source_mode != "api":
+        sources.extend(_multiview_effective_sources(config))
+    if mv.source_mode != "env":
+        disabled = {camera.path.casefold() for camera in config.cameras if not camera.enabled}
+        sources.extend(
+            internal.get(path.casefold(), path) for path in discovered
+            if path.casefold() not in disabled and is_public_source(path, mv.output_prefix)
+        )
+    return unique_sources(sources, mv.output_prefix, mv.max_sources), None
+
+
 def _value_to_cli(value: Any) -> str:
     return str(value)
 
@@ -291,6 +317,11 @@ class OrchestratorSupervisor:
         self.rtsps_network = None
         self._processes: dict[str, ManagedProcess] = {}
         self._last_config: RuntimeConfig | None = None
+        self._audio_ready_paths: set[str] = set()
+        self._audio_refresh_at = 0.0
+        self._multiview_discovery_at = 0.0
+        self._multiview_discovery_url = ""
+        self._discovered_multiview_paths: list[str] = []
         self._monitor_thread = threading.Thread(target=self._monitor_loop, daemon=True)
         self._monitor_thread.start()
 
@@ -307,6 +338,9 @@ class OrchestratorSupervisor:
         with self._lock:
             self._monitoring_enabled = enabled and not self._stop_event.is_set()
             if not self._monitoring_enabled:
+                self._audio_ready_paths.clear()
+                self._discovered_multiview_paths = []
+                self._multiview_discovery_at = 0
                 for proc in self._processes.values():
                     proc.desired = False
                     proc.restart_pending_at = None
@@ -331,13 +365,18 @@ class OrchestratorSupervisor:
 
     def _monitor_loop(self) -> None:
         while not self._stop_event.is_set():
+            self._refresh_audio_readiness()
+            self._refresh_multiview_discovery()
             due_healthchecks: list[str] = []
             with self._lock:
                 now = time.time()
                 for proc in self._processes.values():
                     if proc.process is None:
                         if proc.desired and now >= proc.next_restart_at and proc.command:
-                            self._start_process(proc, is_restart=True)
+                            if proc.audio_source is None or proc.audio_source in self._audio_ready_paths:
+                                self._start_process(
+                                    proc, is_restart=proc.audio_source is None or proc.last_exit_code is not None,
+                                )
                         continue
 
                     exit_code = proc.process.poll()
@@ -378,7 +417,12 @@ class OrchestratorSupervisor:
                     proc.desired = desired
                     proc.last_exit_code = exit_code
                     if proc.desired:
-                        proc.next_restart_at = now + (5.0 if proc.key == "multiview" else 1.0)
+                        if proc.audio_source:
+                            self._audio_ready_paths.discard(live_path(proc.audio_source))
+                            proc.audio_failures = min(5, proc.audio_failures + 1)
+                            proc.next_restart_at = now + min(30, 2 ** proc.audio_failures)
+                        else:
+                            proc.next_restart_at = now + (5.0 if proc.key == "multiview" else 1.0)
                     if exit_code != 0:
                         logger.error("%s exited with code %s", proc.key, exit_code)
                     if proc.key.startswith("camera:"):
@@ -389,7 +433,68 @@ class OrchestratorSupervisor:
                         )
             for process_key in due_healthchecks:
                 self._run_process_healthcheck(process_key)
-            time.sleep(0.5)
+            self._stop_event.wait(0.5)
+
+    def _refresh_audio_readiness(self) -> None:
+        from httpx import HTTPError
+        from flinteye_app.monitoring import media_paths
+
+        with self._lock:
+            now = time.monotonic()
+            if now < self._audio_refresh_at or not any(
+                proc.desired and proc.audio_source for proc in self._processes.values()
+            ):
+                return
+            config = self._last_config
+            self._audio_refresh_at = now + 1.0
+        if config is None:
+            return
+        try:
+            ready = {
+                str(item["name"]) for item in media_paths(config)
+                if item.get("name") and item.get("ready") is True and has_audio_track(item)
+            }
+        except (HTTPError, OSError, ValueError):
+            ready = set()
+        with self._lock:
+            if not self._monitoring_enabled or config is not self._last_config:
+                return
+            self._audio_ready_paths = ready
+            for proc in self._processes.values():
+                if proc.audio_source and proc.is_running() and live_path(proc.audio_source) in ready:
+                    proc.audio_failures = 0
+
+    def live_audio_ready(self, path: str) -> bool:
+        with self._lock:
+            return (live_path(path) in self._audio_ready_paths
+                    and any(proc.audio_source == path and proc.desired and proc.is_running()
+                            for proc in self._processes.values()))
+
+    def _refresh_multiview_discovery(self) -> None:
+        from flinteye_app.workers.multiview_to_rtsp import fetch_paths_from_api
+
+        with self._lock:
+            config = self._last_config
+            now = time.monotonic()
+            if (not self._monitoring_enabled or config is None or not config.multiview.enabled
+                    or config.multiview.source_mode == "env" or config.multiview.layout.source_slots is not None
+                    or now < self._multiview_discovery_at):
+                return
+            url = config.multiview.mtx_api_url
+            self._multiview_discovery_at = now + 5
+        try:
+            paths = sorted(
+                (path for path in fetch_paths_from_api(url) if is_public_source(path, config.multiview.output_prefix)),
+                key=str.casefold,
+            )
+        except (OSError, ValueError):
+            return
+        with self._lock:
+            if (self._monitoring_enabled and config is self._last_config
+                    and (url != self._multiview_discovery_url or paths != self._discovered_multiview_paths)):
+                self._multiview_discovery_url = url
+                self._discovered_multiview_paths = paths
+                self._reconcile_multiview(config)
 
     def _request_managed_restart(
         self,
@@ -427,7 +532,9 @@ class OrchestratorSupervisor:
         if mv_proc is None or not mv_proc.desired:
             return
         if self._last_config is not None and self._last_config.multiview.enabled:
-            mv_proc.command = self._multiview_command(self._last_config)
+            config = self._last_config
+            sources, placements = self._current_multiview_plan(config)
+            mv_proc.command = self._multiview_command(config, sources, placements)
             mv_proc.command_display = _format_cmd(mv_proc.command)
         delay_sec = 8.0
         reason = (
@@ -704,6 +811,7 @@ class OrchestratorSupervisor:
         env: dict[str, str] | None = None,
         cwd: str | None = None,
         force_restart: bool = False,
+        audio_source: str | None = None,
     ) -> ManagedProcess:
         desired = desired and self._monitoring_enabled
         proc = self._processes.get(key)
@@ -716,6 +824,10 @@ class OrchestratorSupervisor:
         proc.cwd = cwd or self.workspace_dir
         proc.env = env
         proc.desired = desired
+        proc.audio_source = audio_source
+        if audio_source and command_changed:
+            proc.audio_failures = 0
+            proc.next_restart_at = 0
 
         if not desired:
             self._stop_process(proc)
@@ -729,7 +841,7 @@ class OrchestratorSupervisor:
             self._stop_process(proc)
             proc.desired = desired
 
-        if proc.process is None:
+        if proc.process is None and audio_source is None:
             proc.desired = desired
             self._start_process(proc, is_restart=proc.restart_count > 0 or force_restart)
         return proc
@@ -744,8 +856,6 @@ class OrchestratorSupervisor:
                 "--audio-channels", str(audio.channels), "--audio-bitrate", str(audio.bitrate_kbps)]
 
     def _reconcile_live_audio(self, config: RuntimeConfig) -> None:
-        from flinteye_app.camera_audio import live_path
-
         desired = set()
         base = _publisher_rtsp_base_url(config)
         if config.mediamtx.control_mode == "direct" and config.mediamtx.managed.enabled:
@@ -764,7 +874,9 @@ class OrchestratorSupervisor:
                     "-f", "rtsp", "-rtsp_transport", "tcp", "-muxdelay", "0",
                     _join_url(base, live_path(camera.path)),
                 ]
-                self._ensure_process(key=key, kind="camera/live-audio", command=command, desired=True)
+                self._ensure_process(
+                    key=key, kind="camera/live-audio", command=command, desired=True, audio_source=camera.path,
+                )
         for key, proc in self._processes.items():
             if key.startswith("live-audio:") and key not in desired:
                 self._stop_process(proc)
@@ -949,13 +1061,15 @@ class OrchestratorSupervisor:
             str(Path(mv.status_file).with_name(f"multiview_buffer_{index}.json")),
         ]
 
-    def _multiview_command(self, config: RuntimeConfig) -> list[str]:
+    def _multiview_command(self, config: RuntimeConfig, sources: list[str] | None = None,
+                           placements: list[list[str | None]] | None = None) -> list[str]:
         mv = config.multiview
         q = mv.quality
         layout = mv.layout
+        if sources is None:
+            sources, placements = _plan_multiview(config, [])
         if mv.sync_buffer.enabled:
             sync = mv.sync_buffer
-            configured_sources = _multiview_effective_sources(config)
             source_label_map: dict[str, str] = {}
             for camera in config.cameras:
                 effective_path = (
@@ -968,7 +1082,7 @@ class OrchestratorSupervisor:
                     source_label_map[effective_path] = label
             cmd = [
                 *worker_command("multiview_raw_compositor", self.python_bin),
-                "--source-paths", ",".join(configured_sources),
+                "--source-paths", ",".join(sources),
                 "--input-rtsp-base-url", mv.input_rtsp_base_url,
                 "--output-rtsp-base-url", mv.output_rtsp_base_url,
                 "--output-prefix", mv.output_prefix,
@@ -1001,6 +1115,8 @@ class OrchestratorSupervisor:
                 _append_arg(cmd, "--slot-positions", layout.global_slots)
             if layout.per_view_slots:
                 _append_arg(cmd, "--per-view-slots-json", json.dumps(layout.per_view_slots, ensure_ascii=False, separators=(",", ":")))
+            if placements is not None:
+                _append_arg(cmd, "--source-slots-json", json.dumps(placements, ensure_ascii=False))
             if q.bitrate:
                 _append_arg(cmd, "--bitrate", q.bitrate)
             if q.maxrate:
@@ -1018,13 +1134,11 @@ class OrchestratorSupervisor:
         effective_latency_preset = "normal" if mv.sync_buffer.enabled else mv.latency_preset
         source_label_map: dict[str, str] = {}
         source_placeholder_map: dict[str, str] = {}
-        configured_sources = _multiview_effective_sources(config)
         shadowed_sources = [
             camera.path
             for camera in config.cameras
             if camera.type == "ip" and camera.ip and _multiview_input_mode(config, camera) != "primary"
         ]
-        source_mode = "hybrid" if shadowed_sources and mv.source_mode == "api" else mv.source_mode
         for camera in config.cameras:
             effective_path = (
                 f"__mv_input/{camera.path}"
@@ -1041,14 +1155,12 @@ class OrchestratorSupervisor:
             placeholder_reason = None if mv.sync_buffer.enabled else self._multiview_placeholder_reason(camera, proc)
             if placeholder_reason:
                 source_placeholder_map[effective_path] = placeholder_reason
-        if mv.sync_buffer.enabled:
-            source_mode = "env"
         cmd = [
             *worker_command("multiview_to_rtsp", self.python_bin),
             "--env-file",
             self.env_file,
-            "--source-mode",
-            "hybrid" if source_placeholder_map and source_mode == "api" else source_mode,
+            "--source-mode", "env",
+            "--source-paths", ",".join(sources),
             "--auto-placeholder-missing-sources"
             if mv.auto_placeholder_missing_sources and not mv.sync_buffer.enabled
             else "--no-auto-placeholder-missing-sources",
@@ -1105,14 +1217,16 @@ class OrchestratorSupervisor:
         ]
         healthcheck_enabled = mv.input_healthcheck_enabled and not mv.sync_buffer.enabled
         cmd.append("--input-healthcheck-enabled" if healthcheck_enabled else "--no-input-healthcheck-enabled")
-        if mv.sync_buffer.enabled or mv.source_paths or source_placeholder_map or shadowed_sources:
-            _append_arg(cmd, "--source-paths", ",".join(configured_sources))
         if shadowed_sources and not mv.sync_buffer.enabled:
             _append_arg(cmd, "--shadowed-source-paths", ",".join(shadowed_sources))
         if layout.grid_columns:
             _append_arg(cmd, "--grid-columns", layout.grid_columns)
         if layout.global_slots:
             _append_arg(cmd, "--slot-positions", layout.global_slots)
+        if layout.per_view_slots:
+            _append_arg(cmd, "--per-view-slots-json", json.dumps(layout.per_view_slots, ensure_ascii=False))
+        if placements is not None:
+            _append_arg(cmd, "--source-slots-json", json.dumps(placements, ensure_ascii=False))
         if q.bitrate:
             _append_arg(cmd, "--bitrate", q.bitrate)
         if q.maxrate:
@@ -1220,13 +1334,14 @@ class OrchestratorSupervisor:
 
             self._reconcile_live_audio(config)
             desired_mv_input_keys: set[str] = set()
-            selected_paths = {
-                path.strip().strip("/").lower()
-                for path in (
-                    config.multiview.source_paths
-                    or [item.path for item in config.cameras if item.enabled]
-                )
-            }
+            if config.multiview.layout.source_slots is not None:
+                selected_paths = {
+                    path.casefold() for page in config.multiview.layout.source_slots for path in page if path
+                }
+            else:
+                selected_paths = {public_source(path).casefold() for path in _configured_multiview_sources(config)}
+                if config.multiview.source_mode == "api":
+                    selected_paths.update(camera.path.casefold() for camera in config.cameras)
             for camera in config.cameras:
                 mode = _multiview_input_mode(config, camera)
                 if (
@@ -1259,27 +1374,32 @@ class OrchestratorSupervisor:
                 if key.startswith("multiview-buffer:") and key not in desired_buffer_keys:
                     self._stop_process(proc)
 
-            mv_key = "multiview"
-            if config.multiview.enabled:
-                mv_command = self._multiview_command(config)
-                mv_proc = self._ensure_process(
-                    key=mv_key,
-                    kind="multiview",
-                    command=mv_command,
-                    desired=True,
-                    force_restart=force_restart,
-                )
-                align_sec = None
-                if config.multiview.maintenance.align_with_record_segments:
-                    align_sec = parse_duration_to_seconds(config.recording.record_segment_duration)
-                mv_proc.maintenance_enabled = config.multiview.maintenance.enabled
-                mv_proc.maintenance_interval_sec = config.multiview.maintenance.restart_interval_sec
-                mv_proc.maintenance_align_sec = align_sec
-                mv_proc.maintenance_offset_sec = config.multiview.maintenance.restart_offset_sec
-                if mv_proc.started_at is not None:
-                    self._refresh_maintenance_schedule(mv_proc, reference_time=mv_proc.started_at)
-            elif mv_key in self._processes:
-                self._stop_process(self._processes[mv_key])
+            self._reconcile_multiview(config, force_restart=force_restart)
+
+    def _current_multiview_plan(self, config: RuntimeConfig) -> tuple[list[str], list[list[str | None]] | None]:
+        discovered = self._discovered_multiview_paths if self._multiview_discovery_url == config.multiview.mtx_api_url else []
+        return _plan_multiview(config, discovered)
+
+    def _reconcile_multiview(self, config: RuntimeConfig, *, force_restart: bool = False) -> None:
+        mv = config.multiview
+        sources, placements = self._current_multiview_plan(config)
+        if not mv.enabled or len(sources) < 2:
+            if proc := self._processes.get("multiview"):
+                self._stop_process(proc)
+            return
+        proc = self._ensure_process(
+            key="multiview", kind="multiview", command=self._multiview_command(config, sources, placements),
+            desired=True, force_restart=force_restart,
+        )
+        proc.maintenance_enabled = mv.maintenance.enabled
+        proc.maintenance_interval_sec = mv.maintenance.restart_interval_sec
+        proc.maintenance_align_sec = (
+            parse_duration_to_seconds(config.recording.record_segment_duration)
+            if mv.maintenance.align_with_record_segments else None
+        )
+        proc.maintenance_offset_sec = mv.maintenance.restart_offset_sec
+        if proc.started_at is not None:
+            self._refresh_maintenance_schedule(proc, reference_time=proc.started_at)
 
     def reconcile_rtsps(self, config: RuntimeConfig) -> None:
         from flinteye_app.rtsps_relay import KEY, prepare_relay
@@ -1521,19 +1641,7 @@ class OrchestratorSupervisor:
             if not self._monitoring_enabled:
                 return False
             self._last_config = config
-            if not config.multiview.enabled:
-                proc = self._processes.get("multiview")
-                if proc:
-                    self._stop_process(proc)
-                return True
-            command = self._multiview_command(config)
-            self._ensure_process(
-                key="multiview",
-                kind="multiview",
-                command=command,
-                desired=True,
-                force_restart=True,
-            )
+            self._reconcile_multiview(config, force_restart=True)
             return True
 
     def exclude_camera_from_multiview(self, camera_id: str, reason: str | None = None) -> bool:

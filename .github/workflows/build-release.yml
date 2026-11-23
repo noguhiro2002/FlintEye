@@ -30,6 +30,7 @@ on:
       - frontend/tests/installed.mjs
       - frontend/tests/settings-*
       - tests/test_macos_lifecycle.py
+      - tests/test_install_staging.py
       - tests/test_network_access.py
       - tests/test_package_layout.py
       - tests/test_process_lifetime.py
@@ -213,6 +214,9 @@ jobs:
           python -m unittest discover -s tests -p test_network_access.py -v
           python -m unittest discover -s tests -p test_windows_maintenance.py -v
           python -m unittest tests.test_package_layout.LayoutTests.test_uvc_worker_probes_ffmpeg_and_launches_directshow_mjpeg tests.test_package_layout.LayoutTests.test_failed_worker_writes_traceback_without_desktop_startup_dialog -v
+      - name: macOS one-script download write failure and recovery
+        if: matrix.os == 'macos'
+        run: python -m unittest discover -s tests -p test_install_staging.py -v
       - name: macOS build tools
         if: matrix.os == 'macos'
         run: brew install cmake pkg-config nasm ninja

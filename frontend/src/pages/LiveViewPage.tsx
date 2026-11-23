@@ -307,10 +307,11 @@ export function LiveViewPage({ api, canManage = false, authRole = null, onConfig
 
         <div className="live-view-stage">
           {selectedCamera?.audio_enabled && !paused && <p className="field-help">
-            {selectedCamera.audio_receiving ? "Audio available. Use the player’s volume control to listen."
+            {(selectedCamera.audio_live_ready ?? selectedCamera.audio_receiving) ? "Audio available. Use the player’s volume control to listen."
               : "Camera audio is enabled, but no audio is being received."}
           </p>}
           {selectedCamera && <WebRtcEmbed
+            key={selectedCamera.id + ":" + Boolean(selectedCamera.audio_live_ready)}
             url={selectedCamera?.addresses.webrtc_url ?? null}
             title={selectedCamera ? `Camera: ${selectedCamera.label || selectedCamera.id}` : "Camera"}
           />}

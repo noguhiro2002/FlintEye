@@ -32,6 +32,12 @@ ARCH は `amd64` または `arm64` です。これらは受け入れターゲッ
 コンピューター上でソフトウェアをコンパイルすることはありません。アップグレードする前に、実行中の FlintEye インスタンスを終了してください。
 無人 Linux サーバーの場合は、デスクトップ UI を起動せずにインストールし、[systemd ガイド](DISTRIBUTION.ja.md#systemd)に従ってください。
 
+ダウンロード中に `curl (23)` が出た場合は、表示された一時フォルダーの空き容量、ユーザーのクォータ、ファイルサイズ上限を確認してください。書き込める別の既存フォルダーを `TMPDIR` で指定して再試行できます。Linux でユーザー単位にインストールする場合の例です。システム全体へのインストールや macOS では `--user` を省きます。
+
+```bash
+TMPDIR="/path/to/writable-directory" bash ./install.sh --user
+```
+
 <a id="included-media-tools-and-macos-recovery"></a>
 ## 付属のメディアツールと macOS のリカバリ
 

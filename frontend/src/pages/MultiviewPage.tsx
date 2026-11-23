@@ -57,7 +57,7 @@ export function MultiviewPage({ api, onConfigure }: MultiviewPageProps): JSX.Ele
     () => views.find((view) => view.id === selectedViewId) ?? null,
     [views, selectedViewId],
   );
-  const selectedStatus = status.views.find((view) => view.id === selectedViewId);
+  const selectedStatus = selectedView?.status ?? status.views.find((view) => view.id === selectedViewId);
 
   return (
     <div className="page">
@@ -73,7 +73,9 @@ export function MultiviewPage({ api, onConfigure }: MultiviewPageProps): JSX.Ele
               {onConfigure ? <button type="button" onClick={onConfigure}>Configure Multiview in Settings</button> : " Ask your administrator to configure Multiview."}
             </div>)
           ) : (
-            views.map((view) => (
+            views.map((view) => {
+              const current = view.status ?? status.views.find((item) => item.id === view.id);
+              return (
               <button
                 key={view.id}
                 type="button"
@@ -87,23 +89,25 @@ export function MultiviewPage({ api, onConfigure }: MultiviewPageProps): JSX.Ele
                   {view.source_items?.some((source) => source.health.placeholder)
                     ? ` / ${view.source_items.filter((source) => source.health.placeholder).length} no stream`
                     : ""}
-                  {(status.views.find((item) => item.id === view.id)?.decode_error_count ?? 0) > 0
-                    ? ` / ${status.views.find((item) => item.id === view.id)?.decode_error_count} decode errors`
+                  {(current?.decode_error_count ?? 0) > 0
+                    ? ` / ${current?.decode_error_count} decode errors`
                     : ""}
                 </small>
-                {status.views.find((item) => item.id === view.id) && (
-                  <span className={`status-tag ${paused ? 'muted' : healthClass(status.views.find((item) => item.id === view.id)?.state)}`}>
-                    {paused ? 'Stopped' : status.views.find((item) => item.id === view.id)?.state}
+                {current && (
+                  <span className={`status-tag ${paused ? 'muted' : healthClass(current.state)}`}>
+                    {paused ? 'Stopped' : current.state}
                   </span>
                 )}
               </button>
-            ))
+              );
+            })
           )}
           {selectedView?.source_items?.length ? (
             <div className="source-health-list">
               {selectedView.source_items.map((source) => {
                 const input = selectedStatus?.inputs.find(
-                  (item) => item.path === source.path || item.path.endsWith(`/${source.path}`),
+                  (item) => item.path === source.path || item.path === "__mv_input/" + source.path
+                    || item.path === "__mv_buffer/" + source.path,
                 );
                 const state = paused ? 'Stopped' : input?.state ?? source.health.state;
                 return (

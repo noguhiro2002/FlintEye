@@ -29,6 +29,8 @@ The command installers select the CPU, download the package for one fixed releas
 They do not compile software on your computer. Quit a running FlintEye instance before upgrading.
 For an unattended Linux server, install without launching the desktop UI and follow the [systemd guide](DISTRIBUTION.md#systemd).
 
+If the one-command script reports `curl (23)` during download, check the temporary destination's free space, your quota and the maximum file size. Rerun with `TMPDIR` pointing to an existing writable directory with enough space. `TMPDIR="/path/to/writable-directory" bash ./install.sh --user` installs for the current Linux user. Omit `--user` for system-wide Linux and macOS installs.
+
 ## Included media tools and macOS recovery
 
 ### Screen Recording requests in older previews

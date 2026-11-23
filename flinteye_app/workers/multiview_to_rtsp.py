@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from flinteye_app.multiview_layout import is_public_source, parse_placements, source_pages, unique_sources
+
 import argparse
 import json
 import math
@@ -71,6 +73,7 @@ class ViewSpec:
     index: int
     sources: list[str]
     slots: list[tuple[int, int, int, int]]
+    placements: list[str | None] = field(default_factory=list)
 
 
 @dataclass
@@ -302,14 +305,6 @@ def normalize_unique(paths: list[str]) -> list[str]:
     return out
 
 
-def is_multiview_output_path(path_name: str, prefix: str) -> bool:
-    if not prefix:
-        return False
-    path_lower = path_name.lower()
-    prefix_lower = prefix.lower()
-    return path_lower == prefix_lower or path_lower.startswith(prefix_lower + "_")
-
-
 def join_rtsp_url(base_url: str, path_name: str) -> str:
     return base_url.rstrip("/") + "/" + path_name.lstrip("/")
 
@@ -538,13 +533,14 @@ def write_status_file(
                 "inputs": [
                     {
                         "path": source,
+                        "slot": index + 1,
                         "state": states[source].state,
                         "last_progress_at": states[source].last_progress_at,
                         "failures": states[source].failures,
                         "isolated": states[source].isolated,
                         "reason": states[source].reason,
                     }
-                    for source in runtime.spec.sources
+                    for index, source in enumerate(runtime.spec.placements or runtime.spec.sources) if source
                 ],
             }
             for runtime in views
@@ -786,27 +782,32 @@ def build_auto_slots(
 def select_slots_for_view(
     args: argparse.Namespace,
     view_index: int,
+    *,
+    compact: bool = False,
 ) -> list[tuple[int, int, int, int]]:
     view_key = f"MV_VIEW_{view_index}_SLOT_POSITIONS"
-    view_value = args.env_values.get(view_key)
+    view_value = args.per_view_slots.get(str(view_index)) or args.env_values.get(view_key)
+    tile_count = args.tile_count
     if view_value:
         slots = parse_slot_positions(view_value, view_key)
     elif args.slot_positions:
         slots = parse_slot_positions(args.slot_positions, "MV_SLOT_POSITIONS")
     else:
+        if compact:
+            tile_count = 2
         slots = build_auto_slots(
-            tile_count=args.tile_count,
+            tile_count=tile_count,
             canvas_width=args.canvas_width,
             canvas_height=args.canvas_height,
-            grid_columns=args.grid_columns,
+            grid_columns=2 if compact else args.grid_columns,
         )
 
-    if len(slots) < args.tile_count:
+    if len(slots) < tile_count:
         raise ValueError(
             f"View {view_index}: slot definitions are fewer than MV_TILE_COUNT "
-            f"({len(slots)} < {args.tile_count})"
+            f"({len(slots)} < {tile_count})"
         )
-    return slots[: args.tile_count]
+    return slots[:tile_count]
 
 
 def build_views(
@@ -814,10 +815,13 @@ def build_views(
     source_paths: list[str],
 ) -> list[ViewSpec]:
     views: list[ViewSpec] = []
-    for index, start in enumerate(range(0, len(source_paths), args.tile_count), start=1):
-        view_sources = source_paths[start : start + args.tile_count]
-        slots = select_slots_for_view(args, index)
-        views.append(ViewSpec(index=index, sources=view_sources, slots=slots))
+    for index, page in enumerate(source_pages(source_paths, args.tile_count, args.source_slots), start=1):
+        view_sources = [source for source in page if source]
+        if view_sources:
+            compact = args.source_slots is None and len(page) == 2
+            slots = select_slots_for_view(args, index, compact=compact)
+            placements = [*page, *([None] * (len(slots) - len(page)))]
+            views.append(ViewSpec(index=index, sources=view_sources, slots=slots, placements=placements))
     return views
 
 
@@ -828,14 +832,14 @@ def build_page_command(
 ) -> list[str]:
     cmd = [args.ffmpeg_bin, "-hide_banner", "-loglevel", args.loglevel]
 
+    placements = view.placements or [*view.sources, *([None] * (len(view.slots) - len(view.sources)))]
     network_input_indexes = [
         index
-        for index, source in enumerate(view.sources)
-        if not get_source_placeholder_reason(args, source)
+        for index, source in enumerate(placements)
+        if source and not get_source_placeholder_reason(args, source)
     ]
-    for source_idx, source_path in enumerate(view.sources):
-        placeholder_reason = get_source_placeholder_reason(args, source_path)
-        if placeholder_reason:
+    for source_idx, source_path in enumerate(placements):
+        if not source_path or get_source_placeholder_reason(args, source_path):
             slot = view.slots[source_idx]
             cmd += [
                 "-f",
@@ -886,15 +890,6 @@ def build_page_command(
             join_rtsp_url(args.input_rtsp_base_url, source_path),
         ]
 
-    for slot_idx in range(len(view.sources), args.tile_count):
-        slot = view.slots[slot_idx]
-        cmd += [
-            "-f",
-            "lavfi",
-            "-i",
-            f"color=c=black:s={slot[2]}x{slot[3]}:r={args.fps}",
-        ]
-
     chains: list[str] = []
     labels: list[str] = []
     for idx, slot in enumerate(view.slots):
@@ -913,8 +908,8 @@ def build_page_command(
         )
         source_label = ""
         placeholder_reason = ""
-        if idx < len(view.sources):
-            normalized_source = normalize_path_name(view.sources[idx])
+        if placements[idx]:
+            normalized_source = normalize_path_name(placements[idx])
             source_label = args.source_label_map.get(normalized_source, "")
             placeholder_reason = get_source_placeholder_reason(args, normalized_source)
         if placeholder_reason and args.text_overlay_enabled:
@@ -985,7 +980,7 @@ def build_page_command(
     layout = "|".join(f"{slot[0]}_{slot[1]}" for slot in view.slots)
     chains.append(
         "".join(labels)
-        + f"xstack=inputs={args.tile_count}:layout={layout}:fill=black[outv]"
+        + f"xstack=inputs={len(view.slots)}:layout={layout}:fill=black[outv]"
     )
     filter_complex = ";".join(chains)
 
@@ -1033,8 +1028,10 @@ def build_page_command(
 
 
 def resolve_sources(args: argparse.Namespace) -> list[str]:
+    placements = getattr(args, "source_slots", None)
+    if placements is not None:
+        return [path for page in placements for path in page if path]
     env_sources = normalize_unique(parse_path_list(args.source_paths))
-    env_source_set = {source.lower() for source in env_sources}
     shadowed_sources = {
         source.lower() for source in normalize_unique(parse_path_list(args.shadowed_source_paths))
     }
@@ -1046,10 +1043,7 @@ def resolve_sources(args: argparse.Namespace) -> list[str]:
                 source
                 for source in api_sources
                 if source.lower() not in shadowed_sources
-                and (
-                    not source.lower().startswith(("__mv_input/", "__mv_buffer/"))
-                    or source.lower() in env_source_set
-                )
+                and is_public_source(source, args.output_prefix)
             ]
         except (urllib.error.URLError, json.JSONDecodeError, TimeoutError) as e:
             if args.source_mode == "api":
@@ -1063,12 +1057,7 @@ def resolve_sources(args: argparse.Namespace) -> list[str]:
     else:
         merged = normalize_unique(env_sources + api_sources)
 
-    filtered = [
-        src
-        for src in merged
-        if not is_multiview_output_path(src, args.output_prefix)
-    ]
-    filtered = filtered[: args.max_sources]
+    filtered = unique_sources(merged, args.output_prefix, args.max_sources)
 
     if len(filtered) < 2:
         raise ValueError(
@@ -1107,6 +1096,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--no-env", action="store_true", help="Ignore .env values")
     p.add_argument("--source-mode", choices=["env", "api", "hybrid"], default="hybrid")
     p.add_argument("--source-paths", help="Comma-separated source paths in MediaMTX")
+    p.add_argument("--source-slots-json")
+    p.add_argument("--per-view-slots-json")
     p.add_argument("--shadowed-source-paths", help="Public paths replaced by internal Multiview inputs")
     p.add_argument("--mtx-api-url", default="http://127.0.0.1:9997/v3/paths/list")
     p.add_argument("--input-rtsp-base-url", default="rtsp://127.0.0.1:8554")
@@ -1249,6 +1240,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         p.error("--tile-count must be in range 2..32")
     if args.max_sources < 2 or args.max_sources > 32:
         p.error("--max-sources must be in range 2..32")
+    try:
+        args.source_slots = parse_placements(args.source_slots_json, args.tile_count)
+        args.per_view_slots = json.loads(args.per_view_slots_json) if args.per_view_slots_json else {}
+        if not isinstance(args.per_view_slots, dict):
+            raise ValueError("Per-view slot positions must be an object")
+    except ValueError as error:
+        p.error(str(error))
     if args.canvas_width <= 0 or args.canvas_height <= 0:
         p.error("canvas size must be positive")
     if args.fps <= 0:

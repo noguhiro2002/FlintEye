@@ -643,6 +643,27 @@ class RuntimeStore:
             payload["recording"] = new
         return payload
 
+    def _remove_deleted_multiview_paths(self, payload: dict[str, Any], candidate: RuntimeConfig) -> None:
+        previous = self.get_effective()
+        current_paths = {camera.path.casefold() for camera in candidate.cameras}
+        deleted = {camera.path.casefold() for camera in previous.cameras} - current_paths
+        if not deleted:
+            return
+        multiview = candidate.multiview
+        if multiview.source_paths == previous.multiview.source_paths and any(
+            path.casefold() in deleted for path in multiview.source_paths
+        ):
+            payload.setdefault("multiview", {})["source_paths"] = [
+                path for path in multiview.source_paths if path.casefold() not in deleted
+            ]
+        slots = multiview.layout.source_slots
+        if slots is not None and slots == previous.multiview.layout.source_slots and any(
+            path and path.casefold() in deleted for row in slots for path in row
+        ):
+            payload.setdefault("multiview", {}).setdefault("layout", {})["source_slots"] = [
+                [path if path and path.casefold() not in deleted else None for path in row] for row in slots
+            ]
+
     def set_runtime(
         self,
         replacement: dict[str, Any],
@@ -657,6 +678,7 @@ class RuntimeStore:
             replacement = self._preserve_recording_history(copy.deepcopy(replacement))
             candidate = RuntimeConfig.model_validate(replacement)
             self._validate_camera_paths(candidate)
+            self._remove_deleted_multiview_paths(replacement, candidate)
             self._check_archive_folders(candidate)
             self._save_runtime_file(replacement)
             self._runtime_raw = copy.deepcopy(replacement)
@@ -679,6 +701,7 @@ class RuntimeStore:
             )
             if 'cameras' in patch:
                 self._validate_camera_paths(candidate)
+                self._remove_deleted_multiview_paths(merged_runtime, candidate)
             if 'recording' in patch:
                 self._check_archive_folders(candidate)
             self._save_runtime_file(merged_runtime)

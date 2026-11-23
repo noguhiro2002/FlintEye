@@ -9,6 +9,24 @@
 > Standalone MediaMTX retention and service settings do not apply to FlintEye-managed storage.
 > Keep listeners on loopback; LAN access uses the authenticated HTTPS proxy described in the [distribution guide](../DISTRIBUTION.md).
 
+## REST API keys
+
+Sign in as an administrator with local authentication and open **Settings → Runtime & access → API access**. Name the integration, choose its permissions, and create a key. Copy the key from the creation form and store it with the integration. Settings shows the name, permission and revocation status after the key is hidden. Revoke lost or unused keys and create a replacement as needed.
+
+Both permission levels allow GET requests to these paths under `/api/v1`:
+
+- `/status/monitoring`, `/viewer/cameras`, `/multiview/views`, `/multiview/status`, `/recordings/streams`, `/recordings`
+
+**Read and control monitoring** also allows POST to `/control/start`, `/control/stop`, `/control/restart`. Use the dedicated [event recording token](../USER_GUIDE.md#event-recordings) for equipment events. Camera settings, PTZ, key management and recording files require their normal signed-in access.
+
+```bash
+curl --fail-with-body \
+  -H "Authorization: Bearer $FLINTEYE_API_KEY" \
+  http://127.0.0.1:18080/api/v1/status/monitoring
+```
+
+Use the server's active HTTPS address and trust its CA when calling from another device. An invalid or revoked key returns HTTP 401. A valid key with insufficient permission returns HTTP 403. [LAN connection and certificate trust](../LAN_ACCESS.md)
+
 <a id="11-unified-camera-orchestrator-api-uvc--multiview--mediamtx"></a>
 
 ## 11. FlintEye API (UVC / MultiView / MediaMTX)

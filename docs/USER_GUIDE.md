@@ -20,6 +20,10 @@ Apply the settings and check **Live View**. For a supported ONVIF camera, discov
 The operating system may ask for camera access. Grant it to FlintEye.
 Only the administrator can change camera and system settings.
 
+## Arrange cameras in Multiview
+
+Choose sources and set the number of slots per view in **Settings → Multiview**. The automatic layout places a pair side by side. To choose positions, open **Camera layout → Arrange cameras**, then drag each camera or select a camera and its destination. **Save changes** saves the positions and any empty slots. New Multiview recordings use the saved layout when composite recording is enabled.
+
 ## Recording and storage
 
 Enable recording for the camera in Settings. Open **Recordings**, select a stream and a recording, and play it.

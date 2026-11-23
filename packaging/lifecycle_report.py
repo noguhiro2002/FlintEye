@@ -26,6 +26,10 @@ NEW_BROWSER_CHECKS = {'GUI-settings-save-and-effective-values', 'GUI-ONVIF-inspe
 NEW_RETAINED_CHECKS = {'retained-branding-rename-and-PTZ'}
 EVENT_BROWSER_CHECKS = {'GUI-event-settings-and-equipment-API-archive-playback-and-download'}
 EVENT_RETAINED_CHECKS = {'retained-event-recording-settings-and-playback'}
+PREVIEW_9_BROWSER_CHECKS = {'GUI-API-key-issue-read-deny-and-revoke',
+                            'Multiview-2-and-3-source-positions-and-audio-isolation',
+                            'GUI-compact-camera-audio-and-recording-tab-selection'}
+PREVIEW_9_RETAINED_CHECKS = {'retained-API-key-metadata'}
 
 
 def requires_preview_7_checks(release: str) -> bool:
@@ -34,6 +38,10 @@ def requires_preview_7_checks(release: str) -> bool:
 
 def requires_preview_8_checks(release: str) -> bool:
     return _requires_preview_checks(release, 8)
+
+
+def requires_preview_9_checks(release: str) -> bool:
+    return _requires_preview_checks(release, 9)
 
 
 def _requires_preview_checks(release: str, number: int) -> bool:
@@ -158,6 +166,8 @@ def collect(directory: Path, *, release: str, commit: str) -> dict:
                     expected_checks = expected_checks | (NEW_BROWSER_CHECKS if name.startswith('browser/') else NEW_RETAINED_CHECKS)
                 if requires_preview_8_checks(release):
                     expected_checks = expected_checks | (EVENT_BROWSER_CHECKS if name.startswith('browser/') else EVENT_RETAINED_CHECKS)
+                if requires_preview_9_checks(release):
+                    expected_checks = expected_checks | (PREVIEW_9_BROWSER_CHECKS if name.startswith('browser/') else PREVIEW_9_RETAINED_CHECKS)
                 if name.startswith('browser/') and key[0] == 'source' and expected_os == 'linux':
                     expected_checks = expected_checks | {'synthetic-USB-and-IP-live-multiview-and-removal',
                                                         'desktop-browser-one-use-setup-handoff'}
@@ -177,6 +187,15 @@ def collect(directory: Path, *, release: str, commit: str) -> dict:
             sources = {Path(name).parts[:2] for name in decoded}
             if sources != {('recordings', name) for name in ('qa-camera-1', 'qa-camera-2', 'multiview_1')}:
                 raise ValueError('Missing or unexpected decoded recording sources')
+            if requires_preview_9_checks(release):
+                layout_path = path.parent/'recording-layouts.json'
+                layouts = json.loads(layout_path.read_text(encoding='utf-8'))
+                choices = json.loads((path.parent/'browser/multiview-layout-samples.json').read_text(encoding='utf-8'))
+                if (layouts != choices or set(layouts) != {'automatic', 'arranged'} or len(set(layouts.values())) != 2
+                        or any(not name.startswith('multiview_1/') or 'recordings/'+name not in decoded
+                               for name in layouts.values())):
+                    raise ValueError('Missing decoded recordings for both Multiview layouts')
+                proofs['recording-layouts.json'] = hashlib.sha256(layout_path.read_bytes()).hexdigest()
             selection = json.loads((path.parent/'browser/download-selection.json').read_text(encoding='utf-8'))
             filename = selection.get('savedName')
             selected = 'recordings/' + selection['relativePath']

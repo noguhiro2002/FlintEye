@@ -54,6 +54,15 @@ export function NetworkAccess({api, blocked, onDirtyChange, onSaved}: {api: ApiC
       {status.error && <p className="panel-error" role="alert">{status.error}</p>}
       {status.restart_required && <p className="panel-note" role="status">Connection changes are saved. Restart FlintEye to apply them.</p>}
       {status.fingerprint && <div className="network-certificate"><strong>CA SHA-256 fingerprint</strong><code>{status.fingerprint}</code><span>Expires: {status.ca_expires}</span></div>}
+      {(status.saved.enabled || enabled) && <details className="runtime-advanced">
+        <summary><strong>Connect an iPhone or iPad</strong></summary>
+        <ol>
+          <li>Once the HTTPS address is active, save the public certificate and connection guide below. Match the CA fingerprint in the guide with the one on this screen.</li>
+          <li>Transfer <code>FlintEye.mobileconfig</code> to your device, open it, and install the profile in Settings → General → VPN &amp; Device Management.</li>
+          <li>In Settings → General → About → Certificate Trust Settings, enable full trust for this FlintEye root. Then open the active HTTPS address above.</li>
+        </ol>
+        <p className="field-help">For ERR_CERT_AUTHORITY_INVALID, verify that full trust is enabled for the current FlintEye CA. After renewing trust, export the guide again following the restart.</p>
+      </details>}
       <form aria-busy={busy} onSubmit={e => {e.preventDefault(); void act(() => api.networkAction('', {enabled, address, rtsp_enabled: enabled && rtspEnabled, allowed_subnets: sources.split(',').map(s => s.trim()).filter(Boolean)}, 'PUT'), true);}}>
         <fieldset className="settings-fields" disabled={busy || blocked}>
           <div className="form-grid">
@@ -72,7 +81,8 @@ export function NetworkAccess({api, blocked, onDirtyChange, onSaved}: {api: ApiC
       </form>
       <div className="button-row">
         <button type="button" disabled={busy} onClick={() => void refresh(false).catch(() => setError('Could not read the active connection status.'))}>Refresh connection status</button>
-        <button disabled={busy || blocked || !status.saved.enabled} onClick={() => void act(() => api.networkAction('/guide', {}))}>Save public certificate and connection guide</button>
+        <button disabled={busy || blocked || !status.saved.enabled || status.restart_required || !status.lan_url}
+          onClick={() => void act(() => api.networkAction('/guide', {}))}>Save public certificate and connection guide</button>
         <button disabled={busy || blocked || !status.saved.enabled} onClick={() => { if (window.confirm('Allow HTTPS TCP 18080 (or your configured API port) and WebRTC UDP 8189 (plus RTSPS TCP 8322 if enabled) for the selected IP and source ranges, on Private networks only? Windows will request administrator approval.')) void act(() => api.networkAction('/firewall', {action:'apply'})); }}>Windows: allow selected LAN access…</button>
         <button disabled={busy || blocked} onClick={() => void act(() => api.networkAction('/firewall', {action:'remove'}))}>Windows: remove this installation’s rules…</button>
         <button disabled={busy || blocked || !status.saved.enabled} onClick={() => {if (window.confirm('Replace the trust certificate? Every viewing device will need to trust the new certificate.')) void act(() => api.networkAction('/renew-trust', {confirm:true}));}}>Renew trust certificate…</button>

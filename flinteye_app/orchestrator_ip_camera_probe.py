@@ -48,19 +48,18 @@ def _safe_error(value: object, source_url: str = "") -> str:
 def _onvif_failure(error: Exception) -> str:
     from requests.exceptions import ConnectionError, SSLError, Timeout
 
-    # onvif-python chains the underlying HTTP/SOAP exception.
-    while isinstance(error.__cause__, Exception):
-        error = error.__cause__
-    if isinstance(error, SSLError):
-        return 'trust'
-    if isinstance(error, (ConnectionError, Timeout)):
-        return 'unreachable'
-    status = getattr(error, 'status_code', None)
-    if status is None:
-        status = getattr(getattr(error, 'response', None), 'status_code', None)
-    fault = str(error).lower()
-    if status in (401, 403) or any(code in fault for code in ('notauthorized', 'failedauthentication', 'unauthorized')):
-        return 'authentication_failed'
+    # The ONVIF client can wrap a transport exception in a SOAP error.
+    while isinstance(error, Exception):
+        fault = str(error).lower()
+        if isinstance(error, SSLError) or 'certificate verify failed' in fault:
+            return 'trust'
+        status = getattr(error, 'status_code', None) or getattr(getattr(error, 'response', None), 'status_code', None)
+        if status in (401, 403) or any(code in fault for code in ('notauthorized', 'failedauthentication', 'unauthorized')):
+            return 'authentication_failed'
+        if (isinstance(error, (ConnectionError, Timeout, ConnectionResetError, TimeoutError))
+                or 'connection reset' in fault or 'connection refused' in fault):
+            return 'unreachable'
+        error = error.__cause__ or error.__context__
     return 'not_connected'
 
 
@@ -454,7 +453,9 @@ def _profile_summary(profile_value: Any, media_service_name: str, media_service:
     }
 
 
-def _probe_media_profiles(client: Any, source_url: str) -> tuple[list[dict[str, Any]], str | None, list[str], bool]:
+def _probe_media_profiles(
+    client: Any, source_url: str, *, failure_kinds: list[str] | None = None
+) -> tuple[list[dict[str, Any]], str | None, list[str], bool]:
     details = _service_details(client)
     namespaces = [str(item.get("namespace") or "") for item in details]
     advertised_media2 = any("/ver20/media/" in namespace for namespace in namespaces)
@@ -489,6 +490,8 @@ def _probe_media_profiles(client: Any, source_url: str) -> tuple[list[dict[str, 
                 all_profiles.extend(profiles)
         except Exception as exc:
             failures.append(f"{service_name}: {_safe_error(exc, source_url)}")
+            if failure_kinds is not None:
+                failure_kinds.append(_onvif_failure(exc))
     primary_service = contacted_services[0] if contacted_services else None
     return all_profiles, primary_service, failures, contacted
 
@@ -558,10 +561,15 @@ def _ptz_support_from_spaces(spaces: Any) -> dict[str, Any]:
     }
 
 
-def probe_ptz_profiles(client: Any, profiles: list[dict[str, Any]], source_url: str) -> dict[str, Any]:
+def probe_ptz_profiles(
+    client: Any, profiles: list[dict[str, Any]], source_url: str, *,
+    failure_kinds: list[str] | None = None
+) -> dict[str, Any]:
     try:
         ptz_service = client.ptz()
     except Exception as exc:
+        if failure_kinds is not None:
+            failure_kinds.append(_onvif_failure(exc))
         return {
             "supported": False,
             "service_available": False,
@@ -571,17 +579,22 @@ def probe_ptz_profiles(client: Any, profiles: list[dict[str, Any]], source_url: 
         }
 
     node_spaces: dict[str, Any] = {}
+    failures: list[str] = []
+    service_contacted = False
     try:
-        for raw_node in _as_list(ptz_service.GetNodes() or [], "PTZNode", "Node", "Nodes"):
+        nodes = ptz_service.GetNodes()
+        service_contacted = True
+        for raw_node in _as_list(nodes or [], "PTZNode", "Node", "Nodes"):
             node_token = _pick(raw_node, "token", "Token")
             spaces = _pick(raw_node, "SupportedPTZSpaces", "supportedPTZSpaces")
             if node_token and spaces is not None:
                 node_spaces[str(node_token)] = spaces
-    except Exception:
-        pass
+    except Exception as exc:
+        failures.append(_safe_error(exc, source_url))
+        if failure_kinds is not None:
+            failure_kinds.append(_onvif_failure(exc))
 
     results: list[dict[str, Any]] = []
-    failures: list[str] = []
     for profile in profiles:
         configuration_token = profile.get("ptz_configuration_token")
         node_token = profile.get("ptz_node_token")
@@ -591,8 +604,11 @@ def probe_ptz_profiles(client: Any, profiles: list[dict[str, Any]], source_url: 
         if configuration_token:
             try:
                 options = ptz_service.GetConfigurationOptions(ConfigurationToken=configuration_token)
+                service_contacted = True
                 spaces = _pick(options, "Spaces", "spaces")
             except Exception as exc:
+                if failure_kinds is not None:
+                    failure_kinds.append(_onvif_failure(exc))
                 failures.append(
                     f"{profile.get('token') or profile.get('name')}: {_safe_error(exc, source_url)}"
                 )
@@ -613,6 +629,8 @@ def probe_ptz_profiles(client: Any, profiles: list[dict[str, Any]], source_url: 
     supported_results = [item for item in results if item.get("supported")]
     if supported_results:
         message = f"PTZ is available on {len(supported_results)} media profile(s)"
+    elif not service_contacted:
+        message = "The ONVIF PTZ service did not respond. Check the connection and inspect again."
     elif not results:
         message = "No inspected ONVIF media profile has a PTZ configuration. Check the camera's profiles and permissions."
     elif failures:
@@ -621,7 +639,7 @@ def probe_ptz_profiles(client: Any, profiles: list[dict[str, Any]], source_url: 
         message = "PTZ service was found, but no controllable PTZ spaces were advertised"
     return {
         "supported": bool(supported_results),
-        "service_available": True,
+        "service_available": service_contacted,
         "message": message,
         "pan_tilt": any(bool(item.get("pan_tilt")) for item in supported_results),
         "zoom": any(bool(item.get("zoom")) for item in supported_results),
@@ -745,7 +763,7 @@ def iter_onvif_clients(
         }
 
 
-def probe_onvif(
+def find_onvif_camera(
     source_url: str,
     *,
     mode: str = "auto",
@@ -753,11 +771,13 @@ def probe_onvif(
     username: str | None = None,
     password: str | None = None,
     timeout_sec: float = 4.0,
-) -> dict[str, Any]:
+    profile_token: str | None = None,
+) -> tuple[dict[str, Any], Any, dict[str, Any]]:
     if mode == "disabled":
-        return {"status": "disabled", "supported": None, "message": "ONVIF inspection is disabled"}
+        return {"status": "disabled", "supported": None, "message": "ONVIF inspection is disabled"}, None, {}
 
     trace: dict[str, Any] = {"attempts": 0, "errors": []}
+    fallback = None
     try:
         candidates = iter_onvif_clients(
             source_url,
@@ -769,6 +789,7 @@ def probe_onvif(
             trace=trace,
         )
         for client, connection in candidates:
+            failures = trace.setdefault('failures', [])
             candidate_host = str(connection["host"])
             port = int(connection["port"])
             resolved_address = str(connection["resolved_address"])
@@ -784,9 +805,9 @@ def probe_onvif(
                     trace.setdefault('failures', []).append(_onvif_failure(exc))
                 service_details = _service_details(client)
                 profiles, media_service_name, media_errors, media_contacted = _probe_media_profiles(
-                    client, source_url
+                    client, source_url, failure_kinds=failures
                 )
-                ptz = probe_ptz_profiles(client, profiles, source_url)
+                ptz = probe_ptz_profiles(client, profiles, source_url, failure_kinds=failures)
                 standard_contact = (
                     bool(service_details)
                     or getattr(client, "capabilities", None) is not None
@@ -800,7 +821,10 @@ def probe_onvif(
                     raise IpCameraProbeError(detail)
                 service_names = [str(item["name"]) for item in service_details]
                 media_note = f" using {media_service_name}" if media_service_name else ""
-                return {
+                if not media_contacted:
+                    _, reason = _onvif_diagnostic(trace)
+                    ptz["message"] = reason
+                result = {
                     "status": "connected",
                     "supported": True,
                     "message": f"ONVIF connected via {discovery_method}{media_note}",
@@ -825,6 +849,18 @@ def probe_onvif(
                     "profiles": profiles,
                     "ptz": ptz,
                 }
+                found_profile = not profile_token or any(
+                    item.get("supported") and item.get("profile_token") == profile_token
+                    for item in ptz["profiles"]
+                )
+                if ptz["supported"] and found_profile:
+                    return result, client, connection
+                if fallback is None or (
+                    bool(profiles), bool(ptz["service_available"])
+                ) > (
+                    bool(fallback[0]["profiles"]), bool(fallback[0]["ptz"]["service_available"])
+                ):
+                    fallback = result, client, connection
             except Exception as exc:
                 trace.setdefault("errors", []).append(
                     f"{candidate_host}:{port}: {_safe_error(exc, source_url)}"
@@ -835,10 +871,23 @@ def probe_onvif(
             "status": "unavailable",
             "supported": None,
             "message": "onvif-python is not installed; install requirements.txt",
-        }
+        }, None, {}
     except IpCameraProbeError as exc:
-        return {"status": "error", "supported": False, "message": _safe_error(exc, source_url)}
+        return {"status": "error", "supported": False, "message": _safe_error(exc, source_url)}, None, {}
 
+    if fallback:
+        return fallback
+    status, message = _onvif_diagnostic(trace)
+    return {
+        "status": status,
+        "supported": None,
+        "message": message,
+        "attempts": int(trace.get("attempts") or 0),
+        "errors": list(trace.get("errors") or [])[:4],
+    }, None, {}
+
+
+def _onvif_diagnostic(trace: dict[str, Any]) -> tuple[str, str]:
     failures = trace.get('failures', [])
     status = 'not_connected'
     if 'authentication_failed' in failures:
@@ -854,13 +903,17 @@ def probe_onvif(
         message = "No ONVIF endpoint was discovered. Select Manual address and enter the device service address."
     else:
         message = "The endpoint did not return an ONVIF response. Check the Device Service address and ONVIF permissions."
-    return {
-        "status": status,
-        "supported": None,
-        "message": message,
-        "attempts": int(trace.get("attempts") or 0),
-        "errors": list(trace.get("errors") or [])[:4],
-    }
+    return status, message
+
+
+def probe_onvif(
+    source_url: str, *, mode: str = "auto", address: str | None = None,
+    username: str | None = None, password: str | None = None, timeout_sec: float = 4.0,
+) -> dict[str, Any]:
+    result, _, _ = find_onvif_camera(
+        source_url, mode=mode, address=address, username=username, password=password, timeout_sec=timeout_sec
+    )
+    return result
 
 
 def inspect_ip_camera(

@@ -74,17 +74,17 @@ export function CameraAudioSettings({ api, cameraId, blocked, saved, current }: 
     const [sample_rate, bit_depth] = PRESETS[preset];
     setDraft({ ...draft, preset, sample_rate, bit_depth, codec: "pcm", channels: 1 });
   };
-  return <section className="section">
-    <h4>Camera audio</h4>
+  return <section className="camera-audio" aria-label="Camera audio">
     <fieldset className="settings-fields" disabled={busy || blocked}>
-      <label className="check">
-        <input type="checkbox" checked={draft.enabled} disabled={!original || (!draft.enabled && availability !== "available")}
-          onChange={e => setDraft({ ...draft, enabled: e.target.checked })} />
-        <span>Enable camera audio</span>
-      </label>
-      <p className="field-help" role="status">{busy ? "Checking or saving audio…" : MESSAGES[availability]}</p>
-      <div className="button-row">
+      <div className="camera-audio-toolbar">
+        <label className="check">
+          <input type="checkbox" checked={draft.enabled} disabled={!original || (!draft.enabled && availability !== "available")}
+            onChange={e => setDraft({ ...draft, enabled: e.target.checked })} />
+          <span>Enable camera audio</span>
+        </label>
+        <span className="field-help" role="status">{busy ? "Checking or saving audio…" : MESSAGES[availability]}</span>
         <button type="button" onClick={() => void check()} disabled={dirty}>Check audio input</button>
+        {dirty && <button type="button" onClick={() => void save()}>Save camera audio</button>}
       </div>
       {draft.enabled && <div className="form-grid">
         <label>Audio preset<select value={draft.preset} onChange={e => changePreset(e.target.value as CameraAudioConfig["preset"])}>
@@ -111,7 +111,6 @@ export function CameraAudioSettings({ api, cameraId, blocked, saved, current }: 
         </>}
         {draft.codec === "pcm" && <p className="field-help">Audio uses {draft.sample_rate * draft.bit_depth * draft.channels / 1000} kbps before container overhead.</p>}
       </div>}
-      <button type="button" disabled={!dirty} onClick={() => void save()}>Save camera audio</button>
     </fieldset>
     {error && <p role="alert" className="panel-error">{error}</p>}
   </section>;

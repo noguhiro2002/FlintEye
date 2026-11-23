@@ -13,6 +13,7 @@ from flinteye_app.orchestrator_api import _authorized_ptz_camera, require_ptz_id
 from flinteye_app.orchestrator_auth import AuthIdentity
 from flinteye_app.orchestrator_ip_camera_probe import (
     _probe_media_profiles,
+    find_onvif_camera,
     iter_onvif_clients,
     probe_onvif,
     probe_ptz_profiles,
@@ -192,6 +193,26 @@ def capability_profile(*, pan_tilt=True, zoom=True, pt_mode="continuous", zoom_m
 
 
 class ProbeCapabilityTests(unittest.TestCase):
+    def test_reset_candidate_is_distinguished_and_later_candidate_can_supply_ptz(self):
+        source = 'rtsp://127.0.0.1:8995/qa-input-1'
+        reset_client = SimpleNamespace(devicemgmt=lambda: SimpleNamespace(
+            GetDeviceInformation=lambda: (_ for _ in ()).throw(ConnectionResetError('Connection reset by peer'))))
+        reset = (reset_client, dict(host='127.0.0.1', port=8994, use_https=False,
+                                   resolved_address='http://127.0.0.1:8994/device', discovery_method='test'))
+        with patch('flinteye_app.orchestrator_ip_camera_probe.iter_onvif_clients', return_value=[reset]):
+            status, _, _ = find_onvif_camera(source)
+        self.assertEqual(status['status'], 'unreachable', status)
+        with onvif_fixture('rtsp://127.0.0.1:8995') as url:
+            real_candidates = list(iter_onvif_clients(source, mode='manual', address=url+'/full/device',
+                                                     username=USERNAME, password=PASSWORD))
+            with patch('flinteye_app.orchestrator_ip_camera_probe.iter_onvif_clients',
+                       return_value=[reset, *real_candidates]):
+                status, client, _ = find_onvif_camera(source, profile_token='qa-main')
+        self.assertIsNotNone(client)
+        self.assertEqual(status['status'], 'connected', status)
+        self.assertTrue(status['ptz']['supported'], status)
+        self.assertEqual(status['resolved_address'], url+'/full/device')
+
     def test_media1_and_media2_are_both_inspected(self):
         media1 = FakeMedia("Media")
         media2 = FakeMedia("Media2")

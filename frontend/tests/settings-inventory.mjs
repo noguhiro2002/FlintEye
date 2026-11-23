@@ -10,6 +10,7 @@ const files = {
   'components/NetworkAccess.tsx': 'runtime-network', 'components/CameraAudioSettings.tsx': 'camera-audio',
   'components/SettingsHelp.tsx': 'settings-help',
   'components/EventRecordings.tsx': 'event-recording',
+  'components/ApiAccess.tsx': 'api-access', 'components/MultiviewLayoutEditor.tsx': 'multiview-layout',
 };
 const controls = new Map();
 const normalize = value => value.replace(/\s+/g, ' ').trim();

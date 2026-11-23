@@ -11,6 +11,25 @@
 > 単体 MediaMTX の保持設定およびサービス設定は、FlintEye が管理するストレージには適用されません。
 > リスナーはループバックに維持してください。LAN アクセスには、[配布ガイド](../DISTRIBUTION.ja.md)で説明されている認証付き HTTPS プロキシを使用します。
 
+<a id="rest-api-keys"></a>
+## REST API キー
+
+ローカル認証の管理者でサインインし、**Settings → Runtime & access → API access** を開きます。連携先の名前と権限を指定し、キーを発行します。発行時に表示されるキーをコピーして、連携先で保管してください。Settings で発行済みの名前、権限、失効状態を確認できます。キーをなくした場合は失効させ、再発行します。
+
+どちらの権限でも、`/api/v1` 以下の次のパスに GET でアクセスできます。
+
+- `/status/monitoring`, `/viewer/cameras`, `/multiview/views`, `/multiview/status`, `/recordings/streams`, `/recordings`
+
+**Read and control monitoring** では、`/control/start`, `/control/stop`, `/control/restart` に POST して監視を操作できます。設備イベントの受信には[イベント録画の専用トークン](../USER_GUIDE.ja.md#event-recordings)を使います。カメラ設定、PTZ、キー管理、録画ファイルへのアクセスは、それぞれの操作に必要なユーザーでサインインしてください。
+
+```bash
+curl --fail-with-body \
+  -H "Authorization: Bearer $FLINTEYE_API_KEY" \
+  http://127.0.0.1:18080/api/v1/status/monitoring
+```
+
+別の端末から接続するときは、サーバーの稼働中の HTTPS アドレスを使い、接続元で CA を信頼します。無効・失効済みのキーは HTTP 401、キーの権限で許可されていない操作は HTTP 403 が返ります。[LAN 接続と証明書の手順](../LAN_ACCESS.ja.md)
+
 <a id="equipment-recording-events"></a>
 ## 設備の異常を受け付けて直前の映像を保存する
 

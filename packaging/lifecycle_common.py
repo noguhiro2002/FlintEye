@@ -148,8 +148,8 @@ def stage_fixture_tools(directory: Path, media: str, ffmpeg: str, *, prefix=None
 
 @contextmanager
 def media_fixture(directory: Path, media: str, ffmpeg: str, *, prefix: list[str] | None = None,
-                  app_directory: str | None = None, excluded_ports: Collection[int] = ()):
-    """Two independent RTSP publishers; they are not owned by the application."""
+                  app_directory: str | None = None, excluded_ports: Collection[int] = (), third_camera: bool = False):
+    """Independent RTSP publishers outside the application process tree."""
     prefix = prefix or []
     app_directory = app_directory or str(directory)
     media, ffmpeg = stage_fixture_tools(directory, media, ffmpeg, prefix=prefix, app_directory=app_directory)
@@ -173,9 +173,10 @@ def media_fixture(directory: Path, media: str, ffmpeg: str, *, prefix: list[str]
                 if probe.connect_ex(('127.0.0.1', port)) == 0: break
             time.sleep(.1)
         else: raise TimeoutError('Synthetic RTSP server did not start')
-        # Pre-encode both signals so the independent fixture publishers can
+        # Pre-encode signals so the independent fixture publishers can
         # keep up on runners that are also decoding, recording and compositing.
-        for i, color in enumerate(('red', 'blue'), start=1):
+        colors = ('red', 'blue', 'lime') if third_camera else ('red', 'blue')
+        for i, color in enumerate(colors, start=1):
             clip = str(Path(app_directory)/f'qa-input-{i}.mp4')
             pattern = f'testsrc2=size=320x180:rate=10,drawbox=x=0:y=ih/3:w=iw:h=ih/3:color={color}:t=fill'
             with (directory/f'fixture-encode-{i}.log').open('w', encoding='utf-8') as log:
@@ -200,7 +201,8 @@ def media_fixture(directory: Path, media: str, ffmpeg: str, *, prefix: list[str]
 
 def browser_check(url: str, profile: Path, output: Path, release: str, commit: str,
                   fixture_url: str, *, retained: bool = False, synthetic_uvc: bool = False,
-                  onvif_url: str | None = None, archive_folder: str | None = None) -> None:
+                  onvif_url: str | None = None, archive_folder: str | None = None,
+                  preview_9: bool = False) -> None:
     output.mkdir(parents=True, exist_ok=True)
     command = ['node', str(ROOT/'frontend/tests/installed.mjs'), '--url', url, '--profile', str(profile),
                '--output', str(output), '--release', release, '--fixture-url', fixture_url]
@@ -209,6 +211,7 @@ def browser_check(url: str, profile: Path, output: Path, release: str, commit: s
     if synthetic_uvc: command += ['--synthetic-uvc']
     if onvif_url: command += ['--onvif-url', onvif_url]
     if archive_folder: command += ['--archive-folder', archive_folder]
+    if preview_9: command += ['--preview-9']
     log_path = output/'browser.log'
     with log_path.open('w', encoding='utf-8') as log:
         completed = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, timeout=420)
@@ -274,9 +277,15 @@ def verify_packet_timestamps(packets, tracked_streams, relative: Path) -> None:
 
 
 def decode_recordings(profile: Path, ffmpeg: str, output: Path, *, prefix: list[str] | None = None,
-                      app_profile: str | None = None) -> None:
+                      app_profile: str | None = None, multiview_samples: dict[str, str] | None = None) -> None:
     streams = {'qa-camera-1': ('red',), 'qa-camera-2': ('blue',), 'multiview_1': ('red', 'blue')}
     progressing = set()
+    verified_layouts = set()
+    layout_markers = {
+        'automatic': (((8, 8), (24, 8)), ('red', 'blue')),
+        'arranged': (((8, 4), (24, 4), (8, 12), (24, 12)), ('blue', 'black', 'green', 'red')),
+    }
+    sample_layout = {'recordings/' + name: layout for layout, name in (multiview_samples or {}).items()}
     checked, audio_enabled = [], []
     verified_tone = False
     ffprobe = str(Path(ffmpeg).with_name('ffprobe.exe' if ffmpeg.endswith('.exe') else 'ffprobe'))
@@ -340,23 +349,48 @@ def decode_recordings(profile: Path, ffmpeg: str, output: Path, *, prefix: list[
                 pixels = result.stdout
                 if not pixels or len(pixels) % size:
                     raise AssertionError(f'No complete video frames: {relative}')
+                layout = sample_layout.get(relative.as_posix())
+                if layout:
+                    points, expected = layout_markers[layout]
+                elif stream == 'multiview_1':
+                    # Changing the layout during these runs creates transitional
+                    # segments. All are decoded; the selected samples prove each layout.
+                    points = [] if multiview_samples is not None else [(8, 8), (24, 8)]
+                    expected = streams[stream]
+                else:
+                    points, expected = [(16, 8)], streams[stream]
                 first_marked = None
                 for offset in range(0, len(pixels), size):
+                    if not points:
+                        break
                     frame = pixels[offset:offset+size]
                     markers = []
-                    for x in ([8, 24] if stream == 'multiview_1' else [16]):
-                        i = (8*32+x)*3
+                    for x, y in points:
+                        i = (y*32+x)*3
                         r, g, b = frame[i:i+3]
-                        markers.append('red' if r > max(g,b)+80 else 'blue' if b > max(r,g)+80 else None)
-                    if tuple(markers) != streams[stream]:
+                        marker = None
+                        if r > max(g, b) + 80:
+                            marker = 'red'
+                        elif g > max(r, b) + 80:
+                            marker = 'green'
+                        elif b > max(r, g) + 80:
+                            marker = 'blue'
+                        elif layout and max(r, g, b) < 25:
+                            marker = 'black'
+                        markers.append(marker)
+                    if tuple(markers) != expected:
                         # The compositor draws a placeholder until each camera connects.
-                        if stream == 'multiview_1' and all(m is None or m == want for m, want in zip(markers, streams[stream])):
+                        if not layout and stream == 'multiview_1' and all(
+                            m is None or m == want for m, want in zip(markers, expected)
+                        ):
                             continue
                         raise AssertionError(f'Wrong camera marker in {relative}: {markers}')
                     if first_marked is None:
                         first_marked = frame
                     elif frame != first_marked:
                         progressing.add(stream)
+                        if layout:
+                            verified_layouts.add(layout)
                 log.write(f'{relative.as_posix()}: {len(pixels)//size} video frames\n')
                 checked.append(relative.as_posix())
     except (AssertionError, OSError, ValueError, subprocess.SubprocessError) as error:
@@ -375,5 +409,9 @@ def decode_recordings(profile: Path, ffmpeg: str, output: Path, *, prefix: list[
         raise AssertionError(f'Missing moving footage with expected camera markers: {sorted(missing)}')
     if not audio_enabled or not verified_tone:
         raise AssertionError('No recording with the saved Standard 16-bit/16-kHz/mono audio')
+    if multiview_samples is not None:
+        if verified_layouts != layout_markers.keys():
+            raise AssertionError('Recorded Multiview samples must contain both moving layouts')
+        (output/'recording-layouts.json').write_text(json.dumps(multiview_samples, indent=2)+'\n')
     (output/'recording-audio.json').write_text(json.dumps({'enabled_camera': audio_enabled, 'disabled_camera': []}, indent=2)+'\n')
     (output/'decoded-recordings.json').write_text(json.dumps(checked, indent=2)+'\n')

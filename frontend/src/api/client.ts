@@ -1,4 +1,4 @@
-import type { CameraAudioConfig } from "../types";
+import type { ApiKeyItem, CameraAudioConfig } from "../types";
 import type {
   MonitoringStatusResponse,
   AuthMeResponse,
@@ -123,6 +123,17 @@ export class ApiClient {
   desktopCapabilities(): Promise<{ folder_picker: boolean; startup_settings?: boolean }> { return this.request('/api/v1/desktop'); }
   getMonitoringStatus(): Promise<MonitoringStatusResponse> { return this.request('/api/v1/status/monitoring'); }
   useBundledMedia(): Promise<{ok: boolean}> { return this.request('/api/v1/media/use-bundled', {method: 'POST'}); }
+  getApiKeys(): Promise<{items: ApiKeyItem[]}> {
+    return this.request("/api/v1/auth/api-keys");
+  }
+  createApiKey(name: string, scope: ApiKeyItem["scope"]): Promise<ApiKeyItem & {token: string}> {
+    return this.request("/api/v1/auth/api-keys", {
+      method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({name, scope}),
+    });
+  }
+  revokeApiKey(id: string): Promise<{ok: boolean}> {
+    return this.request("/api/v1/auth/api-keys/" + encodeURIComponent(id), {method: "DELETE"});
+  }
   getNetwork(): Promise<{
     saved: {enabled: boolean; address: string; allowed_subnets: string[]; rtsp_enabled?: boolean};
     rtsp_status?: string; restart_required: boolean; local_url: string; lan_url: string | null;

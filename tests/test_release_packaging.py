@@ -94,7 +94,8 @@ class ReleaseTests(unittest.TestCase):
     def write_lifecycle(self, value):
         from lifecycle_report import (Report, STAGES, required_matrix, BROWSER_CHECKS, RETAINED_CHECKS,
                                       NEW_BROWSER_CHECKS, NEW_RETAINED_CHECKS, requires_preview_7_checks,
-                                      EVENT_BROWSER_CHECKS, EVENT_RETAINED_CHECKS, requires_preview_8_checks)
+                                      EVENT_BROWSER_CHECKS, EVENT_RETAINED_CHECKS, requires_preview_8_checks,
+                                      PREVIEW_9_BROWSER_CHECKS, PREVIEW_9_RETAINED_CHECKS, requires_preview_9_checks)
         if self.lifecycle.exists(): shutil.rmtree(self.lifecycle)
         for method, runner, arch in required_matrix():
             report = Report(self.lifecycle/f'{method}-{runner}', method=method, release=value, commit=self.commit)
@@ -108,6 +109,8 @@ class ReleaseTests(unittest.TestCase):
                     checks = checks | (NEW_BROWSER_CHECKS if name == 'browser' else NEW_RETAINED_CHECKS)
                 if requires_preview_8_checks(value):
                     checks = checks | (EVENT_BROWSER_CHECKS if name == 'browser' else EVENT_RETAINED_CHECKS)
+                if requires_preview_9_checks(value):
+                    checks = checks | (PREVIEW_9_BROWSER_CHECKS if name == 'browser' else PREVIEW_9_RETAINED_CHECKS)
                 if name == 'browser' and method == 'source' and runner.startswith('ubuntu'):
                     checks = checks | {'synthetic-USB-and-IP-live-multiview-and-removal',
                                        'desktop-browser-one-use-setup-handoff'}
@@ -119,8 +122,13 @@ class ReleaseTests(unittest.TestCase):
                 (fixture/'onvif-operations.json').write_text(json.dumps([
                     {'endpoint': 'ptz', 'operation': operation, 'profile': 'qa-main'}
                     for operation in ('ContinuousMove', 'Stop')]))
-            (report.output/'decoded-recordings.json').write_text(json.dumps(
-                [f'recordings/{stream}/test.mp4' for stream in ('qa-camera-1', 'qa-camera-2', 'multiview_1')]))
+            decoded = [f'recordings/{stream}/test.mp4' for stream in ('qa-camera-1', 'qa-camera-2', 'multiview_1')]
+            if requires_preview_9_checks(value):
+                layouts = {'automatic': 'multiview_1/test.mp4', 'arranged': 'multiview_1/arranged.mp4'}
+                (report.output/'recording-layouts.json').write_text(json.dumps(layouts))
+                (report.output/'browser/multiview-layout-samples.json').write_text(json.dumps(layouts))
+                decoded.append('recordings/'+layouts['arranged'])
+            (report.output/'decoded-recordings.json').write_text(json.dumps(decoded))
             selection = {'relativePath': 'qa-camera-1/test.mp4', 'savedName': 'recording-download.mp4'}
             (report.output/'browser/download-selection.json').write_text(json.dumps(selection))
             (report.output/'browser/recording-download.mp4').write_bytes(b'qa video')
@@ -525,11 +533,16 @@ class ShellInstallerTests(unittest.TestCase):
         self.command('uname', 'if [ "${1:-}" = -m ]; then echo x86_64; else echo Linux; fi')
         self.command('pgrep', 'exit 1')
         self.command('sudo', 'printf "%s\\n" "$*" > "$TEST_MARKER"')
-        self.command('curl', '''out=''
+        self.command('curl', '''out='' head=0
 while [ "$#" -gt 0 ]; do
-  if [ "$1" = --output ]; then out=$2; shift 2; else url=$1; shift; fi
+  case "$1" in
+    --output) out=$2; shift 2 ;;
+    --head) head=1; shift ;;
+    *) url=$1; shift ;;
+  esac
 done
 printf '%s\\n' "$url" >> "$TEST_URLS"
+if [ "$head" = 1 ]; then printf 'HTTP/1.1 200 OK\\r\\nContent-Length: 17\\r\\n\\r\\n'; exit 0; fi
 cp "$TEST_PAYLOAD/${url##*/}" "$out"''')
 
     def command(self, name, body):
@@ -574,7 +587,9 @@ cp "$TEST_PAYLOAD/${url##*/}" "$out"''')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('apt-get install', (self.root / 'installed').read_text())
         urls = (self.root / 'urls').read_text().splitlines()
-        self.assertEqual(len(urls), 2)
+        self.assertEqual(len(urls), 3)
+        self.assertTrue(urls[0].endswith('/SHA256SUMS'))
+        self.assertEqual(urls[1], urls[2])
         self.assertTrue(all('/releases/download/v1.2.3/' in url for url in urls))
 
     def test_running_app_prevents_upgrade(self):

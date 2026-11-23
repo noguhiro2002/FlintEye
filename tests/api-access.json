@@ -1,6 +1,8 @@
 {
   "admin": {
     "/api/v1/accounts/viewer": "POST",
+    "/api/v1/auth/api-keys": "GET POST",
+    "/api/v1/auth/api-keys/{key_id}": "DELETE",
     "/api/v1/cameras": "GET POST",
     "/api/v1/cameras/{camera_id}": "DELETE GET PATCH",
     "/api/v1/cameras/{camera_id}/audio": "GET PUT",

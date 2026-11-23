@@ -1,9 +1,11 @@
 """Isolated TLS/ownership/state tests; no real profiles, firewall or cameras."""
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack
 import io
 import json
 import os
 from pathlib import Path
+import plistlib
 import re
 import tempfile
 import time
@@ -59,6 +61,16 @@ class NetworkTests(unittest.TestCase):
                 with self.assertRaises(urllib.error.URLError) as error:
                     urllib.request.urlopen(f'https://127.0.0.1:{tls_port}/health', timeout=3)
                 self.assertIsInstance(error.exception.reason, ssl.SSLCertVerificationError)
+                group.certificate_change_pending = True
+                active_fingerprint = group.certificate['fingerprint']
+                new = ensure_certificates(root, '127.0.0.1', rotate_ca=True)
+                self.assertNotEqual(active_fingerprint, new['fingerprint'])
+                new_trust = ssl.create_default_context(cafile=str(root/'tls/ca.crt'))
+                with self.assertRaises(urllib.error.URLError) as error:
+                    urllib.request.urlopen(f'https://127.0.0.1:{tls_port}/health', context=new_trust, timeout=3)
+                self.assertIsInstance(error.exception.reason, ssl.SSLCertVerificationError)
+                self.assertEqual(urllib.request.urlopen(f'https://127.0.0.1:{tls_port}/health', context=trust, timeout=3).status, 200)
+                self.assertEqual(group.certificate['fingerprint'], active_fingerprint)
             finally:
                 group.should_exit = True; thread.join(timeout=12)
             self.assertFalse(thread.is_alive())
@@ -99,6 +111,53 @@ class NetworkTests(unittest.TestCase):
             self.assertIn('192.168.1.10:18080 is already in use', listener_bind_error('192.168.1.10', 18080, OSError(code, 'occupied')))
         for code in (10049, errno.EADDRNOTAVAIL):
             self.assertIn('address 192.168.1.10 is unavailable', listener_bind_error('192.168.1.10', 18080, OSError(code, 'unassigned')))
+
+    def test_iphone_profile_matches_active_listener_and_rotation_requires_restart(self):
+        import hashlib
+        from types import SimpleNamespace
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from flinteye_app.orchestrator_api import AppContext, require_admin
+        from flinteye_app.flinteye_routes import install_routes
+
+        with tempfile.TemporaryDirectory() as directory, patch('flinteye_app.orchestrator_logging.LogManager.configure'), ExitStack() as resources:
+            root = Path(directory)
+            runtime = initialize(root)
+            context = AppContext(env_file='', runtime_file=str(runtime), no_env=True)
+            resources.callback(context.shutdown)
+            address, port = '192.168.91.10', 28080
+            context.store.patch_runtime({'network': {'enabled': True, 'address': address,
+                                                      'allowed_subnets': ['192.168.91.0/24']}})
+            active = ensure_certificates(root, address)
+            listener = SimpleNamespace(lan_started=True, lan_error='', certificate=active, certificate_change_pending=False)
+            context.listener_group = listener
+            context.listener = {'url': f'http://127.0.0.1:{port}', 'port': port, 'lan_url': f'https://{address}:{port}'}
+            app = FastAPI()
+            app.dependency_overrides[require_admin] = lambda: None
+            install_routes(app, context, setup_token='', desktop=False)
+            with TestClient(app, client=('127.0.0.1', 123), base_url='http://127.0.0.1') as local:
+                url = '/api/v1/network'
+                self.assertEqual(local.get(url).json()['fingerprint'], active['fingerprint'])
+                exported = local.post(url+'/guide')
+                self.assertEqual(exported.status_code, 200, exported.text)
+                guide = Path(exported.json()['path'])
+                profile = plistlib.loads((guide/'FlintEye.mobileconfig').read_bytes())
+                certificate = profile['PayloadContent'][0]['PayloadContent']
+                self.assertEqual(hashlib.sha256(certificate).hexdigest(), active['fingerprint'])
+                self.assertTrue(any(f'https://{address}:{port}' in file.read_text()
+                                    for file in guide.glob('*.txt')))
+                self.assertEqual(local.post(url+'/renew-trust', json={'confirm': True}).status_code, 200)
+                kept = local.get(url).json()
+                self.assertTrue(kept['restart_required'])
+                self.assertEqual(kept['fingerprint'], active['fingerprint'])
+                self.assertEqual(local.post(url+'/guide').status_code, 409)
+                listener.certificate = ensure_certificates(root, address)
+                listener.certificate_change_pending = False
+                restarted = local.post(url+'/guide')
+                self.assertEqual(restarted.status_code, 200, restarted.text)
+                profile = plistlib.loads((Path(restarted.json()['path'])/'FlintEye.mobileconfig').read_bytes())
+                self.assertNotEqual(hashlib.sha256(profile['PayloadContent'][0]['PayloadContent']).hexdigest(),
+                                    active['fingerprint'])
 
     def test_desktop_browser_handoff_can_only_finish_setup_once_on_the_loopback_origin(self):
         from fastapi import FastAPI

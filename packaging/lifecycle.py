@@ -22,7 +22,8 @@ import venv
 
 from lifecycle_common import (ROOT, application_ports, browser_check, decode_recordings, media_fixture,
                               request_quit, seed_runtime, stop_process, wait_closed, wait_http)
-from lifecycle_report import LINUX_USER_METHODS, Report, requires_preview_7_checks, requires_preview_8_checks
+from lifecycle_report import (LINUX_USER_METHODS, Report, requires_preview_7_checks,
+                              requires_preview_8_checks, requires_preview_9_checks)
 from qa_onvif import onvif_fixture
 from release_lib import digest, release_identity, version
 
@@ -387,17 +388,19 @@ def exercise(adapter: Adapter, report: Report, args):
         fixture_dir = adapter.directory/'fixture'; fixture_dir.mkdir()
         adapter.sync_profile()
         reserved = application_ports(adapter.profile)
+        preview_9 = requires_preview_9_checks(args.release)
         with ExitStack() as resources:
             fixture = resources.enter_context(media_fixture(fixture_dir, adapter.media, adapter.ffmpeg,
                                               prefix=adapter.fixture_prefix, app_directory=adapter.fixture_app_directory,
-                                              excluded_ports=reserved))
+                                              excluded_ports=reserved, third_camera=preview_9))
             onvif = (resources.enter_context(onvif_fixture(fixture, fixture_dir/'onvif-operations.json',
                                                           excluded_ports=reserved))
                      if requires_preview_7_checks(args.release) else None)
             archive_folder = (str(Path(adapter.app_profile)/'event-recordings')
                               if requires_preview_8_checks(args.release) else None)
             browser_check(url, adapter.profile, report.output/'browser', args.release, args.commit, fixture,
-                          synthetic_uvc=args.synthetic_uvc, onvif_url=onvif, archive_folder=archive_folder)
+                          synthetic_uvc=args.synthetic_uvc, onvif_url=onvif, archive_folder=archive_folder,
+                          preview_9=preview_9)
             report.stage(phase, 'passed', 'browser/browser.json; real API; browser video/trace/screenshots')
             phase = 'quit'
             adapter.quit()
@@ -405,8 +408,11 @@ def exercise(adapter: Adapter, report: Report, args):
             completion = json.loads((adapter.profile/'last-monitoring-stop.json').read_text(encoding='utf-8'))
             if completion.get('ok') is not True or completion.get('forced') or completion.get('pending_segments') != 0:
                 raise AssertionError('Normal Quit did not finish active recordings cleanly')
+            multiview_samples = (json.loads((report.output/'browser/multiview-layout-samples.json').read_text(encoding='utf-8'))
+                                 if preview_9 else None)
             decode_recordings(adapter.profile, adapter.ffmpeg, report.output,
-                              prefix=adapter.fixture_prefix, app_profile=adapter.app_profile)
+                              prefix=adapter.fixture_prefix, app_profile=adapter.app_profile,
+                              multiview_samples=multiview_samples)
             report.stage(phase, 'passed', 'Normal quit closed the API; recording files fully decoded')
             retained = {str(path.relative_to(adapter.profile)): digest(path) for path in
                         [adapter.profile/'runtime.json', *(adapter.profile/'recordings').rglob('*'),
@@ -438,7 +444,8 @@ def exercise(adapter: Adapter, report: Report, args):
                 if not (adapter.profile/name).is_file() or digest(adapter.profile/name) != expected:
                     raise AssertionError('Reinstall changed a finalized recording: '+name)
             browser_check(url, adapter.profile, report.output/'retained', args.release, args.commit, fixture,
-                          retained=True, synthetic_uvc=args.synthetic_uvc, onvif_url=onvif, archive_folder=archive_folder)
+                          retained=True, synthetic_uvc=args.synthetic_uvc, onvif_url=onvif, archive_folder=archive_folder,
+                          preview_9=preview_9)
             adapter.quit(); adapter.uninstall()
             report.stage(phase, 'passed', 'retained/browser.json; existing credentials, config and recordings reused')
     except BaseException as exc:

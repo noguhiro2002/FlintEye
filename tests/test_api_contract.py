@@ -230,12 +230,47 @@ class ApiContractTests(unittest.TestCase):
                     call = upstream.request.await_args
                     self.assertEqual(call.args, (method, expected_url))
                     self.assertEqual(call.kwargs['content'], body)
-                    self.assertEqual(call.kwargs['params']['fixture'], '1')
+                    self.assertEqual(dict(call.kwargs['params'])['fixture'], '1')
                     self.assertEqual(call.kwargs['headers']['if-match'], 'fixture-etag')
                     self.assertNotIn('cookie', call.kwargs['headers'])
                     self.assertNotIn('authorization', call.kwargs['headers'])
             upstream.request.side_effect = httpx.ConnectError('fixture media service offline')
             self.assertEqual(client.get('/media/test/whep').status_code, 502)
+
+    def test_whep_audio_falls_back_to_video_and_pins_the_session(self):
+        from flinteye_app.camera_audio import live_path
+
+        context = self.app.state.context
+        context.store.patch_runtime({'cameras': [{'id': 'cam', 'path': 'cam', 'type': 'ip',
+            'ip': {'source_url': 'rtsp://127.0.0.1:8555/qa'}, 'audio': {'enabled': True}}]})
+        viewer = self.clients['viewer']
+        relay = live_path('cam')
+        session = f'/{relay}/whep/qa-session'
+        def reply(status, path, location=None):
+            return httpx.Response(status, request=httpx.Request('POST', 'http://127.0.0.1:8889'+path),
+                                  headers={'Location': location} if location else {})
+        with patch.object(context.supervisor, 'live_audio_ready', return_value=False) as ready, \
+             patch('flinteye_app.flinteye_routes.httpx.AsyncClient') as client:
+            forward = client.return_value.__aenter__.return_value.request
+            forward.return_value = reply(201, '/cam/whep', '/cam/whep/primary')
+            self.assertEqual(viewer.post('/media/cam/whep').status_code, 201)
+            self.assertTrue(forward.call_args.args[1].endswith('/cam/whep'))
+            ready.return_value = True
+            forward.side_effect = [reply(404, f'/{relay}/whep'), reply(201, '/cam/whep', '/cam/whep/primary')]
+            self.assertEqual(viewer.post('/media/cam/whep').headers['location'], '/media/cam/whep/primary')
+            self.assertTrue(forward.call_args_list[-2].args[1].endswith(f'/{relay}/whep'))
+            self.assertTrue(forward.call_args.args[1].endswith('/cam/whep'))
+
+            forward.side_effect = None
+            forward.return_value = reply(201, f'/{relay}/whep', session+'?fixture=1')
+            location = viewer.post('/media/cam/whep').headers['location']
+            self.assertEqual(location, '/media/cam/whep/qa-session?fixture=1&flinteye_audio=1')
+            ready.return_value = False
+            forward.return_value = reply(204, session)
+            self.assertEqual(viewer.delete(location).status_code, 204)
+            self.assertTrue(forward.call_args.args[1].endswith(session))
+            self.assertEqual(dict(forward.call_args.kwargs['params']), {'fixture': '1'})
+            self.assertEqual(viewer.post(f'/media/{relay}/whep').status_code, 404)
 
     def test_missing_camera_is_reported_to_authenticated_clients(self):
         admin = self.clients['admin']
@@ -295,6 +330,79 @@ class ApiContractTests(unittest.TestCase):
             self.assertEqual(admin.patch('/api/v1/monitoring/preferences', json={'resume_on_startup':value}).status_code, 422)
         self.assertEqual(before.read_bytes(), old)
         self.assertTrue(admin.patch('/api/v1/monitoring/preferences', json={'resume_on_startup':True}).json()['resume_on_startup'])
+
+    def test_rest_api_keys_are_scoped_persistent_and_revocable(self):
+        from flinteye_app.api_keys import ApiKeyStore, CONTROL_ROUTES, READ_ROUTES
+
+        admin, external = self.clients['admin'], self.clients['anonymous']
+        endpoint = '/api/v1/auth/api-keys'
+        self.assertEqual(admin.get(endpoint).json(), {'items': []})
+        self.assertEqual(admin.post(endpoint, json={'name': 'test', 'scope': 'admin'}).status_code, 422)
+        issued = {}
+        for scope in ('read', 'monitor'):
+            response = admin.post(endpoint, json={'name': 'Synthetic '+scope, 'scope': scope})
+            self.assertEqual(response.status_code, 201, response.text)
+            self.assertEqual(response.headers['cache-control'], 'no-store')
+            issued[scope] = response.json()
+        settings = admin.get(endpoint).json()['items']
+        self.assertEqual({row['scope'] for row in settings}, {'read', 'monitor'})
+        self.assertTrue(all('token' not in row and 'digest' not in row for row in settings))
+
+        store = ApiKeyStore(self.runtime.parent)
+        self.assertEqual(store.scope(issued['monitor']['token']), 'monitor')
+        context = self.app.state.context
+        self.assertNotIn(issued['monitor']['token'].encode(), store.path.read_bytes())
+        self.assertNotIn(issued['read']['token'].encode(), self.runtime.read_bytes())
+        bearer = lambda scope: {'Authorization': 'Bearer '+issued[scope]['token']}
+        for scope in ('read', 'monitor'):
+            for route in READ_ROUTES:
+                actual = external.get(route, headers=bearer(scope))
+                self.assertEqual(actual.status_code, 200, actual.text)
+            for method, route in [('GET', endpoint), ('GET', '/api/v1/config/runtime'),
+                                  ('POST', '/api/v1/cameras/qa-camera/ptz/move'),
+                                  ('POST', '/api/v1/config/apply')]:
+                self.assertEqual(external.request(method, route, headers=bearer(scope)).status_code, 403)
+        for route in CONTROL_ROUTES:
+            self.assertEqual(external.post(route, headers=bearer('read')).status_code, 403)
+        with patch.object(context.supervisor, 'mediamtx_start', return_value={'ok': True}), \
+             patch.object(context.supervisor, '_start_process'):
+            for action, running in [('start', True), ('restart', True), ('stop', False)]:
+                result = external.post('/api/v1/control/'+action, headers=bearer('monitor'))
+                self.assertEqual(result.status_code, 200, result.text)
+                self.assertIs(external.get('/api/v1/status/monitoring', headers=bearer('monitor')).json()['desired_running'], running)
+        revoke = endpoint+'/'+issued['monitor']['id']
+        for _ in range(2):
+            self.assertEqual(admin.delete(revoke).status_code, 200)
+        self.assertEqual(admin.delete(endpoint+'/qa-unknown').status_code, 404)
+        self.assertEqual(external.get('/api/v1/status/monitoring', headers=bearer('monitor')).status_code, 401)
+        self.assertEqual(external.get('/api/v1/status/monitoring', headers=bearer('read')).status_code, 200)
+        self.assertIsNotNone(next(row for row in admin.get(endpoint).json()['items'] if row['scope'] == 'monitor')['revoked_at'])
+
+    def test_multiview_positions_follow_camera_rename_and_removal(self):
+        admin, viewer = self.clients['admin'], self.clients['viewer']
+        context = self.app.state.context
+        config_path = '/api/v1/config/runtime'
+        cameras = [{'id': f'cam{i}', 'path': f'cam{i}', 'type': 'ip',
+                    'ip': {'source_url': f'rtsp://127.0.0.1:8997/camera{i}', 'onvif_mode': 'disabled'}}
+                   for i in (1, 2, 3)]
+        slots = [['cam2', None, 'cam1', 'cam3']]
+        cfg = {'enabled': True, 'tile_count': 4, 'source_paths': ['cam1', 'cam2', 'cam3'],
+               'layout': {'source_slots': slots}}
+        with patch.object(context.supervisor, '_start_process'):
+            initial = admin.patch(config_path, json={'cameras': cameras, 'multiview': cfg})
+            self.assertEqual(initial.status_code, 200, initial.text)
+            self.assertEqual(admin.patch(config_path, json={'multiview': {'layout': {
+                'source_slots': [['cam2', None, 'cam1', 'CAM2']]}}}).status_code, 422)
+            renamed = admin.patch('/api/v1/cameras/cam2', json={'path': 'renamed'})
+            self.assertEqual(renamed.status_code, 200, renamed.text)
+            self.assertEqual(admin.delete('/api/v1/cameras/cam3').status_code, 200)
+            prefs = admin.get(config_path).json()['multiview']
+            self.assertEqual(prefs['layout']['source_slots'], [['renamed', None, 'cam1', None]])
+            self.assertEqual(prefs['source_paths'], ['cam1', 'renamed'])
+            for client in (admin, viewer):
+                view = client.get('/api/v1/multiview/views').json()['items'][0]
+                self.assertEqual(view['sources'], ['renamed', 'cam1'])
+                self.assertEqual([row['slot'] for row in view['source_items']], [1, 3])
 
     def test_lan_settings_export_and_rotation_only_change_synthetic_profile(self):
         admin = self.clients['admin']

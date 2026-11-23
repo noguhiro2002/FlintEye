@@ -32,6 +32,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import ValidationError
 
+from flinteye_app.api_keys import ApiKeyStore, CONTROL_ROUTES, NewApiKey, PREFIX as API_KEY_PREFIX, READ_ROUTES
+from flinteye_app.multiview_layout import is_public_source, public_source, source_pages, unique_sources
 from flinteye_app.orchestrator_auth import (
     AuthIdentity,
     authenticate_local_user,
@@ -102,6 +104,7 @@ class AppContext:
         self._closing = threading.Event()
         from flinteye_app.monitoring import MonitoringController
         self.monitoring = MonitoringController(self)
+        self.api_keys = ApiKeyStore(Path(self.store.runtime_file).resolve().parent)
         self.recording_archive = RecordingArchive(
             Path(self.store.runtime_file).resolve().parent, self.workspace_dir, self.store.get_effective,
             lambda: self.monitoring.desired or self.monitoring.phase in {'stopping', 'finalizing'})
@@ -306,6 +309,24 @@ def _require_legacy_identity(
     _validate_bearer_token(credentials=credentials, accepted_tokens=[admin_token, viewer_token])
 
 
+def _authorize_api_key(request: Request, context: AppContext, credentials: HTTPAuthorizationCredentials | None) -> bool:
+    if not credentials or not credentials.credentials.startswith(API_KEY_PREFIX):
+        return False
+    auth = _auth_config(context)
+    try:
+        scope = context.api_keys.scope(credentials.credentials) if local_auth_is_configured(auth) else None
+    except (OSError, sqlite3.Error) as error:
+        raise HTTPException(503, "API key store is temporarily unavailable") from error
+    if scope is None:
+        raise HTTPException(401, "Invalid or revoked API key")
+    route = getattr(request.scope.get("route"), "path", None)
+    if request.method == "GET" and route in READ_ROUTES:
+        return True
+    if request.method == "POST" and scope == "monitor" and route in CONTROL_ROUTES:
+        return True
+    raise HTTPException(403, "This API key does not grant access to the operation")
+
+
 def require_admin(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(http_bearer),
@@ -313,7 +334,8 @@ def require_admin(
     context = get_context(request)
     provider = _auth_config(context).provider
     if provider == "local":
-        _require_local_identity(request, require_admin_role=True)
+        if not _authorize_api_key(request, context, credentials):
+            _require_local_identity(request, require_admin_role=True)
         return
     _require_legacy_identity(request, credentials, require_admin_role=True)
 
@@ -325,7 +347,8 @@ def require_viewer(
     context = get_context(request)
     provider = _auth_config(context).provider
     if provider == "local":
-        _require_local_identity(request, require_admin_role=False)
+        if not _authorize_api_key(request, context, credentials):
+            _require_local_identity(request, require_admin_role=False)
         return
     _require_legacy_identity(request, credentials, require_admin_role=False)
 
@@ -337,6 +360,8 @@ def require_ptz_identity(
     context = get_context(request)
     auth = _auth_config(context)
     if auth.provider == "local":
+        if credentials and credentials.credentials.startswith(API_KEY_PREFIX):
+            raise HTTPException(403, "PTZ control requires a signed-in user")
         if not local_auth_is_configured(auth):
             raise HTTPException(status_code=503, detail="local auth is not initialized")
         identity = _get_session_identity(request, context)
@@ -667,22 +692,14 @@ def _collect_multiview_sources(config: RuntimeConfig) -> list[str]:
     return out
 
 
-def _is_multiview_path(path: str, prefix: str) -> bool:
-    p = path.lower()
-    pref = prefix.lower()
-    return p == pref or p.startswith(pref + "_")
-
-
 def _camera_by_path(config: RuntimeConfig) -> dict[str, CameraConfig]:
     return {camera.path.strip().strip("/").lower(): camera for camera in config.cameras}
 
 
-def _multiview_views(config: RuntimeConfig, processes: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+def _multiview_views(
+    config: RuntimeConfig, processes: dict[str, Any] | None = None, workspace: str | None = None
+) -> list[dict[str, Any]]:
     mv = config.multiview
-    all_sources = _collect_multiview_sources(config)
-    filtered_sources = [p for p in all_sources if not _is_multiview_path(p, mv.output_prefix)]
-    if not filtered_sources or mv.tile_count <= 0:
-        return []
     process_items = processes or {"items": []}
     cameras_by_path = _camera_by_path(config)
 
@@ -711,21 +728,48 @@ def _multiview_views(config: RuntimeConfig, processes: dict[str, Any] | None = N
             "health": _camera_health_item(camera, process),
         }
 
-    view_count = int(math.ceil(len(filtered_sources) / mv.tile_count))
-    views: list[dict[str, Any]] = []
-    for idx in range(view_count):
-        sources = filtered_sources[idx * mv.tile_count : (idx + 1) * mv.tile_count]
-        view_path = f"{mv.output_prefix}_{idx + 1}"
-        views.append(
-            {
-                "id": view_path,
-                "index": idx + 1,
-                "sources": sources,
-                "source_items": [source_item(path) for path in sources],
-                **_stream_addresses(config, view_path),
-            }
-        )
-    return views
+    def view_row(index: int, slots: list[tuple[str, int]], status=None) -> dict:
+        view_path = f"{mv.output_prefix}_{index}"
+        return {
+            "id": view_path,
+            "index": index,
+            "sources": [path for path, _ in slots],
+            "source_items": [{**source_item(path), "slot": slot} for path, slot in slots],
+            **({"status": status} if status is not None else {}),
+            **_stream_addresses(config, view_path),
+        }
+
+    proc = next((item for item in process_items["items"] if item.get("id") == "multiview"), None)
+    if workspace is not None and proc and proc.get("status") == "running" and proc.get("started_at"):
+        try:
+            status, _ = _read_multiview_status(config, workspace)
+            if float(status.get("updated_at") or 0) >= proc["started_at"]:
+                prefix = mv.output_prefix + "_"
+                views = []
+                for entry in status["views"]:
+                    suffix = entry["id"].removeprefix(prefix)
+                    if not suffix.isascii() or not suffix.isdigit() or not entry["id"].startswith(prefix):
+                        continue
+                    inputs = []
+                    paths = set()
+                    for item in entry["inputs"]:
+                        path = public_source(item["path"])
+                        if path.casefold() in paths or not is_public_source(path, mv.output_prefix):
+                            continue
+                        paths.add(path.casefold())
+                        inputs.append({**item, "path": path})
+                    views.append(view_row(int(suffix), [(item["path"], item["slot"]) for item in inputs],
+                                          {**entry, "inputs": inputs}))
+                return views
+        except (OSError, TypeError, ValueError):
+            pass
+
+    sources = unique_sources(_collect_multiview_sources(config), mv.output_prefix, mv.max_sources)
+    return [
+        view_row(index, [(path, slot) for slot, path in enumerate(page, start=1) if path])
+        for index, page in enumerate(source_pages(sources, mv.tile_count, mv.layout.source_slots), start=1)
+        if any(page)
+    ]
 
 
 def _resolve_record_root_path(config: RuntimeConfig, workspace_dir: str) -> Path:
@@ -1167,6 +1211,28 @@ def _apply_mediamtx_config(context: AppContext, config: RuntimeConfig, *, before
 def _replace_camera_list(context: AppContext, cameras_payload: list[dict[str, Any]]) -> RuntimeConfig:
     patched = context.store.patch_runtime({"cameras": cameras_payload})
     return patched
+
+
+def _camera_path_changes(config: RuntimeConfig, old_path: str, new_path: str) -> dict[str, Any]:
+    old_key = old_path.casefold()
+
+    def migrate(path: str) -> str:
+        return new_path if path.casefold() == old_key else path
+
+    multiview: dict[str, Any] = {'source_paths': list(dict.fromkeys(map(migrate, config.multiview.source_paths)))}
+    if config.multiview.layout.source_slots is not None:
+        # If an external path was already assigned to the new name, keep its
+        # existing position and empty the obsolete camera slot.
+        pages = config.multiview.layout.source_slots
+        occupied = old_key != new_path.casefold() and any(
+            path and path.casefold() == new_path.casefold() for row in pages for path in row
+        )
+        multiview['layout'] = {'source_slots': [
+            [None if path is None or (occupied and path.casefold() == old_key) else migrate(path) for path in row]
+            for row in pages
+        ]}
+    return {'recording': {'record_paths': list(dict.fromkeys(map(migrate, config.recording.record_paths)))},
+            'multiview': multiview}
 
 
 def _device_keys_for_match(device: dict[str, Any]) -> set[str]:
@@ -1842,13 +1908,9 @@ def post_uvc_device_apply(
         if item.strip().lower() not in ignored_device_keys
     ]
     update = {"cameras": cameras_payload, "device_discovery": {"ignored_uvc_devices": ignored_devices}}
-    if matched_id and matched_id != runtime_camera['path']:
-        def migrate_paths(paths):
-            return list(dict.fromkeys(runtime_camera['path'] if path.casefold() == matched_id.casefold() else path
-                                      for path in paths))
-
-        update['recording'] = {'record_paths': migrate_paths(old_cfg.recording.record_paths)}
-        update['multiview'] = {'source_paths': migrate_paths(old_cfg.multiview.source_paths)}
+    previous_camera = next((camera for camera in old_cfg.cameras if camera.id == matched_id), None)
+    if previous_camera and previous_camera.path != runtime_camera['path']:
+        update.update(_camera_path_changes(old_cfg, previous_camera.path, runtime_camera['path']))
     new_cfg = context.store.patch_runtime(update)
     _restart_affected(context, old_cfg, new_cfg)
 
@@ -1991,6 +2053,11 @@ def get_viewer_cameras(request: Request) -> dict[str, Any]:
     for item, camera in zip(items, config.cameras):
         item["audio_enabled"] = camera.audio.enabled
         item["audio_receiving"] = monitoring_audio.get(camera.id, False)
+        item["audio_live_ready"] = (
+            context.supervisor.live_audio_ready(camera.path)
+            if config.mediamtx.control_mode == "direct" and config.mediamtx.managed.enabled
+            else item["audio_receiving"]
+        )
         item["addresses"].update(_external_rtsp_fields(context, config, item["path"], status))
     return {"items": items}
 
@@ -2027,7 +2094,7 @@ def get_viewer_info(request: Request) -> dict[str, Any]:
         "gop": mv.quality.gop,
         "input_stall_timeout_sec": mv.input_stall_timeout_sec,
         "input_stall_timeout_option": mv.input_stall_timeout_option,
-        "views": _multiview_views(config, processes),
+        "views": _multiview_views(config, processes, context.workspace_dir),
     }
 
     return {
@@ -2223,13 +2290,18 @@ def patch_camera(request: Request, camera_id: str, payload: dict[str, Any]) -> d
     target = _find_camera(old_cfg, camera_id)
 
     merged = _deep_merge_dict(target.model_dump(), payload)
-    merged["id"] = target.id
     merged["path"] = merged.get("path") or target.path
+    merged["id"] = merged["path"]
     camera = _validate_camera_payload(merged)
 
     cameras = [cam.model_dump() for cam in old_cfg.cameras if cam.id.lower() != target.id.lower()]
     cameras.append(camera.model_dump())
-    new_cfg = _replace_camera_list(context, cameras)
+    update = {"cameras": cameras}
+    if camera.path != target.path:
+        if any(item.path.casefold() == camera.path.casefold() for item in old_cfg.cameras if item.id != target.id):
+            raise HTTPException(409, "The camera path is already used by another camera.")
+        update.update(_camera_path_changes(old_cfg, target.path, camera.path))
+    new_cfg = context.store.patch_runtime(update)
     _restart_affected(context, old_cfg, new_cfg)
     return {"ok": True, "camera": camera.model_dump()}
 
@@ -2385,7 +2457,7 @@ def get_multiview(request: Request) -> dict[str, Any]:
     config = context.store.get_effective()
     processes = _sanitized_process_status(context.supervisor.process_status())
     data = config.multiview.model_dump()
-    data["views"] = _multiview_views(config, processes)
+    data["views"] = _multiview_views(config, processes, context.workspace_dir)
     data["process"] = next(
         (item for item in processes.get("items", []) if item.get("id") == "multiview"),
         None,
@@ -2405,12 +2477,13 @@ def _sanitize_multiview_status_payload(payload: dict[str, Any]) -> dict[str, Any
         raw_inputs = raw_view.get("inputs")
         if not isinstance(raw_inputs, list):
             raw_inputs = []
-        for raw_input in raw_inputs:
+        for index, raw_input in enumerate(raw_inputs, start=1):
             if not isinstance(raw_input, dict):
                 continue
             safe_inputs.append(
                 {
                     "path": str(raw_input.get("path") or "")[:256],
+                    "slot": raw_input["slot"] if type(raw_input.get("slot")) is int and 1 <= raw_input["slot"] <= 32 else index,
                     "state": str(raw_input.get("state") or "starting")[:32],
                     "last_progress_at": raw_input.get("last_progress_at"),
                     "failures": int(raw_input.get("failures") or 0),
@@ -2484,20 +2557,24 @@ def _merge_multiview_buffer_status(payload: dict[str, Any], status_path: Path) -
         payload["updated_at"] = latest_updated_at
 
 
+def _read_multiview_status(config: RuntimeConfig, workspace: str) -> tuple[dict[str, Any], Path]:
+    status_path = Path(config.multiview.status_file)
+    if not status_path.is_absolute():
+        status_path = Path(workspace) / status_path
+    if status_path.stat().st_size > 2_000_000:
+        raise ValueError("status payload is too large")
+    payload = json.loads(status_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("status payload is not an object")
+    return _sanitize_multiview_status_payload(payload), status_path
+
+
 @app.get("/api/v1/multiview/status", dependencies=[Depends(require_viewer)])
 def get_multiview_status(request: Request) -> dict[str, Any]:
     context = get_context(request)
     config = context.store.get_effective()
-    status_path = Path(config.multiview.status_file)
-    if not status_path.is_absolute():
-        status_path = Path(context.workspace_dir) / status_path
     try:
-        if status_path.stat().st_size > 2_000_000:
-            raise ValueError("status payload is too large")
-        payload = json.loads(status_path.read_text(encoding="utf-8"))
-        if not isinstance(payload, dict):
-            raise ValueError("status payload is not an object")
-        payload = _sanitize_multiview_status_payload(payload)
+        payload, status_path = _read_multiview_status(config, context.workspace_dir)
         for camera in config.cameras:
             if camera.type != "ip" or not camera.ip:
                 continue
@@ -2579,7 +2656,7 @@ def get_multiview_views(request: Request) -> dict[str, Any]:
     context = get_context(request)
     config = context.store.get_effective()
     processes = _observed_process_status(context)
-    return {"items": _multiview_views(config, processes)}
+    return {"items": _multiview_views(config, processes, context.workspace_dir)}
 
 
 @app.get("/api/v1/multiview/views/{view_id}/addresses", dependencies=[Depends(require_viewer)])
@@ -2587,7 +2664,7 @@ def get_multiview_view_addresses(request: Request, view_id: str) -> dict[str, An
     context = get_context(request)
     config = context.store.get_effective()
     processes = _sanitized_process_status(context.supervisor.process_status())
-    views = _multiview_views(config, processes)
+    views = _multiview_views(config, processes, context.workspace_dir)
     normalized = view_id.strip().strip("/")
     for view in views:
         if view["id"].lower() == normalized.lower():
@@ -2600,7 +2677,7 @@ def get_multiview_view_snapshot(request: Request, view_id: str) -> Response:
     context = get_context(request)
     config = context.store.get_effective()
     processes = _sanitized_process_status(context.supervisor.process_status())
-    views = _multiview_views(config, processes)
+    views = _multiview_views(config, processes, context.workspace_dir)
     normalized = view_id.strip().strip("/")
     for view in views:
         if view["id"].lower() != normalized.lower():
@@ -2651,6 +2728,34 @@ def _archive_call(operation, *args, **kwargs):
         raise HTTPException(status_code=error.status, detail=str(error), headers=headers) from error
     except (OSError, sqlite3.Error) as error:
         raise HTTPException(status_code=503, detail="Event recording storage is temporarily unavailable") from error
+
+
+def _api_key_store(request: Request, operation: str, *args):
+    context = get_context(request)
+    if _auth_config(context).provider != "local":
+        raise HTTPException(409, "API key management requires local login authentication")
+    try:
+        return getattr(context.api_keys, operation)(*args)
+    except (OSError, sqlite3.Error) as error:
+        raise HTTPException(503, "API key store is temporarily unavailable") from error
+
+
+@app.get("/api/v1/auth/api-keys", dependencies=[Depends(require_admin)])
+def list_api_keys(request: Request) -> dict:
+    return {"items": _api_key_store(request, "list")}
+
+
+@app.post("/api/v1/auth/api-keys", status_code=201, dependencies=[Depends(require_admin)])
+def create_api_key(request: Request, response: Response, payload: NewApiKey) -> dict:
+    response.headers["Cache-Control"] = "no-store"
+    return _api_key_store(request, "create", payload)
+
+
+@app.delete("/api/v1/auth/api-keys/{key_id}", dependencies=[Depends(require_admin)])
+def revoke_api_key(request: Request, key_id: str) -> dict:
+    if not _api_key_store(request, "revoke", key_id):
+        raise HTTPException(404, "API key not found")
+    return {"ok": True}
 
 
 def _archive_token(credentials: HTTPAuthorizationCredentials | None = Depends(http_bearer)) -> str:

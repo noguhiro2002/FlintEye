@@ -235,8 +235,111 @@ body,
 
 .form-grid label {
   display: grid;
+  align-content: start;
   gap: 6px;
   font-size: 13px;
+}
+
+.camera-audio {
+  padding-block: 8px;
+}
+
+.camera-audio-toolbar,
+.camera-audio-toolbar .check {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.camera-audio-toolbar .check {
+  font-weight: 600;
+}
+
+.camera-audio .form-grid {
+  margin-top: 10px;
+}
+
+.recording-view-switch button[aria-pressed="true"] {
+  background: #e8f1ff;
+  border-color: #8bb5e6;
+  box-shadow: inset 0 -3px #1769bb;
+  color: #104f93;
+}
+
+.api-access-body {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  min-width: 0;
+}
+
+.api-access-body form {
+  align-items: end;
+  flex-wrap: wrap;
+}
+
+.api-access-body label {
+  display: grid;
+  gap: 4px;
+}
+
+.api-access-body pre {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.api-key-list {
+  display: grid;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.api-key-list li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-block: 6px;
+  border-top: 1px solid #dce5f0;
+  overflow-wrap: anywhere;
+}
+
+.multiview-layout-editor {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  background: #f4f8fc;
+  border: 1px solid #dce5f0;
+  border-radius: 10px;
+}
+
+.multiview-layout-preview {
+  display: grid;
+  gap: 5px;
+  max-width: 52rem;
+}
+
+.multiview-layout-preview > * {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 52px;
+  padding: 5px;
+  border: 1px solid #c4d6e8;
+  border-radius: 6px;
+  background: #fff;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.multiview-layout-editor button[aria-pressed="true"] {
+  background: #e8f1ff;
+  border-color: #1769bb;
 }
 
 .form-field {

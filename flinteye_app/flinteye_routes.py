@@ -129,18 +129,14 @@ def install_routes(app, context, *, setup_token: str, desktop: bool):
         owner_local(request)
         config = context.store.get_effective()
         listeners = context.listener or {}
-        metadata = {}
-        if active_network.enabled and (data/'tls/ca.crt').is_file():
-            from cryptography import x509
-            from cryptography.hazmat.primitives import hashes
-            ca = x509.load_pem_x509_certificate((data/'tls/ca.crt').read_bytes())
-            metadata = {'fingerprint': ca.fingerprint(hashes.SHA256()).hex(), 'ca_expires': ca.not_valid_after_utc.isoformat()}
         group = getattr(context, 'listener_group', None)
         lan_url = listeners.get('lan_url') if group and group.lan_started else None
+        certificate = (getattr(group, 'certificate', None) or {}) if lan_url else {}
+        metadata = {key: certificate[key] for key in ('fingerprint', 'ca_expires') if key in certificate}
         recent = last_denied_source
         from flinteye_app.network_access import lan_guide_url
         return {'saved': config.network.model_dump(), 'active': active_network.model_dump(), 'guide_url': lan_guide_url(),
-                'restart_required': config.network != active_network,
+                'restart_required': config.network != active_network or bool(getattr(group, 'certificate_change_pending', False)),
                 'local_url': listeners.get('url'), 'lan_url': lan_url,
                 'lan_state': 'listening' if lan_url else ('unavailable' if active_network.enabled else 'disabled'),
                 'last_denied_source': recent[0] if recent and time.monotonic() - recent[1] < 900 else None,
@@ -177,6 +173,9 @@ def install_routes(app, context, *, setup_token: str, desktop: bool):
             backup_profile(data)
             context.store.patch_runtime({'network': network.model_dump(),
                 **({'auth': {'viewer_auth_required': True}, **lan_media_patch(context.store.get_effective())} if network.enabled else {})})
+            group = getattr(context, 'listener_group', None)
+            if group and network.address != active_network.address:
+                group.certificate_change_pending = True
         except (ValueError, OSError) as error:
             raise HTTPException(422, str(error)) from error
         return {'ok': True, 'restart_required': True}
@@ -188,7 +187,12 @@ def install_routes(app, context, *, setup_token: str, desktop: bool):
         config = context.store.get_effective()
         if not config.network.enabled:
             raise HTTPException(409, 'Enable LAN access first')
-        folder = export_guide(data, config.network.address, config.api.port)
+        group = getattr(context, 'listener_group', None)
+        if group and (not group.lan_started or config.network != active_network
+                      or group.certificate_change_pending):
+            raise HTTPException(409, 'Restart FlintEye and confirm that the LAN HTTPS address is active.')
+        port = (context.listener or {}).get('port') or config.api.port
+        folder = export_guide(data, config.network.address, port)
         return {'path': str(folder), 'message': 'Public certificate and instructions saved. Transfer them to your viewing devices and compare the fingerprint on this server.'}
 
     @app.post('/api/v1/network/renew-trust', dependencies=[Depends(require_admin)])
@@ -199,10 +203,12 @@ def install_routes(app, context, *, setup_token: str, desktop: bool):
         config = context.store.get_effective()
         if not config.network.enabled:
             raise HTTPException(409, 'Enable LAN access first')
-        from flinteye_app.network_access import ensure_certificates, export_guide
+        from flinteye_app.network_access import ensure_certificates
+        group = getattr(context, 'listener_group', None)
+        if group:
+            group.certificate_change_pending = True
         ensure_certificates(data, config.network.address, rotate_ca=True)
-        export_guide(data, config.network.address, config.api.port)
-        return {'ok': True, 'restart_required': True, 'message': 'Install the new trust certificate on every viewing device'}
+        return {'ok': True, 'restart_required': True, 'message': 'Export the new certificate after restarting, then trust it on each device.'}
 
     @app.post('/api/v1/network/firewall', dependencies=[Depends(require_admin)])
     def firewall(request: Request, payload: dict):
@@ -340,6 +346,8 @@ def install_routes(app, context, *, setup_token: str, desktop: bool):
             raise HTTPException(404, 'Unknown media path')
         upstream_path = path
         original = None
+        relay_session = request.query_params.get('flinteye_audio') == '1'
+        query = [(key, value) for key, value in request.query_params.multi_items() if key != 'flinteye_audio']
         config = context.store.get_effective()
         # Only the administrator's managed listener port is configurable. The
         # proxy host stays loopback; request URLs and headers cannot choose it.
@@ -353,28 +361,39 @@ def install_routes(app, context, *, setup_token: str, desktop: bool):
             upstream_port = int(match[1])
         for camera in sorted(config.cameras, key=lambda item: -len(item.path)):
             if path == camera.path or path.startswith(camera.path + '/'):
-                if camera.audio.enabled and config.mediamtx.control_mode == 'direct' and config.mediamtx.managed.enabled:
+                suffix = path[len(camera.path):]
+                during_session = suffix.startswith('/whep/') and request.method in {'PATCH', 'DELETE'}
+                use_relay = relay_session if during_session else (
+                    camera.audio.enabled and context.supervisor.live_audio_ready(camera.path)
+                )
+                if use_relay and config.mediamtx.control_mode == 'direct' and config.mediamtx.managed.enabled:
                     original = camera.path
-                    upstream_path = live_path(original) + path[len(original):]
+                    upstream_path = live_path(original) + suffix
                 break
         headers = {key: value for key, value in request.headers.items()
                    if key.lower() in {'content-type', 'accept', 'if-match'}}
         try:
             async with httpx.AsyncClient(timeout=30, trust_env=False) as client:
-                upstream = await client.request(request.method, f'http://127.0.0.1:{upstream_port}/' + upstream_path,
-                                                params=request.query_params, headers=headers,
-                                                content=await request.body())
+                base = f'http://127.0.0.1:{upstream_port}/'
+                body = await request.body()
+                upstream = await client.request(request.method, base + upstream_path, params=query, headers=headers, content=body)
+                # A relay can disappear between the readiness sample and the initial WHEP request.
+                if original and upstream.status_code == 404 and request.method in {'GET', 'HEAD', 'POST'}:
+                    upstream = await client.request(request.method, base + path, params=query, headers=headers, content=body)
+                    original = None
         except httpx.HTTPError as exc: raise HTTPException(502, 'Media server is unavailable') from exc
         out = {key: value for key, value in upstream.headers.items()
                if key.lower() in {'content-type', 'etag', 'accept-patch', 'link'}}
         location = upstream.headers.get('location')
         if location:
-            from urllib.parse import urljoin
+            from urllib.parse import parse_qsl, urlencode, urljoin
             absolute = urlsplit(urljoin(str(upstream.url), location))
             location_path = absolute.path
+            location_query = absolute.query
             if original and location_path.startswith('/' + live_path(original)):
                 location_path = '/' + original + location_path[len(live_path(original)) + 1:]
-            out['location'] = '/media' + location_path + (('?' + absolute.query) if absolute.query else '')
+                location_query = urlencode([*parse_qsl(location_query, keep_blank_values=True), ('flinteye_audio', '1')])
+            out['location'] = '/media' + location_path + (('?' + location_query) if location_query else '')
         return Response(upstream.content, status_code=upstream.status_code, headers=out)
 
     dist = application_dir() / 'frontend/dist'

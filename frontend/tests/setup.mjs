@@ -175,12 +175,19 @@ try {
     console.log('PASS desktop setup handoff, expiration, and manual fallback');
     for (const width of [320, 1440]) {
         const { ctx, p } = await context('admin', width, 900);
-        await ctx.route('**/api/v1/network', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ saved: { enabled: true, address: '192.168.1.10', allowed_subnets: ['192.168.1.0/24'] }, restart_required: false, local_url: 'http://127.0.0.1:18080', lan_url: 'https://192.168.1.10:18080', fingerprint: '0123456789abcdef'.repeat(4), ca_expires: '2031-11-16T00:00:00Z', guide_url: 'https://example.test/guide', error: '' }) }));
+        let pending = false;
+        await ctx.route('**/api/v1/network', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ saved: { enabled: true, address: '192.168.1.10', allowed_subnets: ['192.168.1.0/24'] }, restart_required: pending, local_url: 'http://127.0.0.1:18080', lan_url: 'https://192.168.1.10:18080', fingerprint: '0123456789abcdef'.repeat(4), ca_expires: '2031-11-16T00:00:00Z', guide_url: 'https://example.test/guide', error: '' }) }));
         await p.locator('.sidebar').getByRole('button', { name: 'Settings', exact: true }).click();
         await p.getByRole('complementary', { name: 'Settings categories' }).getByRole('button', { name: 'Runtime & access', exact: true }).click();
         await p.getByText('LAN connection and certificate trust', { exact: true }).click();
         const address = p.getByRole('textbox', { name: 'Server IPv4 address', exact: true });
         await address.waitFor();
+        const exportGuide = p.getByRole('button', {name: 'Save public certificate and connection guide', exact: true});
+        assert(await exportGuide.isEnabled());
+        await p.getByText('Connect an iPhone or iPad', {exact: true}).click();
+        await p.getByText('FlintEye.mobileconfig', {exact: true}).waitFor();
+        assert(await p.getByText(/Certificate Trust Settings, enable full trust/).isVisible());
+        assert(await p.getByText(/ERR_CERT_AUTHORITY_INVALID/).isVisible());
         const widths = await p.evaluate(() => [innerWidth, document.documentElement.scrollWidth]);
         assert.ok(widths[1] <= widths[0] + 1, `LAN settings overflow: ${widths}`);
         const fields = p.locator('.network-access form label');
@@ -194,10 +201,19 @@ try {
             for (const b of boxes.slice(i + 1)) assert.ok(a.y + a.height <= b.y + 1 || b.y + b.height <= a.y + 1 || a.x + a.width <= b.x + 1 || b.x + b.width <= a.x + 1, 'LAN setting labels overlap');
         }
         await p.screenshot({ path: `dist/terra-webapp-fixes/network-settings-${width}.png`, fullPage: true });
-        await ctx.route('**/api/v1/network/renew-trust', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, restart_required: true, message: 'Install the new trust certificate on every viewing device.' }) }));
+        await ctx.route('**/api/v1/network/renew-trust', route => {
+            pending = true;
+            return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, restart_required: true, message: 'Install the new trust certificate on every viewing device.' }) });
+        });
         p.once('dialog', dialog => dialog.accept());
         await p.getByRole('button', { name: 'Renew trust certificate…', exact: true }).click();
         await p.getByText('Install the new trust certificate on every viewing device. Restart FlintEye to apply connection changes.', { exact: true }).waitFor();
+        await p.getByText('Connection changes are saved. Restart FlintEye to apply them.', {exact: true}).waitFor();
+        assert(await exportGuide.isDisabled());
+        pending = false;
+        await p.getByRole('button', {name: 'Refresh connection status', exact: true}).click();
+        await p.getByText('Connection changes are saved. Restart FlintEye to apply them.', {exact: true}).waitFor({state: 'hidden'});
+        assert(await exportGuide.isEnabled());
         await address.fill('192.168.1.20');
         await p.locator('.sidebar').getByRole('button', { name: 'Dashboard', exact: true }).click();
         await p.getByRole('button', { name: 'Continue editing', exact: true }).click();

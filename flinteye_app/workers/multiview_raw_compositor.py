@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import BinaryIO
 
+from flinteye_app.multiview_layout import parse_placements, source_pages
 from flinteye_app.workers.multiview_buffer_to_rtsp import (
     BufferedFrame,
     ChildProcessRegistry,
@@ -165,6 +166,7 @@ class InputRuntime:
     label: str
     slot: Slot
     frame_buffer: WallClockFrameBuffer
+    slot_index: int = 0
     lock: threading.Lock = field(default_factory=threading.Lock)
     state: str = "starting"
     reason: str | None = None
@@ -398,15 +400,21 @@ def reader_loop(
 
 def build_views(args: argparse.Namespace, sources: list[str]) -> list[ViewSpec]:
     labels = parse_label_map(args.source_label_map_json)
-    auto_slots = build_auto_slots(args.tile_count, args.canvas_width, args.canvas_height, args.grid_columns)
     views: list[ViewSpec] = []
-    for view_index, start in enumerate(range(0, len(sources), args.tile_count), start=1):
+    for view_index, page in enumerate(source_pages(sources, args.tile_count, args.source_slots), start=1):
+        if not any(page):
+            continue
         slot_text = args.per_view_slots.get(str(view_index)) or args.slot_positions
+        compact = not slot_text and args.source_slots is None and len(page) == 2
+        count = 2 if compact else args.tile_count
+        auto_slots = build_auto_slots(count, args.canvas_width, args.canvas_height, 2 if compact else args.grid_columns)
         slots = parse_slot_positions(slot_text, f"view {view_index} slots") if slot_text else auto_slots
-        if len(slots) < args.tile_count:
+        if len(slots) < count:
             raise ValueError(f"view {view_index} has fewer slots than tile_count")
         inputs: list[InputRuntime] = []
-        for source_index, source in enumerate(sources[start : start + args.tile_count]):
+        for source_index, source in enumerate(page):
+            if not source:
+                continue
             slot = slots[source_index]
             x, y, width, height = slot
             if x + width > args.canvas_width or y + height > args.canvas_height:
@@ -421,7 +429,8 @@ def build_views(args: argparse.Namespace, sources: list[str]) -> list[ViewSpec]:
                 ),
                 retention_sec=args.buffer_sec,
             )
-            inputs.append(InputRuntime(source=source, label=labels.get(source, source), slot=slot, frame_buffer=buffer))
+            inputs.append(InputRuntime(source=source, label=labels.get(source, source), slot=slot,
+                                       frame_buffer=buffer, slot_index=source_index))
         views.append(ViewSpec(index=view_index, inputs=inputs))
     return views
 
@@ -464,7 +473,7 @@ def write_status(args: argparse.Namespace, views: list[ViewSpec], encoders: list
     now = time.time()
     payload_views: list[dict[str, object]] = []
     for view, encoder in zip(views, encoders):
-        inputs = [runtime.snapshot() for runtime in view.inputs]
+        inputs = [{**runtime.snapshot(), "slot": runtime.slot_index + 1} for runtime in view.inputs]
         states = [str(item["state"]) for item in inputs]
         encoder_status = encoder.snapshot()
         output_fresh = bool(
@@ -604,6 +613,7 @@ def run(args: argparse.Namespace) -> int:
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Synchronized raw-frame Multiview compositor")
     parser.add_argument("--source-paths", required=True)
+    parser.add_argument("--source-slots-json")
     parser.add_argument("--source-label-map-json")
     parser.add_argument("--input-rtsp-base-url", default="rtsp://127.0.0.1:8554")
     parser.add_argument("--output-rtsp-base-url", default="rtsp://127.0.0.1:8554")
@@ -651,6 +661,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     if args.memory_limit_mb <= 0 or args.reconnect_sec <= 0 or args.thread_queue_size <= 0:
         parser.error("memory, reconnect, and queue values must be positive")
     try:
+        args.source_slots = parse_placements(args.source_slots_json, args.tile_count)
         parsed_slots = json.loads(args.per_view_slots_json) if args.per_view_slots_json else {}
         if not isinstance(parsed_slots, dict):
             raise ValueError("per-view slots must be an object")

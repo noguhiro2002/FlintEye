@@ -14,6 +14,7 @@ from flinteye_app.workers.multiview_to_rtsp import (
     ViewRuntime,
     ViewSpec,
     build_page_command,
+    build_views,
     detect_input_stall_timeout_option,
     parse_args,
     poll_input_health,
@@ -28,6 +29,7 @@ from flinteye_app.orchestrator_supervisor import (
     _multiview_buffer_path,
     _configured_multiview_sources,
     _multiview_effective_sources,
+    _plan_multiview,
 )
 
 
@@ -143,6 +145,36 @@ class MultiviewModelTests(unittest.TestCase):
         ):
             self.assertEqual(resolve_sources(args), ["__mv_input/ipcam1", "external", "other"])
 
+    def test_hybrid_uses_each_camera_once_with_audio_and_private_paths(self) -> None:
+        from flinteye_app.camera_audio import live_path
+
+        config = runtime_config()
+        config.cameras[0].ip.multiview_input.mode = "normalized_primary"
+        reported = ["external", "ipcam1", "__mv_input/ipcam1", live_path("ipcam1"),
+                    "__mv_buffer/ipcam1", "multiview_1"]
+        self.assertEqual(_plan_multiview(config, reported), (["__mv_input/ipcam1", "external"], None))
+        self.assertEqual(_plan_multiview(config, [*reported, "third"]),
+                         (["__mv_input/ipcam1", "external", "third"], None))
+
+    def test_standard_and_raw_compositors_use_the_same_slots(self) -> None:
+        geometry = ["--source-paths", "left,right", "--canvas-width", "8", "--canvas-height", "4", "--tile-count", "4"]
+        expected = [(0, 0, 4, 4), (4, 0, 4, 4)]
+        standard = build_views(parse_args(geometry), ["left", "right"])[0]
+        raw = build_raw_views(parse_raw_args(geometry), ["left", "right"])[0]
+        self.assertEqual(standard.slots, expected)
+        self.assertEqual([row.slot for row in raw.inputs], expected)
+
+        options = geometry + ["--source-slots-json", '[["right",null,null,"left"]]']
+        args = parse_args(options)
+        standard = build_views(args, ["left", "right"])[0]
+        raw = build_raw_views(parse_raw_args(options), ["left", "right"])[0]
+        self.assertEqual(standard.placements, ["right", None, None, "left"])
+        self.assertEqual([(entry.source, entry.slot_index) for entry in raw.inputs], [("right", 0), ("left", 3)])
+        command = build_page_command(args, standard, 'libx264')
+        inputs = [value for flag, value in zip(command, command[1:]) if flag == "-i"]
+        self.assertTrue(inputs[0].endswith("/right"))
+        self.assertTrue(inputs[3].endswith("/left"))
+        self.assertTrue(all(value.startswith("color=c=black") for value in inputs[1:3]))
 
 class WallClockBufferTests(unittest.TestCase):
     def test_shared_target_is_quantized_to_server_epoch(self) -> None:

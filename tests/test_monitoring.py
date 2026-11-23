@@ -46,6 +46,50 @@ class MonitoringTests(unittest.TestCase):
             recording_events.record_event(self.root, file, complete=True, session=self.controller.session)
         return file
 
+    def test_live_audio_waits_for_a_published_audio_track_and_backs_off_after_exit(self):
+        from flinteye_app.camera_audio import live_path
+
+        supervisor = self.context.supervisor
+        supervisor._stop_event.set()
+        supervisor._monitor_thread.join(2)
+        supervisor._stop_event.clear()
+        config = self.context.store.patch_runtime({'cameras': [
+            {'id': 'cam', 'path': 'cam', 'type': 'uvc', 'audio': {'enabled': True}},
+        ]})
+        supervisor._last_config = config
+        supervisor._reconcile_live_audio(config)
+        proc = supervisor._processes['live-audio:cam']
+        track = {'name': 'cam', 'ready': True, 'tracks': ['H264', 'MPEG-4 Audio']}
+
+        def tick(paths):
+            supervisor._audio_refresh_at = 0
+            supervisor._stop_event.clear()
+            with patch('flinteye_app.monitoring.media_paths', return_value=paths), \
+                 patch.object(supervisor._stop_event, 'wait', side_effect=lambda _: supervisor._stop_event.set()):
+                supervisor._monitor_loop()
+
+        for paths in ([], [{**track, 'ready': False}], [{**track, 'tracks': ['H264']}]):
+            tick(paths)
+            self.spawn.assert_not_called()
+        tick([track])
+        self.spawn.assert_called_once_with(proc, is_restart=False)
+        proc.process = Mock(pid=123, poll=Mock(return_value=8))
+        self.spawn.reset_mock()
+        with patch.object(supervisor, '_stop_process', side_effect=lambda item: setattr(item, 'process', None)):
+            tick([track])
+        self.assertEqual(proc.audio_failures, 1)
+        self.assertGreater(proc.next_restart_at, time.time())
+        tick([track])
+        self.spawn.assert_not_called()
+        proc.next_restart_at = 0
+        tick([track])
+        self.spawn.assert_called_once_with(proc, is_restart=True)
+        proc.process = Mock(pid=123, poll=Mock(return_value=None))
+        tick([track, {**track, 'name': live_path('cam'), 'tracks': ['H264', 'Opus']}])
+        self.assertTrue(supervisor.live_audio_ready('cam'))
+        self.assertEqual(proc.audio_failures, 0)
+        proc.process = None
+
     def test_stop_survives_config_save_reconcile_and_recovery(self):
         self.assertTrue(self.controller.perform('stop')['ok'])
         self.spawn.reset_mock()

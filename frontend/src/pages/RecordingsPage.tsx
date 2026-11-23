@@ -434,7 +434,7 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
           {loading ? "Refreshing..." : "Refresh"}
         </button>}
       </div>
-      <nav className="button-row" aria-label="Recording views">
+      <nav className="button-row recording-view-switch" aria-label="Recording views">
         <button type="button" aria-pressed={!showEvents} onClick={() => setShowEvents(false)}>Loop recordings</button>
         <button type="button" aria-pressed={showEvents} onClick={() => { setShowEvents(true); setError(""); }}>Event recordings</button>
       </nav>

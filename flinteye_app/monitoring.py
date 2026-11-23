@@ -16,6 +16,7 @@ from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
 import httpx
 
+from flinteye_app.camera_audio import has_audio_track
 from flinteye_app.orchestrator_auth import local_auth_is_configured
 from flinteye_app import recording_events
 
@@ -489,10 +490,7 @@ class MonitoringController:
                 reason = ('Receiving' if receiving else 'Stopped' if not self.desired else
                           'Media status unavailable' if not available else
                           'Waiting for camera' if not ready else 'Waiting for video data' if not last_reception else 'No new video data for 15 seconds')
-                audio = camera.audio.enabled and any(
-                    str(track).lower() in {'lpcm', 'mpeg-4 audio', 'mpeg4audio', 'aac', 'opus'}
-                    for track in path.get('tracks', [])
-                )
+                audio = camera.audio.enabled and has_audio_track(path)
                 cameras.append({'id': camera.id, 'receiving': receiving, 'last_received_at': last_reception,
                                 'reason': reason, 'audio_receiving': bool(ready and audio)})
             receiving = sum(item['receiving'] for item in cameras)

@@ -10,13 +10,10 @@ from urllib.parse import urlparse
 
 from flinteye_app.orchestrator_auth import AuthIdentity
 from flinteye_app.orchestrator_ip_camera_probe import (
-    IpCameraProbeError,
     _pick,
-    _probe_media_profiles,
     _safe_error,
     _serialized,
-    iter_onvif_clients,
-    probe_ptz_profiles,
+    find_onvif_camera,
 )
 from flinteye_app.orchestrator_models import CameraConfig
 
@@ -285,47 +282,21 @@ class OnvifPtzController:
 
     def _inspect_camera(self, camera: CameraConfig) -> PtzCacheEntry:
         assert camera.ip and camera.ip.source_url
-        trace: dict[str, Any] = {"attempts": 0, "errors": []}
-        last_error = "No ONVIF PTZ service responded"
+        result, client, connection = find_onvif_camera(
+            camera.ip.source_url, mode=camera.ip.onvif_mode, address=camera.ip.onvif_address,
+            username=camera.ip.onvif_username, password=camera.ip.onvif_password,
+            profile_token=camera.ip.ptz.profile_token,
+        )
+        if result["status"] == "unavailable":
+            raise PtzConfigurationError(result["message"])
+        if client is None:
+            raise PtzControlError(result["message"])
+        ptz = result["ptz"]
         try:
-            candidates = iter_onvif_clients(
-                camera.ip.source_url,
-                mode=camera.ip.onvif_mode,
-                address=camera.ip.onvif_address,
-                username=camera.ip.onvif_username,
-                password=camera.ip.onvif_password,
-                timeout_sec=4.0,
-                trace=trace,
-            )
-            for client, connection in candidates:
-                try:
-                    profiles, _, media_errors, contacted = _probe_media_profiles(client, camera.ip.source_url)
-                    ptz = probe_ptz_profiles(client, profiles, camera.ip.source_url)
-                    if not contacted and not ptz.get("service_available"):
-                        detail = "; ".join(media_errors) or str(ptz.get("error") or last_error)
-                        raise IpCameraProbeError(detail)
-                    service = client.ptz() if ptz.get("service_available") else None
-                    if service is None:
-                        last_error = str(ptz.get("error") or ptz.get("message") or last_error)
-                        continue
-                    return PtzCacheEntry(
-                        signature="",
-                        client=client,
-                        service=service,
-                        profiles=profiles,
-                        ptz=ptz,
-                        connection=connection,
-                        expires_at=0.0,
-                    )
-                except Exception as exc:
-                    last_error = _safe_error(exc, camera.ip.source_url)
-        except ImportError as exc:
-            raise PtzConfigurationError(
-                "onvif-python is not installed; install requirements.txt"
-            ) from exc
-        except IpCameraProbeError as exc:
-            last_error = _safe_error(exc, camera.ip.source_url)
-        raise PtzControlError(last_error)
+            service = client.ptz() if ptz["service_available"] else None
+        except Exception as exc:
+            raise PtzControlError(_safe_error(exc, camera.ip.source_url)) from exc
+        return PtzCacheEntry("", client, service, result["profiles"], ptz, connection, 0.0)
 
     @staticmethod
     def _validate_camera(camera: CameraConfig) -> None:

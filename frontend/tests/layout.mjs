@@ -155,11 +155,22 @@ try {
         const { ctx, p } = await context('admin', width, 844);
         await p.locator('.sidebar').getByRole('button', { name: 'Settings', exact: true }).click();
         const nav = p.getByRole('complementary', { name: 'Settings categories' });
-        const categories = width <= 768 ? ['General', 'MediaMTX', 'Multiview', 'Cameras'] : ['Cameras'];
+        const categories = width <= 768 ? ['General', 'MediaMTX', 'Multiview', 'Cameras'] : ['MediaMTX', 'Cameras'];
         for (const category of categories) {
             await nav.getByRole('button', { name: category, exact: true }).click();
+            if (category === 'MediaMTX') {
+                const base = await p.getByRole('textbox', { name: 'RTSP Base URL', exact: true }).boundingBox();
+                const internal = await p.getByRole('textbox', { name: /^Internal RTSP Base URL/ }).boundingBox();
+                assert(base && internal && Math.abs(base.height - internal.height) <= 1, 'RTSP URL inputs should have matching heights');
+                if (width > 768) assert(Math.abs(base.y - internal.y) <= 1, 'Desktop RTSP URL inputs should align');
+            }
             if (category === 'Cameras') {
                 const first = p.locator('.ip-camera-card').first();
+                const audio = first.locator('.camera-audio-toolbar');
+                assert(await audio.isVisible());
+                assert.equal(await first.getByRole('button', {name: 'Save camera audio', exact: true}).count(), 0);
+                const toolbar = await audio.boundingBox();
+                assert(toolbar && toolbar.height < (width <= 390 ? 190 : 115), 'Camera audio toolbar is too tall');
                 await first.getByRole('textbox', { name: /^Display Name/ }).fill('LongCameraNameWithoutAnyBreaks'.repeat(8));
                 await first.getByRole('textbox', { name: /^Source URL/ }).fill('rtsp://example.test/' + 'pathsegment'.repeat(30));
                 await assertIpCameraLayout(first, `IP camera at ${width}px with automatic ONVIF discovery`);

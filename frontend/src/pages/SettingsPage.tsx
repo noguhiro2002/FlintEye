@@ -2,6 +2,8 @@ import { CameraAudioSettings } from "../components/CameraAudioSettings";
 import { EventRecordingOptions } from "../components/EventRecordings";
 import { StartupSettings } from "../components/StartupSettings";
 import { NetworkAccess } from '../components/NetworkAccess';
+import { ApiAccess } from '../components/ApiAccess';
+import { MultiviewLayoutEditor } from '../components/MultiviewLayoutEditor';
 import { useConfirmChanges } from "../components/ConfirmChanges";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
@@ -195,6 +197,7 @@ const SETTINGS_SEARCH_INDEX: Array<{
   { label: "Software updates", description: "Check and download releases", section: "general", terms: "update upgrade version release download" },
   { label: "API endpoint", description: "API host and port", section: "runtime", terms: "api host port server endpoint" },
   { label: "Viewer access", description: "Authentication provider and viewer requirement", section: "runtime", terms: "auth provider authentication viewer username password access" },
+  { label: "API access", description: "Issue and revoke REST API keys", section: "runtime", terms: "bearer token key curl permission monitoring integration" },
   { label: "Session settings", description: "TTL and cookie name", section: "runtime", terms: "session ttl cookie timeout" },
   { label: "Thumbnail refresh", description: "Snapshot timeout and refresh interval", section: "runtime", terms: "snapshot thumbnail refresh interval timeout" },
   { label: "MediaMTX endpoints", description: "RTSP, internal RTSP, and WebRTC URLs", section: "mediamtx", terms: "mediamtx rtsp webrtc url service control mode" },
@@ -896,13 +899,15 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
   };
 
   const setMultiviewSourcePaths = (paths: string[]): void => {
-    setRuntime((prev) => ({
-      ...prev,
-      multiview: {
-        ...(prev.multiview ?? {}),
-        source_paths: uniqueStrings(paths),
-      },
-    }));
+    const selected = uniqueStrings(paths);
+    setRuntime((prev) => {
+      const layout = prev.multiview?.layout;
+      const selectedPaths = new Set(selected.map(path => path.toLowerCase()));
+      const source_slots = layout?.source_slots?.map(page =>
+        page.map(path => path && selectedPaths.has(path.toLowerCase()) ? path : null));
+      return {...prev, multiview: {...prev.multiview, source_paths: selected,
+        ...(source_slots ? {layout: {...layout, source_slots}} : {})}};
+    });
   };
 
   const onToggleKnownSource = (path: string, checked: boolean): void => {
@@ -1361,6 +1366,20 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
       recording.record_paths = migratePaths(recording.record_paths);
       const multiview = runtime.multiview && { ...runtime.multiview,
         source_paths: migratePaths(runtime.multiview.source_paths) };
+      if (multiview?.layout?.source_slots) {
+        const removed = new Set(cameras.filter(camera =>
+          camera.type === "ip" && !ipDrafts.some(draft => draft.id === camera.id)
+        ).map(camera => camera.path.toLowerCase()));
+        const source_slots = multiview.layout.source_slots.map(page => page.map(path => path && !removed.has(path.toLowerCase())
+          ? renamedPaths.get(path.toLowerCase()) ?? path : null));
+        const assigned = new Set(source_slots.flatMap(page => page.flatMap(path => path ? [path.toLowerCase()] : [])));
+        if (multiview.source_paths?.some(path => !assigned.has(path.toLowerCase()) && !removed.has(path.toLowerCase()))) {
+          throw new Error("Assign the remaining selected cameras to a Multiview slot or deselect them before saving.");
+        }
+        if (assigned.size > (multiview.max_sources ?? 32)) throw new Error("Multiview assignments exceed Max Sources.");
+        multiview.source_paths = multiview.source_paths?.filter(path => !removed.has(path.toLowerCase()));
+        multiview.layout = {...multiview.layout, source_slots};
+      }
       if (recording.managed_storage) {
         if (recording.max_bytes != null && (!Number.isFinite(recording.max_bytes) || recording.max_bytes <= 0)) {
           throw new Error("Enter a positive recording capacity.");
@@ -1926,6 +1945,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
 
           <div className="section settings-section settings-section-runtime">
             <NetworkAccess api={api} blocked={hasUnsavedChanges} onDirtyChange={setNetworkDirty} onSaved={reloadSettings} />
+            {runtime.auth?.provider === "local" && <ApiAccess api={api} />}
             <div className="button-row">
               <a href={api.buildUrl('/api/v1/diagnostics')} download="FlintEye-diagnostics.zip">Save diagnostics (no raw logs or secrets)</a>
               {installation && <button type="button" disabled={loading || hasUnsavedChanges} onClick={() => { if (window.confirm('Use the MediaMTX bundled with this installation? Custom media commands will be replaced; recordings and accounts are preserved.')) void onInstallationAction(async () => {await api.useBundledMedia(); setNotice('Saved bundled MediaMTX. Use Start or Restart on Dashboard to apply it.');}); }}>Repair media command using bundled MediaMTX…</button>}
@@ -2664,15 +2684,17 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                   min={2}
                   max={32}
                   value={runtime.multiview?.tile_count ?? 4}
-                  onChange={(e) =>
-                    setRuntime((prev) => ({
-                      ...prev,
-                      multiview: {
-                        ...(prev.multiview ?? {}),
-                        tile_count: Number(e.target.value),
-                      },
-                    }))
-                  }
+                  onChange={(e) => {
+                    const tile_count = Number(e.target.value);
+                    setRuntime((prev) => {
+                      const layout = prev.multiview?.layout;
+                      const source_slots = tile_count >= 2 && tile_count <= 32 && Number.isInteger(tile_count)
+                        ? layout?.source_slots?.map(page => Array.from({length: tile_count}, (_, slot) => page[slot] ?? null))
+                        : undefined;
+                      return {...prev, multiview: {...prev.multiview, tile_count,
+                        ...(source_slots ? {layout: {...layout, source_slots}} : {})}};
+                    });
+                  }}
                 />
               </label>
               <label>
@@ -2693,6 +2715,22 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                   }
                 />
               </label>
+              <MultiviewLayoutEditor
+                sources={(multiviewSourcePaths.length ? multiviewSourcePaths : sourceOptions.filter(item => item.enabled).map(item => item.path))
+                  .map(path => ({path, label: sourceOptions.find(item => item.path.toLowerCase() === path.toLowerCase())?.label ?? path}))}
+                tileCount={Math.max(2, Math.min(32, Math.floor(runtime.multiview?.tile_count ?? 4)))}
+                columns={runtime.multiview?.layout?.grid_columns}
+                placements={runtime.multiview?.layout?.source_slots ?? null}
+                onChange={source_slots => setRuntime(prev => ({
+                  ...prev,
+                  multiview: {
+                    ...prev.multiview,
+                    source_paths: source_slots && !prev.multiview?.source_paths?.length
+                      ? sourceOptions.filter(item => item.enabled).map(item => item.path) : prev.multiview?.source_paths,
+                    layout: {...prev.multiview?.layout, source_slots},
+                  },
+                }))}
+              />
               <label>
                 Default IP Input
                 <select
@@ -3622,10 +3660,6 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                         Remove
                       </button>
                     </header>
-                    {cameras.some((camera) => camera.id === draft.id && camera.type === "ip") &&
-                      <CameraAudioSettings key={draft.id} api={api} cameraId={draft.id}
-                        current={cameras.find((camera) => camera.id === draft.id)?.audio}
-                        blocked={loading || formDirty || jsonDirty} saved={reloadSettings} />}
                     <div className="ip-camera-identity-grid">
                       <label>
                         Display Name
@@ -3640,6 +3674,10 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                         <input value={draft.path} onChange={(e) => onUpdateIpDraft(idx, { path: e.target.value })} />
                       </label>
                     </div>
+                    {cameras.some((camera) => camera.id === draft.id && camera.type === "ip") &&
+                      <CameraAudioSettings key={draft.id} api={api} cameraId={draft.id}
+                        current={cameras.find((camera) => camera.id === draft.id)?.audio}
+                        blocked={loading || formDirty || jsonDirty} saved={reloadSettings} />}
 
                     <section className="ip-camera-panel ip-camera-connection-panel">
                       <div className="ip-camera-panel-title">

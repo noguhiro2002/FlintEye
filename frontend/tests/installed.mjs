@@ -10,6 +10,7 @@ const { values } = parseArgs({ options: {
   release: { type: 'string' }, commit: { type: 'string' }, retained: { type: 'boolean', default: false },
   'fixture-url': { type: 'string' }, 'synthetic-uvc': { type: 'boolean', default: false },
   'onvif-url': { type: 'string' }, 'archive-folder': { type: 'string' },
+  'preview-9': { type: 'boolean', default: false },
 }});
 assert(values.url && values.profile && values.output && values.release);
 const origin = new URL(values.url);
@@ -22,6 +23,7 @@ const onvif = values['onvif-url'] && new URL(values['onvif-url']);
 const eventFolder = values['archive-folder'];
 const eventApi = '/api/v1/recording-events';
 const eventLabel = 'Synthetic equipment fault';
+const preview9 = values['preview-9'];
 if (onvif) assert.equal(onvif.hostname, '127.0.0.1');
 const renamedIp = '入口 IP – QA';
 const renamedSecond = '作業台 カメラ – QA';
@@ -108,7 +110,23 @@ function usbDiscovery() {
 
 async function archivePlayback() {
   await nav('Recordings');
-  await page.getByRole('button', { name: 'Event recordings', exact: true }).click();
+  const loop = page.getByRole('button', { name: 'Loop recordings', exact: true });
+  const events = page.getByRole('button', { name: 'Event recordings', exact: true });
+  if (preview9) {
+    assert.equal(await loop.getAttribute('aria-pressed'), 'true');
+    assert.equal(await events.getAttribute('aria-pressed'), 'false');
+  }
+  await events.click();
+  if (preview9) {
+    assert.equal(await events.getAttribute('aria-pressed'), 'true');
+    assert.equal(await loop.getAttribute('aria-pressed'), 'false');
+    assert.notEqual(await loop.evaluate(el => getComputedStyle(el).backgroundColor),
+                    await events.evaluate(el => getComputedStyle(el).backgroundColor));
+    await loop.click();
+    assert.equal(await loop.getAttribute('aria-pressed'), 'true');
+    assert.equal(await events.getAttribute('aria-pressed'), 'false');
+    await events.click();
+  }
   await page.getByRole('heading', { name: new RegExp('^'+eventLabel) }).waitFor();
   await page.getByRole('button', { name: 'Play QA camera 1', exact: true }).click();
   const video = page.getByRole('dialog').locator('video');
@@ -249,6 +267,126 @@ async function configureMultiview() {
   assert.equal(config.quality.quality_preset, 'low');
 }
 
+async function verifyApiKeys() {
+  await nav('Settings'); await category('Runtime & access'); await settingsReady();
+  const panel = page.locator('.api-access');
+  await panel.locator('summary').click();
+  const name = panel.getByLabel('API key name', { exact: true });
+  const permissions = panel.getByRole('combobox', { name: /^API key permissions/ });
+  const key = panel.getByLabel('New API key (copy it now)', { exact: true });
+  const anonymous = await browser.newContext();
+  try {
+    async function issue(label, scope) {
+      await name.fill(label);
+      await permissions.selectOption(scope);
+      await panel.getByRole('button', { name: 'Create API key', exact: true }).click();
+      await key.waitFor();
+      const token = await key.inputValue();
+      assert(token.startsWith('fe_api_'));
+      return { Authorization: 'Bearer '+token };
+    }
+    const fetch = (path, headers, method = 'GET') =>
+      anonymous.request.fetch(new URL(path, origin).href, { method, headers });
+    const reader = await issue('QA retained read key', 'read');
+    assert.equal((await fetch('/api/v1/status/monitoring', reader)).status(), 200);
+    assert.equal((await fetch('/api/v1/control/stop', reader, 'POST')).status(), 403);
+    await panel.getByRole('button', { name: 'Hide key', exact: true }).click();
+    await key.waitFor({state: 'hidden'});
+    const controller = await issue('QA retired monitoring key', 'monitor');
+    assert.equal((await fetch('/api/v1/status/monitoring', controller)).status(), 200);
+    assert.equal((await fetch('/api/v1/config/runtime', controller)).status(), 403);
+    await panel.getByRole('listitem').filter({hasText: 'QA retired monitoring key'})
+      .getByRole('button', { name: 'Revoke key', exact: true }).click();
+    await panel.getByText('Revoked', { exact: true }).waitFor();
+    assert.equal((await fetch('/api/v1/status/monitoring', controller)).status(), 401);
+    assert.equal((await fetch('/api/v1/status/monitoring', reader)).status(), 200);
+    assert.equal(await key.count(), 0);
+  } finally {
+    await anonymous.close();
+  }
+  stages.push('GUI-API-key-issue-read-deny-and-revoke');
+}
+
+async function verifyRetainedApiKeys() {
+  await nav('Settings'); await category('Runtime & access'); await settingsReady();
+  const panel = page.locator('.api-access');
+  await panel.locator('summary').click();
+  const items = panel.getByRole('listitem');
+  await items.filter({hasText: 'QA retained read key'}).getByText('Active', {exact: true}).waitFor();
+  await items.filter({hasText: 'QA retired monitoring key'}).getByText('Revoked', {exact: true}).waitFor();
+  assert.equal(await panel.getByLabel('New API key (copy it now)', {exact: true}).count(), 0);
+  stages.push('retained-API-key-metadata');
+}
+
+async function verifyMultiviewPositions() {
+  const route = '/api/v1/multiview/views';
+  const pair = ['qa-camera-1', 'qa-camera-2'];
+  const third = 'qa-camera-3';
+  const quadrantCenters = [[.25,.25], [.75,.25], [.25,.75], [.75,.75]];
+  const completedClipAfter = async (start, label) => {
+    const result = await until(
+      () => json('/api/v1/recordings?status=stable&stream_id=multiview_1&recorded_from='+start),
+      result => result.items.some(clip => clip.started_at >= start), label);
+    return result.items.find(clip => clip.started_at >= start).relative_path;
+  };
+  const positions = async (sources, slots) => {
+    const response = await until(() => json(route), result => result.items.length === 1 &&
+      result.items[0].status?.phase !== 'starting' && Boolean(result.items[0].status) &&
+      JSON.stringify(result.items[0].sources) === JSON.stringify(sources), 'Current compositor source list');
+    const rows = response.items[0].source_items;
+    assert.deepEqual(rows.map(row => row.slot), slots);
+  };
+  await patch({multiview: { source_mode: 'hybrid', tile_count: 4 }});
+  await positions(pair, [1, 2]);
+  await nav('Multiview');
+  await videoProgress('Two independent tiles with camera audio active', {markers: ['red', 'blue', 'black', 'black'],
+    points: [[.25,.5], [.75,.5], [.25,.1], [.75,.9]]});
+  await page.getByText('2 sources', {exact: false}).first().waitFor();
+  const automaticRecording = await completedClipAfter(Date.now()/1000, 'New recording of two horizontal tiles');
+
+  const existing = await json('/api/v1/config/effective');
+  await api('/api/v1/cameras', 'POST', {id: third, path: third, display_name: 'QA camera 3', type: 'ip',
+    ip: {source_url: values['fixture-url']+'/qa-input-3', onvif_mode: 'disabled'}});
+  await positions([...pair, third], [1, 2, 3]);
+  await nav('Settings'); await category('Multiview');
+  await page.getByRole('checkbox', { name: /^QA camera 3/ }).check();
+  const layout = page.getByRole('region', {name: 'Multiview layout preview'});
+  await layout.getByRole('button', {name: 'Arrange cameras', exact: true}).click();
+  await layout.getByRole('button', {name: 'Slot 1 · QA camera 1'}).dragTo(layout.getByRole('button', {name: 'Slot 4 · Empty'}));
+  await layout.getByRole('button', {name: 'Slot 2 · QA camera 2'}).click();
+  await layout.getByRole('button', {name: 'Slot 1 · Empty'}).click();
+  await saveCameraForm();
+  const persisted = ['qa-camera-2', null, third, 'qa-camera-1'];
+  assert.deepEqual((await json('/api/v1/config/effective')).multiview.layout.source_slots, [persisted]);
+  await layout.getByRole('button', {name: 'Slot 4 · QA camera 1'}).waitFor();
+  await positions(persisted.filter(Boolean), [1, 3, 4]);
+  const measuredAfter = Date.now()/1000;
+  await nav('Multiview');
+  await videoProgress('Three different cameras in configured positions with an empty slot',
+    {markers: ['blue', 'black', 'green', 'red'], points: quadrantCenters});
+  await page.getByText('3 sources', {exact: false}).first().waitFor();
+  const arrangedRecording = await completedClipAfter(measuredAfter, 'New recording of arranged Multiview');
+  await writeFile(join(output, 'multiview-layout-samples.json'), JSON.stringify({
+    automatic: automaticRecording, arranged: arrangedRecording,
+  }));
+  const viewer = await browser.newContext();
+  try {
+    const login = await viewer.request.post(new URL('/api/v1/auth/login', origin).href, {
+      data: {username: 'viewer', password: viewerPassword}, headers: {Origin: origin.origin},
+    });
+    assert.equal(login.status(), 200);
+    const response = await viewer.request.get(new URL(route, origin).href);
+    assert.deepEqual((await response.json()).items[0].sources, persisted.filter(Boolean));
+  } finally {
+    await viewer.close();
+  }
+  await page.screenshot({path: join(output, 'Multiview-arranged.png')});
+  await api('/api/v1/cameras/'+third, 'DELETE');
+  await patch({multiview: existing.multiview});
+  await positions(pair, [1, 2]);
+  stages.push('Multiview-2-and-3-source-positions-and-audio-isolation');
+}
+
 async function verifyPtzMovement() {
   const pan = page.getByRole('button', { name: 'Pan right', exact: true });
   await pan.focus();
@@ -325,12 +463,12 @@ async function verifyPathChange() {
   stages.push('GUI-rejects-duplicate-and-migrates-paths');
 }
 
-async function videoProgress(label, { audio = false, markers = [] } = {}) {
+async function videoProgress(label, { audio = false, markers = [], points = [] } = {}) {
   const frame = page.frameLocator('iframe.webrtc-frame');
   const video = frame.locator('video');
   await until(async () => {
     try {
-      return await video.evaluate(async (v, { audio, markers }) => {
+      return await video.evaluate(async (v, { audio, markers, points }) => {
         v.muted = true;
         if (v.paused) void v.play().catch(() => {});
         if (v.readyState < 2 || !v.videoWidth) return { ready: v.readyState, width: v.videoWidth };
@@ -346,10 +484,13 @@ async function videoProgress(label, { audio = false, markers = [] } = {}) {
           canvas.height = 1;
           const ctx = canvas.getContext('2d');
           sample.markers = markers.map((_, index) => {
-            const x = Math.floor(v.videoWidth * (index + .5) / markers.length);
-            ctx.drawImage(v, x, Math.floor(v.videoHeight / 2), 1, 1, 0, 0, 1, 1);
+            const [x, y] = points[index] ?? [(index + .5) / markers.length, .5];
+            ctx.drawImage(v, Math.floor(v.videoWidth*x), Math.floor(v.videoHeight*y), 1, 1, 0, 0, 1, 1);
             const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
-            return r > Math.max(g, b) + 80 ? 'red' : b > Math.max(r, g) + 80 ? 'blue' : 'unknown';
+            if (r > Math.max(g, b) + 80) return 'red';
+            if (b > Math.max(r, g) + 80) return 'blue';
+            if (g > Math.max(r, b) + 80) return 'green';
+            return Math.max(r, g, b) < 25 ? 'black' : 'unknown';
           });
         }
         if (audio) {
@@ -359,7 +500,7 @@ async function videoProgress(label, { audio = false, markers = [] } = {}) {
             .reduce((total, item) => total + (item.bytesReceived || 0), 0);
         }
         return sample;
-      }, { audio, markers }, { timeout: 2000 });
+      }, { audio, markers, points }, { timeout: 2000 });
     } catch (error) {
       if (error.name === 'TimeoutError' || /Execution context was destroyed|frame was detached/i.test(error.message)) {
         return { state: 'waiting for current player' };
@@ -447,6 +588,12 @@ try {
     stages.push('GUI-register-two-cameras-and-save');
     await nav('Information'); await nav('Settings'); await category('Cameras');
     const audioCard = page.locator('.ip-camera-card').first();
+    if (preview9) {
+      const panel = audioCard.locator('.camera-audio-toolbar');
+      assert.equal(await audioCard.getByRole('button', { name: 'Save camera audio', exact: true }).count(), 0);
+      const compact = await panel.boundingBox();
+      assert(compact && compact.height < 150, 'Camera audio occupies more than two compact rows');
+    }
     await audioCard.getByRole('button', { name: 'Check audio input', exact: true }).click();
     await until(() => json('/api/v1/cameras/qa-camera-1/audio'), value => value.availability === 'available', 'Synthetic audio detection');
     const toggle = audioCard.getByLabel('Enable camera audio', { exact: true });
@@ -490,6 +637,7 @@ try {
     await page.getByRole('button', { name: 'Close player', exact: true }).click();
     stages.push('retained-event-recording-settings-and-playback');
   }
+  if (values.retained && preview9) await verifyRetainedApiKeys();
   if (!values.retained) {
     await until(() => json('/api/v1/viewer/cameras'), value => value.items.length === 2 && value.items.every(c => c.health?.state === 'healthy'), 'Two receiving camera workers', 120);
     await nav('Live View');
@@ -522,6 +670,7 @@ try {
     await page.getByRole('button', { name: 'Close player', exact: true }).click();
     stages.push('recording-GUI-playback-and-download');
     if (eventFolder) await archiveEvent();
+    if (preview9) stages.push('GUI-compact-camera-audio-and-recording-tab-selection');
 
     const redBefore = (await json('/api/v1/status/processes')).items.find(stream => stream.id === 'camera:qa-camera-1');
     assert.equal(redBefore.status, 'running');
@@ -552,6 +701,7 @@ try {
       await saveCameraForm();
     }
     await until(() => json('/api/v1/viewer/cameras'), value => value.items.length === 2 && value.items.every(c => c.health?.state === 'healthy'), 'Re-added camera receives video', 120);
+    if (preview9) await patch({multiview: {source_paths: ['qa-camera-1', 'qa-camera-2']}});
     await nav('Multiview');
     await videoProgress('Both camera tiles after re-adding the second camera', { markers: ['red', 'blue'] });
     stages.push('GUI-remove-and-readd-camera-keeps-other-publisher');
@@ -568,6 +718,10 @@ try {
     await page.getByRole('button', { name: 'Logout', exact: true }).click();
     await login('admin', password);
     stages.push('viewer-login-and-real-API-write-denial');
+    if (preview9) {
+      await verifyApiKeys();
+      await verifyMultiviewPositions();
+    }
     if (onvif) await renameCameras();
     await nav('Dashboard');
     await page.getByRole('button', { name: 'Stop monitoring', exact: true }).click();

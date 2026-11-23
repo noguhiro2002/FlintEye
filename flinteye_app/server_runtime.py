@@ -68,6 +68,7 @@ class ListenerGroup:
                        timeout_graceful_shutdown=5, proxy_headers=not network.enabled,
                        forwarded_allow_ips='127.0.0.1,::1'))]
         self.certificate = None
+        self.certificate_change_pending = False
         self.lan_error = ''
         self.local_error = ''
         if network.enabled:
@@ -142,7 +143,8 @@ class ListenerGroup:
             async def supervise():
                 renewed_at = time.monotonic()
                 while not self.should_exit and not any(task.done() for task in tasks):
-                    if self.network.enabled and len(sockets) > 1 and time.monotonic() - renewed_at >= 3600:
+                    if (self.network.enabled and len(sockets) > 1 and not self.certificate_change_pending
+                            and time.monotonic() - renewed_at >= 3600):
                         renewed_at = time.monotonic()
                         try:
                             metadata = ensure_certificates(self.root, self.network.address)

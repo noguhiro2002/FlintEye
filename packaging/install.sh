@@ -130,7 +130,9 @@ fi
 if [ "$user_install" = 0 ] && command -v pgrep >/dev/null && pgrep -x FlintEye >/dev/null; then
   fail 'Quit FlintEye using Stop monitoring and quit, then run this installer again.'
 fi
-work=$(mktemp -d "${TMPDIR:-/tmp}/flinteye-install.XXXXXXXX")
+work_root=${TMPDIR:-/tmp}
+work=$(mktemp -d "$work_root/flinteye-install.XXXXXXXX") ||
+  fail "Cannot create a work directory under $work_root. Set TMPDIR to a writable directory and run the installer again."
 mount_dir=''
 user_stage=''
 cleanup() {
@@ -147,21 +149,56 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 base="https://github.com/noguhiro2002/FlintEye/releases/download/v$version"
 fetch() { curl --fail --location --proto '=https' --tlsv1.2 --retry 3 --output "$2" "$1"; }
+available_kib() { df -Pk "$work" 2>/dev/null | awk 'END { if ($4 ~ /^[0-9]+$/) print $4 }'; }
+write_failure() {
+  local available
+  available=$(available_kib) || available=''
+  fail "$1 in $work_root (available: ${available:-unknown} KiB). Check disk space, your user quota and file size limit. Free space or set TMPDIR to a writable location with more space, then run the same installer again."
+}
+check_download_space() {
+  local length available
+  length=$(curl --silent --fail --location --head --proto '=https' --tlsv1.2 \
+    --connect-timeout 5 --max-time 12 "$1" | awk '
+      /^HTTP\// { size = "" }
+      tolower($1) == "content-length:" { size = $2; sub(/\r$/, "", size) }
+      END { if (size ~ /^[0-9]+$/) print size }'
+  ) || return 0
+  available=$(available_kib) || return 0
+  [ -n "$length" ] && [ -n "$available" ] || return 0
+  if ! awk -v bytes="$length" -v kib="$available" 'BEGIN { exit (bytes <= kib * 1024 ? 0 : 1) }'; then
+    write_failure "Package download needs $length bytes"
+  fi
+}
 if [ -n "$package_directory" ]; then
   [ -d "$package_directory" ] || fail 'The selected artifact folder does not exist.'
   printf 'Installing from explicitly selected validation artifacts; no release download will occur.\n'
   cp -- "$package_directory/SHA256SUMS" "$work/SHA256SUMS" || fail 'The artifact checksum file is missing.'
 else
-  fetch "$base/SHA256SUMS" "$work/SHA256SUMS" || fail 'Release not available. Check the version and whether it has been published.'
+  if fetch "$base/SHA256SUMS" "$work/SHA256SUMS"; then
+    :
+  elif [ "$?" = 23 ]; then
+    write_failure 'Could not write the release checksums'
+  else
+    fail 'Release not available. Check the version and whether it has been published.'
+  fi
 fi
 expected=$(awk -v file="$asset" '$2 == file { print $1 }' "$work/SHA256SUMS")
 [[ "$expected" =~ ^[0-9a-f]{64}$ ]] || fail 'Package checksum is missing or ambiguous.'
 if [ -n "$package_directory" ]; then
   cp -- "$package_directory/$asset" "$work/$asset" || fail 'The selected package is missing.'
 else
-  fetch "$base/$asset" "$work/$asset" || fail 'Package download failed.'
+  check_download_space "$base/$asset"
+  if fetch "$base/$asset" "$work/$asset"; then
+    :
+  elif [ "$?" = 23 ]; then
+    write_failure 'Could not write the package download (curl 23)'
+  else
+    fail 'Package download failed.'
+  fi
 fi
 if command -v sha256sum >/dev/null; then
   actual=$(sha256sum "$work/$asset" | awk '{print $1}')
