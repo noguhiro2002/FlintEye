@@ -87,10 +87,15 @@ def _has_table(db, name):
     return db.execute('SELECT 1 FROM sqlite_master WHERE type=? AND name=?', ('table', name)).fetchone() is not None
 
 
+def _read_index(data: Path):
+    # Retention and segment completion can briefly hold the index during startup.
+    return database(data, timeout=3, initialize=False)
+
+
 def configured_folders(data: Path) -> set[Path]:
     if not (data/'recordings.sqlite3').is_file():
         return set()
-    with database(data, timeout=.5) as db:
+    with _read_index(data) as db:
         if not _has_table(db, 'archive_settings'):
             return set()
         return {Path(row[0]) for row in db.execute(
@@ -160,7 +165,7 @@ class RecordingArchive:
     def settings(self) -> dict:
         if not (self.root/'recordings.sqlite3').exists():
             return {'enabled': False, 'folder': '', 'token_configured': False, 'max_lookback_sec': 600}
-        with database(self.root, timeout=.5) as db:
+        with _read_index(self.root) as db:
             db.row_factory = sqlite3.Row
             row = self._settings(db)
         if row is None:
@@ -286,7 +291,9 @@ class RecordingArchive:
         return _public_event(event)
 
     def event_status(self, event_id: str, token: str) -> dict:
-        with database(self.root, timeout=.5) as db:
+        if not (self.root/'recordings.sqlite3').is_file():
+            raise ArchiveError(401, 'An event recording token is required')
+        with _read_index(self.root) as db:
             db.row_factory = sqlite3.Row
             owner = self._authenticate(db, token)['token_hash']
             row = db.execute('SELECT * FROM archive_events WHERE id=? AND token_hash=?',
@@ -298,7 +305,7 @@ class RecordingArchive:
     def events(self, *, limit=100, offset=0) -> list[dict]:
         if not (self.root/'recordings.sqlite3').is_file():
             return []
-        with database(self.root, timeout=.5) as db:
+        with _read_index(self.root) as db:
             if not _has_table(db, 'archive_events'):
                 return []
             db.row_factory = sqlite3.Row
@@ -320,7 +327,7 @@ class RecordingArchive:
         if not match or not (self.root/'recordings.sqlite3').is_file():
             raise ArchiveError(404, 'Event recording file not found')
         event_id, index = match[1], int(match[2])
-        with database(self.root, timeout=.5) as db:
+        with _read_index(self.root) as db:
             if not _has_table(db, 'archive_events'):
                 raise ArchiveError(404, 'Event recording file not found')
             db.row_factory = sqlite3.Row
@@ -360,7 +367,7 @@ class RecordingArchive:
     def process_pending(self):
         if not (self.root/'recordings.sqlite3').is_file():
             return
-        with database(self.root, timeout=.5) as db:
+        with _read_index(self.root) as db:
             if not _has_table(db, 'archive_events'):
                 return
             db.row_factory = sqlite3.Row

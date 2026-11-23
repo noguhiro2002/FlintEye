@@ -1,4 +1,5 @@
 """Event preservation with actual synthetic media and the managed retention index."""
+from concurrent.futures import ThreadPoolExecutor, wait
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -10,7 +11,7 @@ import unittest
 from unittest.mock import patch
 
 from flinteye_app.cli import initialize
-from flinteye_app.flinteye_storage import cleanup
+from flinteye_app.flinteye_storage import cleanup, database
 from flinteye_app.orchestrator_store import RuntimeStore
 from flinteye_app.recording_archive import ArchiveError, ArchiveSettings, EventRequest, RecordingArchive
 from flinteye_app.recording_events import file_evidence, record_event, recover_closed
@@ -99,6 +100,29 @@ class RecordingArchiveTests(unittest.TestCase):
         self.assertEqual(cleanup(self.root, rolling_config, str(self.root), now=time.time()+5), 2)
         reopened = self.new_archive()
         self.assertEqual(reopened.resolve(clip['file_id'])[2].read_bytes(), saved.read_bytes())
+
+    def test_existing_event_can_be_listed_and_played_during_index_updates(self):
+        self.segment('a', 0)
+        accepted = self.event(2, 1)
+        self.archive.process_pending()
+        event = self.archive.event_status(accepted['id'], self.token)
+        clip, = event['clips']
+        reopened = self.new_archive()
+        start = threading.Barrier(3, timeout=2)
+
+        def read(operation, *args):
+            start.wait()
+            return operation(*args)
+
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            with database(self.root) as index:
+                index.execute('BEGIN EXCLUSIVE')
+                listing = workers.submit(read, reopened.events)
+                playback = workers.submit(read, reopened.resolve, clip['file_id'])
+                start.wait()
+                self.assertFalse(wait((listing, playback), timeout=.8).done)
+            self.assertEqual(listing.result(timeout=3)[0]['id'], accepted['id'])
+            self.assertTrue(playback.result(timeout=3)[2].is_file())
 
     def test_waits_for_open_tail_and_resumes_after_storage_returns(self):
         self.segment('a', 0)

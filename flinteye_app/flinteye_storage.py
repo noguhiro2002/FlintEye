@@ -17,10 +17,15 @@ def suggested_quota(path: Path) -> int:
 
 
 @contextmanager
-def database(root: Path, *, timeout=30):
-    db = sqlite3.connect(root / 'recordings.sqlite3', timeout=timeout)
+def database(root: Path, *, timeout=30, initialize=True):
+    path = root / 'recordings.sqlite3'
+    # Existing-index queries need no schema statement. A read/write connection
+    # still lets SQLite recover an interrupted transaction after a restart.
+    target = path if initialize else path.resolve().as_uri() + '?mode=rw'
+    db = sqlite3.connect(target, timeout=timeout, uri=not initialize)
     try:
-        db.execute('CREATE TABLE IF NOT EXISTS segments (root TEXT, relative TEXT, size INTEGER, mtime INTEGER, PRIMARY KEY(root, relative))')
+        if initialize:
+            db.execute('CREATE TABLE IF NOT EXISTS segments (root TEXT, relative TEXT, size INTEGER, mtime INTEGER, PRIMARY KEY(root, relative))')
         with db:
             yield db
     finally:
