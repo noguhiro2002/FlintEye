@@ -264,6 +264,9 @@ class ReleaseTests(unittest.TestCase):
         (source/'images').mkdir(); (source/'.github').mkdir()
         (source/'packaging').mkdir()
         (source/'packaging/acceptance-1.2.0.json').write_text('{}')
+        font_license = source/'flinteye_app/fonts/OFL.txt'
+        font_license.parent.mkdir(parents=True)
+        font_license.write_text('Font license fixture')
         for name in ('README.md', 'README.ja.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'docs/INSTALL.md'):
             (source/name).write_text('Retained text: '+name)
         previous, selected = '1.2.0-preview.3', '1.2.0-preview.4'
@@ -272,6 +275,9 @@ class ReleaseTests(unittest.TestCase):
             (source/name).write_text(original)
         logo = b'\x89PNG binary fixture\0'
         (source/'images/logo.png').write_bytes(logo)
+        screenshot = source/'images/preview10/basic-cameras.png'
+        screenshot.parent.mkdir()
+        screenshot.write_bytes(b'\x89PNG screenshot fixture\0')
         with patch('release.ROOT', source):
             release.write_documentation(self.root/'first.zip', release=selected)
             for path in source.rglob('*.md'):
@@ -284,6 +290,8 @@ class ReleaseTests(unittest.TestCase):
                 self.assertEqual(archive.read(name).decode(), original.replace(previous, selected))
             self.assertEqual(archive.read('LICENSE'), (source/'LICENSE').read_bytes())
             self.assertEqual(archive.read('images/logo.png'), logo)
+            self.assertEqual(archive.read('images/preview10/basic-cameras.png'), screenshot.read_bytes())
+            self.assertEqual(archive.read('flinteye_app/fonts/OFL.txt'), font_license.read_bytes())
 
     def test_stable_requires_every_p1_case_but_preview_discloses_pending_devices(self):
         root = self.root/'acceptance-source'; (root/'packaging').mkdir(parents=True)

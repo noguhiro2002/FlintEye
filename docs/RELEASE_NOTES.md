@@ -21,11 +21,22 @@ Windows/macOS packages are unsigned/not notarized. Follow the per-application OS
 
 The archives include English/Japanese installation and acceptance guides, the exact applicable LICENSE, third-party notices and corresponding sources. `SHA256SUMS` covers every attached file except itself; `build-manifest.json` records the original tested bundle. `distribution-manifest.json` identifies this release's selected files and GHCR image digests. Public one-command installation scripts are omitted from private testing releases.
 
+`documentation.zip` includes the [Windows and macOS runtime notices](licenses/README.md).
+
 ## Container
 
 Use `ghcr.io/noguhiro2002/flinteye:@IMAGE_VERSION@` for `linux/amd64` or `linux/arm64`. Public images allow anonymous pulls; private testing requires authorized GHCR login. Preview images have no container `latest` tag. Use the attached `compose.yaml` and the Docker guide in `documentation.zip`.
 
 ## Changes in this version
+
+- Settings opens in **Basic** for cameras, recording, Multiview and access. **Advanced** holds detailed options and shares the same unsaved changes. The theme menu offers System, Light and Dark. Reopen Getting started from **Information** after the first run. [Illustrated first-run guide (Japanese)](PREVIEW_10_FIRST_RUN.ja.md)
+- LAN and VPN setup shows when a restart is pending and displays the active HTTPS address once it is ready. The connection guide covers installing the FlintEye CA on viewing devices and connecting through Tailscale. [LAN and VPN guide](LAN_ACCESS.md)
+- On Linux, USB discovery identifies capture devices and explains when access is denied, a device is busy or no capture modes are available. Reassign a replacement device while keeping the saved camera and its recording history.
+- Live video and controls are easier to reach on narrow screens. Recording filters collapse on phones, long names wrap, and playback controls fit in landscape. Multiview includes a font for Japanese camera labels.
+- Saved event recordings play while the loop recording index is being updated.
+- The Linux quick-install command downloads and runs the pinned installer for the current user. The Actions checks and the local verification command share the same test definitions. [Installation guide](INSTALL.md) [Test inventory](testing/CI_ACCEPTANCE.md)
+
+## Earlier previews
 
 - Multiview uses the same sources for its video and camera list. Automatic layouts place two cameras side by side. Set positions for the live and recorded composite in **Settings → Multiview → Camera layout**.
 - Live audio waits for the camera stream to publish an audio track and keeps the main video available. ONVIF checks candidate endpoints and reports connection, trust and authentication failures.

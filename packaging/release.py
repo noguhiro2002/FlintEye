@@ -78,7 +78,8 @@ def write_documentation(destination: Path, *, release: str | None = None) -> Non
     paths += sorted((ROOT / 'docs').rglob('*.md'))
     paths += [ROOT/'packaging/acceptance-1.2.0.json']
     paths += sorted((ROOT / '.github').glob('*.md'))
-    paths += sorted(p for p in (ROOT / 'images').iterdir() if p.is_file())
+    paths += sorted(p for p in (ROOT / 'images').rglob('*') if p.is_file())
+    paths.append(ROOT / 'flinteye_app/fonts/OFL.txt')
     with zipfile.ZipFile(destination, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         for path in sorted(paths):
             if path.is_symlink():

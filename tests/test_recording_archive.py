@@ -7,13 +7,18 @@ import shutil
 import subprocess
 import tempfile
 import time
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
+from fastapi import Request
+
+from flinteye_app import orchestrator_api
 from flinteye_app.cli import initialize
 from flinteye_app.flinteye_storage import cleanup, database
 from flinteye_app.orchestrator_store import RuntimeStore
 from flinteye_app.recording_archive import ArchiveError, ArchiveSettings, EventRequest, RecordingArchive
+from flinteye_app.recording_events import database as evidence_database
 from flinteye_app.recording_events import file_evidence, record_event, recover_closed
 import threading
 
@@ -123,6 +128,29 @@ class RecordingArchiveTests(unittest.TestCase):
                 self.assertFalse(wait((listing, playback), timeout=.8).done)
             self.assertEqual(listing.result(timeout=3)[0]['id'], accepted['id'])
             self.assertTrue(playback.result(timeout=3)[2].is_file())
+
+    def test_archived_playback_during_loop_evidence_write(self):
+        self.segment('a', 0)
+        accepted = self.event(2, 1)
+        self.archive.process_pending()
+        event = self.archive.event_status(accepted['id'], self.token)
+        self.assertEqual(event['status'], 'ready')
+        clip, = event['clips']
+        context = SimpleNamespace(
+            store=self.store, workspace_dir=str(self.root), recording_archive=self.new_archive(),
+            playback_cache_dir=self.root/'playback-cache', lock=threading.RLock(),
+        )
+        app = SimpleNamespace(state=SimpleNamespace(context=context))
+        request = Request({'type': 'http', 'app': app})
+
+        with evidence_database(self.root) as ledger:
+            ledger.execute('BEGIN EXCLUSIVE')
+            prepared = orchestrator_api.post_prepare_recording_file(request, clip['file_id'])
+            self.assertTrue(prepared['ok'])
+            playback = orchestrator_api.get_recording_playable_file(request, clip['file_id'])
+            self.assertEqual(playback.media_type, 'video/mp4')
+            self.assertEqual(Path(playback.path), Path(prepared['cache_file']))
+            self.assertGreater(Path(playback.path).stat().st_size, 0)
 
     def test_waits_for_open_tail_and_resumes_after_storage_returns(self):
         self.segment('a', 0)

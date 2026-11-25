@@ -1066,15 +1066,18 @@ def _prepare_recording_playback_file(
     archive_file: bool = False,
 ) -> Path:
     stat_result = file_path.stat()
-    age_sec = max(0.0, time.time() - float(stat_result.st_mtime))
-    from flinteye_app.recording_events import file_evidence
-    evidence = file_evidence(Path(context.store.runtime_file).resolve().parent, [file_path]).get(str(file_path.resolve()))
-    if not archive_file and ((evidence is not None and not evidence['is_stable'])
-                             or (evidence is None and age_sec < RECORDING_STABLE_AGE_SEC)):
-        raise HTTPException(
-            status_code=409,
-            detail="recording file is still being written; wait until it becomes stable",
-        )
+    # The archive resolver already verified the saved clip's file identity.
+    if not archive_file:
+        from flinteye_app.recording_events import file_evidence
+        runtime_root = Path(context.store.runtime_file).resolve().parent
+        evidence = file_evidence(runtime_root, [file_path]).get(str(file_path.resolve()))
+        age_sec = max(0.0, time.time() - float(stat_result.st_mtime))
+        if ((evidence is not None and not evidence['is_stable'])
+                or (evidence is None and age_sec < RECORDING_STABLE_AGE_SEC)):
+            raise HTTPException(
+                status_code=409,
+                detail="recording file is still being written; wait until it becomes stable",
+            )
 
     output_path = _build_recording_playback_cache_path(context.playback_cache_dir, root, relative_path, stat_result)
     cache_limit = _playback_cache_limit(config)
