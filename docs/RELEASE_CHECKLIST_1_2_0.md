@@ -10,6 +10,8 @@ For preview.9, 28 of 36 lifecycle cases passed all seven stages. Tests decoded b
 
 For preview.8, 28 of 36 lifecycle cases passed all seven stages. The tests included the API, the browser UI and event recording playback and download after reinstalling. The 8 macOS package cases awaiting first-launch approval passed install, integrity and removal. See QA-RESULTS.json for individual results. Physical-device acceptance is pending.
 
+12 of 14 Preview 10 public installation cases passed all seven stages, including Windows ARM64 event playback after reinstall, Linux DEB/RPM in system and user modes, and both GHCR architectures. 2 macOS script cases passed install, integrity and removal and await first-launch approval. [Preview 10 public installation results](https://github.com/noguhiro2002/FlintEye/actions/runs/45624057667)
+
 12 of the 14 preview.9 public download cases passed all seven stages. They covered the Windows script, Linux DEB and RPM with and without administrator privileges, and both GHCR architectures. 2 macOS script cases passed install, integrity and removal and await first-launch approval. [Public installation results](https://github.com/noguhiro2002/FlintEye/actions/runs/45249760004)
 
 12 of the 14 preview.8 public download cases passed all seven stages. They covered the Windows script, Linux DEB and RPM with and without administrator privileges, and both GHCR architectures. 2 macOS script cases passed install, integrity and removal and await first-launch approval. [Public installation results](https://github.com/noguhiro2002/FlintEye/actions/runs/45034872890)

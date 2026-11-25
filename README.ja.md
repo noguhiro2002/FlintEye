@@ -2,7 +2,7 @@
 
 **FlintEyeは現在開発中です。これは安定版ではなく開発プレビューです。テストには開発プレビューをご利用ください。**
 
-現在の開発プレビュー版は **1.2.0-preview.9** です。以下のクイックインストールコマンドで導入できます。macOSでは初回起動時の承認手順に従ってください。自動テストの結果と実機での確認項目は[開発プレビュー版の検証一覧](docs/RELEASE_CHECKLIST_1_2_0.ja.md)で確認できます。
+現在の開発プレビュー版は **1.2.0-preview.10** です。以下のクイックインストールコマンドで導入できます。macOSでは初回起動時の承認手順に従ってください。自動テストの結果と実機での確認項目は[開発プレビュー版の検証一覧](docs/RELEASE_CHECKLIST_1_2_0.ja.md)で確認できます。
 
 [既知の問題](docs/KNOWN_ISSUES.ja.md) · [バグを報告する](https://github.com/noguhiro2002/FlintEye/issues) · [質問とアイデア](https://github.com/noguhiro2002/FlintEye/discussions)
 
@@ -32,24 +32,24 @@ USBカメラやIPカメラの監視、ライブ映像の視聴、録画の検索
 
 [管理者権限なしでインストールする方法](#install-without-administrator-privileges)
 
-**開発プレビュー：[v1.2.0-preview.9](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.2.0-preview.9)。** 実機での受け入れ確認は現在進行中です。お使いのコンピュータ用のコマンドを実行し、セットアップに従ってください。Python、FFmpeg、FFprobe、MediaMTXが同梱されているため、Gitのチェックアウトやコンパイルは不要です。
+**開発プレビュー：[v1.2.0-preview.10](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.2.0-preview.10)。** 実機での受け入れ確認は現在進行中です。お使いのコンピュータ用のコマンドを実行し、セットアップに従ってください。Python、FFmpeg、FFprobe、MediaMTXが同梱されているため、Gitのチェックアウトやコンパイルは不要です。
 
 **Windows — PowerShell**
 
 ```powershell
-irm https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.9/install.ps1 | iex
+irm https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.10/install.ps1 | iex
 ```
 
 **macOS — ターミナル**
 
 ```sh
-bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.9/install.sh
+bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.10/install.sh
 ```
 
 **Linux — ターミナル**
 
 ```sh
-bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.9/install.sh
+bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.10/install.sh
 ```
 
 また、選択したリリースからスクリプトをダウンロードして内容を確認し、ローカルで実行することもできます。パッケージ版にはPython、FFmpeg、FFprobe、MediaMTXが含まれています。別途インストールする必要はありません。Windows/macOSパッケージは署名なし/公証されていません。[OS確認画面](docs/INSTALL.ja.md#unsigned-packages)をご覧ください。
@@ -62,10 +62,10 @@ bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap clean
 
 - **Windows** — 一般ユーザーでEXEまたはPowerShellのインストーラーを実行します。インストール先は `%LOCALAPPDATA%\Programs\FlintEye` です。スタートメニューから起動できます。削除するときはFlintEyeを終了し、**設定 → アプリ → FlintEye → アンインストール**を選びます。データを保持する既定の選択を使ってください。
 - **macOS** — 一般ユーザーでワンコマンド版を実行するか、DMG内の `FlintEye.app` を個人用の `~/Applications` にコピーして開きます。必要に応じて[初回起動の承認手順](#macos-trust)に従ってください。削除するときはメニューバーで **Disable start at login and quit** を選び、そのアプリをゴミ箱に移動します。組織管理のMacでは、起動に管理者の承認が必要な場合があります。
-- **Linux** — 次の1行で公開済みプレビュー版のスクリプトを取得し、ユーザー権限で導入します。同じビルドのActions成果物を使う場合は、ZIPを展開したフォルダで `bash ./install.sh --user --package-directory .` を実行します。[install.shをダウンロード](https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.9/install.sh)
+- **Linux** — 次の1行で公開済みプレビュー版のスクリプトを取得し、ユーザー権限で導入します。同じビルドのActions成果物を使う場合は、ZIPを展開したフォルダで `bash ./install.sh --user --package-directory .` を実行します。[install.shをダウンロード](https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.10/install.sh)
 
 ```sh
-bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script" --user' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.9/install.sh
+bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script" --user' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.10/install.sh
 ```
 
 対応するUbuntu、Debian、64ビット版Raspberry Pi OSでは `dpkg-deb`、Rocky Linux、AlmaLinux、RHELでは `rpm2cpio` と `cpio` を使います。[実行に必要なライブラリ](packaging/nfpm.yaml)はOS側に入っている必要があります。インストール先は `~/.local/opt/flinteye-user` です。`"$HOME/.local/opt/flinteye-user/FlintEye"` で起動し、案内されたアドレスを開きます。サーバーでは `--headless` を付けて起動し、Ctrl+Cで終了します。

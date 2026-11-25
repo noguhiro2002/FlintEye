@@ -12,14 +12,14 @@ Docker EngineとComposeプラグインがインストールされたLinuxサー�
 <a id="install-without-cloning"></a>
 ## クローンせずにインストールする
 
-**UNDER DEVELOPMENT.** プレビューイメージは `ghcr.io/noguhiro2002/flinteye:1.2.0-preview.9` です。導入と実機を検証するには、[公開GHCRパッケージ](https://github.com/users/noguhiro2002/packages/container/package/flinteye)からこの版を取得してください。自動パッケージチェックは通過しましたが、実機での受け入れテストは進行中です。これは安定版リリースではありません。[ローカルでのビルド](#build-the-development-image)を行うことも可能です。
+**UNDER DEVELOPMENT.** プレビューイメージは `ghcr.io/noguhiro2002/flinteye:1.2.0-preview.10` です。導入と実機を検証するには、[公開GHCRパッケージ](https://github.com/users/noguhiro2002/packages/container/package/flinteye)からこの版を取得してください。自動パッケージチェックは通過しましたが、実機での受け入れテストは進行中です。これは安定版リリースではありません。[ローカルでのビルド](#build-the-development-image)を行うことも可能です。
 
 公開されているパブリックイメージは、GitHubアカウントやトークンなしでプルできます。Dockerに期限切れの保存済み認証情報がある場合は、匿名でプルする前に `docker logout ghcr.io` を使用してください。管理者によるプライベートテストには、引き続き認証済みのアカウントと、`read:packages` を備えたクラシックトークンが必要です。これらは `docker login ghcr.io -u YOUR_GITHUB_USERNAME` のパスワードプロンプトに入力してください。トークンを `.env` やコマンド引数に入力しないでください。
 
-同じバージョンのGitHub Releaseから [compose.yaml](https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.9/compose.yaml) を新しいディレクトリにダウンロードし、`.env` を作成します。
+同じバージョンのGitHub Releaseから [compose.yaml](https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.10/compose.yaml) を新しいディレクトリにダウンロードし、`.env` を作成します。
 
 ```dotenv
-FLINTEYE_IMAGE=ghcr.io/noguhiro2002/flinteye:1.2.0-preview.9
+FLINTEYE_IMAGE=ghcr.io/noguhiro2002/flinteye:1.2.0-preview.10
 ```
 
 プレビュー版には `latest` イメージタグがありません。上記のように正確なバージョンを固定し、ハードウェア用の[受け入れチェック](ACCEPTANCE.ja.md)を完了させてください。

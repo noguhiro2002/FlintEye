@@ -2,7 +2,7 @@
 
 **FlintEye is under active development. This is a development preview, not a stable release. Use development previews for testing.**
 
-The current development preview is **1.2.0-preview.9**. Install it with the Quick Install commands below. On macOS, follow the first-launch approval instructions. The [development preview validation checklist](docs/RELEASE_CHECKLIST_1_2_0.md) records completed automated checks and remaining real-device tests.
+The current development preview is **1.2.0-preview.10**. Install it with the Quick Install commands below. On macOS, follow the first-launch approval instructions. The [development preview validation checklist](docs/RELEASE_CHECKLIST_1_2_0.md) records completed automated checks and remaining real-device tests.
 
 [Known issues](docs/KNOWN_ISSUES.md) · [Report a bug](https://github.com/noguhiro2002/FlintEye/issues) · [Questions and ideas](https://github.com/noguhiro2002/FlintEye/discussions)
 
@@ -31,24 +31,24 @@ Monitor USB and IP cameras, watch live video, and find recordings in your browse
 
 [Installing without administrator privileges?](#install-without-administrator-privileges)
 
-**Development preview: [v1.2.0-preview.9](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.2.0-preview.9).** Real-device acceptance is still in progress. Run the command for your computer and follow setup. Python, FFmpeg, FFprobe and MediaMTX are included; no Git checkout or compilation is needed.
+**Development preview: [v1.2.0-preview.10](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.2.0-preview.10).** Real-device acceptance is still in progress. Run the command for your computer and follow setup. Python, FFmpeg, FFprobe and MediaMTX are included; no Git checkout or compilation is needed.
 
 **Windows — PowerShell**
 
 ```powershell
-irm https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.9/install.ps1 | iex
+irm https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.10/install.ps1 | iex
 ```
 
 **macOS — Terminal**
 
 ```sh
-bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.9/install.sh
+bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.10/install.sh
 ```
 
 **Linux — Terminal**
 
 ```sh
-bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.9/install.sh
+bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.10/install.sh
 ```
 
 You can also download the script from the selected release, inspect it, and run it locally. Packaged builds include Python, FFmpeg, FFprobe and MediaMTX. No separate copies are required. Windows/macOS packages are unsigned/not notarized; see [OS confirmation screens](docs/INSTALL.md#unsigned-packages).
@@ -60,10 +60,10 @@ You can also download the script from the selected release, inspect it, and run 
 
 - **Windows** — Run the EXE or PowerShell installer from your normal account. FlintEye goes into `%LOCALAPPDATA%\Programs\FlintEye`. Open it from Start. To remove it, quit FlintEye, then use **Settings → Apps → FlintEye → Uninstall** and keep the default choice to retain data.
 - **macOS** — Run the shell installer from your normal account or copy `FlintEye.app` from the DMG into your personal `~/Applications` folder. Open that copy and follow the first-launch instructions if prompted. To remove it, choose **Disable start at login and quit** in the menu bar, then move that copy to Trash. Managed Macs may require IT approval for launch. [First-launch instructions](docs/INSTALL.md#unsigned-packages)
-- **Linux** — Run this command to download the published preview installer and install for your user account. For a matching Actions artifact, extract the ZIP and run `bash ./install.sh --user --package-directory .` inside it. [Download install.sh](https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.9/install.sh)
+- **Linux** — Run this command to download the published preview installer and install for your user account. For a matching Actions artifact, extract the ZIP and run `bash ./install.sh --user --package-directory .` inside it. [Download install.sh](https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.10/install.sh)
 
 ```sh
-bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script" --user' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.9/install.sh
+bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script" --user' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.10/install.sh
 ```
 
 On supported Ubuntu, Debian and 64-bit Raspberry Pi OS systems the script uses `dpkg-deb`. On supported Rocky, AlmaLinux and RHEL systems it uses `rpm2cpio` and `cpio`. The host needs the package's [runtime libraries](packaging/nfpm.yaml) already installed. The script puts the app in `~/.local/opt/flinteye-user`. Start it with `"$HOME/.local/opt/flinteye-user/FlintEye"` and open the address it shows. On a server add `--headless` and stop it with Ctrl+C.
