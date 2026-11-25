@@ -28,7 +28,10 @@ FROM scratch AS media-sources
 COPY --from=media /media-source.tar.gz /
 
 FROM python:3.13-slim-trixie@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core alsa-utils zlib1g && rm -rf /var/lib/apt/lists/*
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core alsa-utils zlib1g \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /opt/flinteye
 COPY requirements.txt ./
 COPY packaging/constraints.txt ./packaging/
