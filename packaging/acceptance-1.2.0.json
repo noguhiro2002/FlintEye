@@ -1,6 +1,6 @@
 {
   "version": "1.2.0",
-  "commit": "59a0fb29c8587d92d1253654d63413e56bdfa6d8",
+  "commit": "6508296ff967bbb5505dc51936fe0c85d144a8c7",
   "cases": {
     "windows-owner-startup": {
       "status": "pending",
@@ -24,7 +24,7 @@
     },
     "physical-cameras-and-long-run": {
       "status": "pending",
-      "evidence": "An isolated preview 7 source test on Linux received two real USB cameras and one IP stream, verified browser playback and decoded 44 test clips including Multiview. The original profile and recordings were retained. Packaged real-device and 24-hour checks are pending."
+      "evidence": "A Linux x86_64 test of an earlier Preview 10 candidate verified two physical USB cameras and one IP camera, including recording, decoding, and normal quit. Long-run testing and the remaining device checks are pending."
     },
     "linux-native-and-docker": {
       "status": "pending",
@@ -36,7 +36,7 @@
     },
     "all-native-architectures": {
       "status": "passed",
-      "evidence": "https://github.com/noguhiro2002/FlintEye/actions/runs/45229712775 built all eight installers and both container architectures from 59a0fb29c8587d92d1253654d63413e56bdfa6d8. 28 of 36 lifecycle cases passed all seven stages, including both Multiview recording layouts, API key retention and event playback. 8 macOS package cases require first-launch approval. See QA-RESULTS.json."
+      "evidence": "https://github.com/noguhiro2002/FlintEye/actions/runs/45609459603 built all eight installers and both container architectures from 6508296ff967bbb5505dc51936fe0c85d144a8c7. 28 of 36 lifecycle cases passed all seven stages. 8 macOS cases require first-launch approval before the installed app can be exercised. The release bundle records the tested routes in QA-RESULTS.json."
     }
   }
 }

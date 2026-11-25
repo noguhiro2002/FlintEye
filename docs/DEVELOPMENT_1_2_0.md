@@ -5,7 +5,7 @@
 **UNDER DEVELOPMENT. Public 1.1.3-preview.1 is unchanged. This source is not a claim that the reported Windows failures have recovered on the owner's machine.**
 
 Baseline: application build `25718ed3f06833a1f291992753b4f0538d7dc939`, published tag `v1.1.3-preview.1`; implementation starts from main `8e13378`. Input: the owner's QA rev11 dated 2026-11-15 and macOS installer follow-up.
-Use the 1.2.0-preview.9 candidate for the latest fixes. Download the appropriate OS and CPU artifact from the [candidate build](https://github.com/noguhiro2002/FlintEye/actions/runs/45229712775) and record the tested commit and results in the [device checklist](RELEASE_CHECKLIST_1_2_0.md).
+Use the 1.2.0-preview.10 candidate for the latest fixes. Download the appropriate OS and CPU artifact from the [candidate build](https://github.com/noguhiro2002/FlintEye/actions/runs/45609459603) and record the tested commit and results in the [device checklist](RELEASE_CHECKLIST_1_2_0.md).
 
 ## Preview.3: macOS installation follow-up
 
@@ -53,13 +53,13 @@ Download and extract the successful Build release run's `release-bundle` artifac
 Windows PowerShell, from the extracted bundle directory:
 
 ```powershell
-.\public\install.ps1 -Version 1.2.0-preview.9 -PackageDirectory .\public
+.\public\install.ps1 -Version 1.2.0-preview.10 -PackageDirectory .\public
 ```
 
 macOS or Linux, from the extracted bundle directory:
 
 ```sh
-bash public/install.sh --version 1.2.0-preview.9 --package-directory public
+bash public/install.sh --version 1.2.0-preview.10 --package-directory public
 ```
 
 Compare this installation with the standalone installer from the same folder and verify both SHA-256 values match. Keep the version and source commit fixed. Public download commands pin the matching 1.2.0-preview.9 development release; stable promotion waits for physical acceptance. To test the container before GHCR publication, load the matching `containers/container-amd64.tar.gz` or `container-arm64.tar.gz`, then set `FLINTEYE_IMAGE=flinteye:release-amd64` or `flinteye:release-arm64` before using Compose. Do not mistake a downloaded Compose file's future GHCR tag for an already published image.

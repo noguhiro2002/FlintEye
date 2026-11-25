@@ -4,6 +4,8 @@
 
 **Stable distribution of 1.2.0 requires all eight device gates below and a passing build for every OS and CPU on the same commit.** A failed or untested gate blocks stable promotion. A public UNDER DEVELOPMENT preview may distribute the passing build for testing while physical cases are pending; it must disclose those pending results and must not become Latest.
 
+Preview 10 built eight installers and both container architectures. 28 of 36 lifecycle cases passed all seven stages. 8 macOS cases require first-launch approval before the installed app can be exercised. A Linux user-install test of an earlier Preview 10 candidate recorded and decoded footage from two USB cameras and one IP camera. [Preview 10 build results](https://github.com/noguhiro2002/FlintEye/actions/runs/45609459603)
+
 For preview.9, 28 of 36 lifecycle cases passed all seven stages. Tests decoded both recorded Multiview layouts and verified playback and API key metadata after reinstalling. 8 macOS package cases passed installation, integrity and removal and await first-launch approval. Physical-device acceptance is pending. [Preview 9 build results](https://github.com/noguhiro2002/FlintEye/actions/runs/45229712775)
 
 For preview.8, 28 of 36 lifecycle cases passed all seven stages. The tests included the API, the browser UI and event recording playback and download after reinstalling. The 8 macOS package cases awaiting first-launch approval passed install, integrity and removal. See QA-RESULTS.json for individual results. Physical-device acceptance is pending.
@@ -18,9 +20,9 @@ During preview.7, a Linux source test received two physical USB cameras and one 
 
 | Field | Required value or record |
 | --- | --- |
-| Release / application | `v1.2.0-preview.9` / `1.2.0` |
-| Tested application commit | `59a0fb29c8587d92d1253654d63413e56bdfa6d8` |
-| Build | [Build release run 45229712775](https://github.com/noguhiro2002/FlintEye/actions/runs/45229712775) · [release-bundle](https://github.com/noguhiro2002/FlintEye/actions/runs/45229712775/artifacts/14852939187) |
+| Release / application | `v1.2.0-preview.10` / `1.2.0` |
+| Tested application commit | `6508296ff967bbb5505dc51936fe0c85d144a8c7` |
+| Build | [Build release run 45609459603](https://github.com/noguhiro2002/FlintEye/actions/runs/45609459603) · [release-bundle](https://github.com/noguhiro2002/FlintEye/actions/runs/45609459603/artifacts/15023948700) |
 | Package identity | Record the package filename and its matching `SHA256SUMS` value; confirm `build-manifest.json` and Information agree |
 | Environment | Date, tester, device, OS/build, CPU, browser/version, install method, install/data paths, actual API address/port, camera model/resolution/fps |
 | Results | For each operation, record expected behavior, observed behavior, Pass / Fail / Not tested, and an evidence reference |
@@ -31,14 +33,14 @@ The required desktop device coverage includes Windows x64, an M1 Mac and Linux x
 
 Test both the standalone package and the one-command installer using these same files. Before GHCR publication, load the matching verified `containers/container-amd64.tar.gz` or `containers/container-arm64.tar.gz` and use the local image tag described in the [development guide](DEVELOPMENT_1_2_0.md).
 
-## Preview 9 on Windows and M1 Mac
+## Preview 10 on Windows and M1 Mac
 
-Download the installer and check its SHA-256 against the release checksum file. Confirm **Information → System** shows `1.2.0-preview.9` and the manifest commit. [Windows x64 EXE](https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.9/FlintEye-1.2.0-windows-amd64-setup.exe) · [Apple Silicon DMG](https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.9/FlintEye-1.2.0-macos-arm64.dmg) · [SHA256SUMS](https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.9/SHA256SUMS)
+Download the installer and check its SHA-256 against the release checksum file. Confirm **Information → System** shows `1.2.0-preview.10` and the manifest commit. [Windows x64 EXE](https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.10/FlintEye-1.2.0-windows-amd64-setup.exe) · [Apple Silicon DMG](https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.10/FlintEye-1.2.0-macos-arm64.dmg) · [SHA256SUMS](https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.10/SHA256SUMS)
 
-Each smaller OS-specific artifact includes its installer, script and `SHA256SUMS`. In its extracted directory, use `.\install.ps1 -PackageDirectory .` on Windows or `bash ./install.sh --package-directory .` on macOS. [Windows x64 artifact](https://github.com/noguhiro2002/FlintEye/actions/runs/45229712775/artifacts/14850356779) · [M1 Mac artifact](https://github.com/noguhiro2002/FlintEye/actions/runs/45229712775/artifacts/14848028786)
+Each smaller OS-specific artifact includes its installer, script and `SHA256SUMS`. In its extracted directory, use `.\install.ps1 -PackageDirectory .` on Windows or `bash ./install.sh --package-directory .` on macOS. [Windows x64 artifact](https://github.com/noguhiro2002/FlintEye/actions/runs/45609459603/artifacts/15022595541) · [M1 Mac artifact](https://github.com/noguhiro2002/FlintEye/actions/runs/45609459603/artifacts/15021871670)
 
-- Windows PowerShell · `.\public\install.ps1 -Version 1.2.0-preview.9 -PackageDirectory .\public`
-- macOS Terminal · `bash public/install.sh --version 1.2.0-preview.9 --package-directory public`
+- Windows PowerShell · `.\public\install.ps1 -Version 1.2.0-preview.10 -PackageDirectory .\public`
+- macOS Terminal · `bash public/install.sh --version 1.2.0-preview.10 --package-directory public`
 
 - [ ] On a fresh desktop profile, choose the administrator password directly in the browser. Close that tab before setup completes and resume with **Open FlintEye** or by launching the app again. Confirm manual guidance on a Docker/systemd setup. Confirm that a retained profile still signs in.
 - [ ] From a separate LAN or VPN device, use the active HTTPS address and verify the connection after trusting the CA. Verify the restart message and the displayed source IP when a client is outside the allowed ranges. Check error `10048` with a disposable port conflict and remove that conflict before continuing.
