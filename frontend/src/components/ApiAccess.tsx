@@ -45,7 +45,7 @@ export function ApiAccess({api}: {api: ApiClient}) {
   };
   const statusUrl = new URL(api.buildUrl("/api/v1/status/monitoring"), window.location.href).href;
 
-  return <details className="runtime-advanced api-access form-span-3" onToggle={event => {
+  return <details id="api-access" className="runtime-advanced api-access form-span-3" onToggle={event => {
     setOpen(event.currentTarget.open);
     if (!event.currentTarget.open) setToken("");
   }}>

@@ -1,3 +1,4 @@
+import { chooseSettingsCategory } from './settings-navigation.mjs';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync } from 'node:fs';
 process.chdir(fileURLToPath(new URL('../..', import.meta.url)));
@@ -148,8 +149,8 @@ catch (e) {
 } }
 try {
     await run(3, async () => { const { ctx, p } = await context('auth-error'); const text = await p.locator('body').innerText(); assert.doesNotMatch(text, /Public viewer/i); assert.match(text, /auth|sign.in|retry|unavailable/i); await p.screenshot({ path: 'dist/terra-webapp-fixes/3-auth.png' }); await ctx.close(); });
-    await run('25 config refresh failure', async () => { configFail = false; const { ctx, p } = await context('admin'); await p.locator('.sidebar').getByRole('button', { name: 'Settings', exact: true }).click(); const nav = p.getByRole('complementary', { name: 'Settings categories' }); await nav.getByRole('button', { name: 'General', exact: true }).click(); configFail = true; await p.getByRole('button', { name: 'Refresh', exact: true }).first().click(); await p.getByText(/Synthetic configuration unavailable/).first().waitFor(); assert.ok(await p.getByRole('button', { name: 'Save changes', exact: true }).first().isDisabled()); configFail = false; await ctx.close(); });
-    await run(25, async () => { const { ctx, p } = await context('uvc-error'); await p.locator('.sidebar').getByRole('button', { name: 'Settings', exact: true }).click(); await p.getByRole('complementary', { name: 'Settings categories' }).getByRole('button', { name: 'General', exact: true }).click(); assert.equal(await p.getByRole('textbox', { name: /^App Title/ }).inputValue(), 'Synthetic loaded title'); assert.match(await p.locator('body').innerText(), /Synthetic USB discovery denied/); await p.screenshot({ path: 'dist/terra-webapp-fixes/25-settings.png', fullPage: true }); await ctx.close(); });
+    await run('25 config refresh failure', async () => { configFail = false; const { ctx, p } = await context('admin'); await p.locator('.sidebar').getByRole('button', { name: 'Settings', exact: true }).click(); await chooseSettingsCategory(p, 'General'); configFail = true; await p.getByRole('button', { name: 'Refresh', exact: true }).first().click(); await p.getByText(/Synthetic configuration unavailable/).first().waitFor(); assert.ok(await p.getByRole('button', { name: 'Save changes', exact: true }).first().isDisabled()); configFail = false; await ctx.close(); });
+    await run(25, async () => { const { ctx, p } = await context('uvc-error'); await p.locator('.sidebar').getByRole('button', { name: 'Settings', exact: true }).click(); await chooseSettingsCategory(p, 'General'); assert.equal(await p.getByRole('textbox', { name: /^App Title/ }).inputValue(), 'Synthetic loaded title'); assert.match(await p.locator('body').innerText(), /Synthetic USB discovery denied/); await p.screenshot({ path: 'dist/terra-webapp-fixes/25-settings.png', fullPage: true }); await ctx.close(); });
 }
 finally {
     await browser.close();

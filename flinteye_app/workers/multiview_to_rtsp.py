@@ -165,6 +165,9 @@ def has_drawtext_filter(ffmpeg_bin: str) -> bool:
 
 
 def auto_default_font_path() -> str | None:
+    bundled_font = Path(__file__).resolve().parents[1] / "fonts" / "NotoSansJP-Regular.otf"
+    if bundled_font.is_file():
+        return str(bundled_font)
     candidates: list[str] = []
     if sys.platform.startswith("win"):
         windir = os.environ.get("WINDIR") or os.environ.get("SystemRoot") or r"C:\Windows"

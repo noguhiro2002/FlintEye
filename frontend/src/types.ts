@@ -335,6 +335,9 @@ export interface UvcDeviceItem {
   index: string | null;
   ffmpeg_device: string;
   ffmpeg_device_index: string;
+  device_aliases?: string[];
+  stable_device?: string | null;
+  probe_state?: "available" | "permission_denied" | "busy" | "modes_unavailable";
   mode_warning?: string;
   modes: Array<{ width: number; height: number; fps?: number; input_format?: string }>;
   recommended: { width: number; height: number; fps: number; input_format?: string };

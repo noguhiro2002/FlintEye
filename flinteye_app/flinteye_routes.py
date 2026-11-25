@@ -142,7 +142,8 @@ def install_routes(app, context, *, setup_token: str, desktop: bool):
                 'lan_state': 'listening' if lan_url else ('unavailable' if active_network.enabled else 'disabled'),
                 'last_denied_source': recent[0] if recent and time.monotonic() - recent[1] < 900 else None,
                 'error': group.lan_error if group else '',
-                'rtsp_status': context.supervisor.rtsps_status(), **metadata}
+                'rtsp_status': context.supervisor.rtsps_status(),
+                'can_manage_firewall': sys.platform == 'win32', **metadata}
 
     @app.post('/api/v1/network/rtsps-credential', dependencies=[Depends(require_admin)])
     def rtsps_credential(request: Request):

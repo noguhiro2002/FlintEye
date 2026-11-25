@@ -1241,6 +1241,7 @@ def _device_keys_for_match(device: dict[str, Any]) -> set[str]:
         device.get("ffmpeg_device"),
         device.get("ffmpeg_device_index"),
         device.get("display_name"),
+        *device.get("device_aliases", []),
     ]:
         if not raw:
             continue
@@ -1358,8 +1359,9 @@ def _suggest_for_device(
     bitrate: str | None = None,
     use_device_index: bool = False,
     fallback_index: int | None = None,
+    replace_camera: CameraConfig | None = None,
 ) -> dict[str, Any]:
-    matched = _find_camera_by_device(config, device)
+    matched = replace_camera or _find_camera_by_device(config, device)
     if matched:
         default_profile = matched.uvc.profile if matched.uvc else matched.path
         default_path = matched.path
@@ -1384,11 +1386,12 @@ def _suggest_for_device(
 
     recommended = device.get("recommended", {})
     saved = matched.uvc.env if matched and matched.uvc else {}
+    capture = {} if replace_camera else saved
     explicit_mode = width is not None and height is not None and fps is not None
     try:
-        width = int(width if width is not None else saved.get("WIDTH") or recommended.get("width") or 1280)
-        height = int(height if height is not None else saved.get("HEIGHT") or recommended.get("height") or 720)
-        fps = float(fps if fps is not None else saved.get("FPS") or recommended.get("fps") or 30)
+        width = int(width if width is not None else capture.get("WIDTH") or recommended.get("width") or 1280)
+        height = int(height if height is not None else capture.get("HEIGHT") or recommended.get("height") or 720)
+        fps = float(fps if fps is not None else capture.get("FPS") or recommended.get("fps") or 30)
     except (ValueError, TypeError, OverflowError) as error:
         raise HTTPException(422, "Invalid capture mode") from error
     if width < 1 or height < 1 or not 0 < fps <= 1000:
@@ -1399,23 +1402,22 @@ def _suggest_for_device(
             and mode["height"] == height and abs((mode.get("fps") or fps) - fps) < .001
             for mode in device.get("modes", [])
         )
-        if not reported and input_format != saved.get("INPUT_FORMAT", ""):
+        if not reported and input_format != capture.get("INPUT_FORMAT", ""):
             raise HTTPException(422, "Select a capture format reported by the camera")
     else:
         compatible = next((mode for mode in device.get("modes", []) if mode["width"] == width
                            and mode["height"] == height and mode.get("fps") == fps), {})
-        saved_size = str(width) == str(saved.get("WIDTH")) and str(height) == str(saved.get("HEIGHT"))
-        if matched and (not explicit_mode or saved_size):
-            input_format = saved.get("INPUT_FORMAT")
+        saved_size = str(width) == str(capture.get("WIDTH")) and str(height) == str(capture.get("HEIGHT"))
+        if matched and not replace_camera and (not explicit_mode or saved_size):
+            input_format = capture.get("INPUT_FORMAT")
         else:
             input_format = compatible.get("input_format") or recommended.get("input_format")
     bitrate_value = default_bitrate if bitrate is None else str(bitrate).strip()
     suggestion = build_uvc_suggestion(
         driver=device["driver"],
         ffmpeg_device=(
-            device.get("ffmpeg_device_index")
-            if use_device_index and device.get("ffmpeg_device_index")
-            else device.get("ffmpeg_device")
+            device["ffmpeg_device_index"] if use_device_index and device.get("ffmpeg_device_index")
+            else capture.get("DEVICE") or device.get("stable_device") or device["ffmpeg_device"]
         ),
         display_name=device.get("display_name") or default_name,
         profile=(profile or default_profile),
@@ -1868,14 +1870,37 @@ def post_uvc_device_apply(
     payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     context = get_context(request)
+    revision = context.store.runtime_revision()
     old_cfg = context.store.get_effective()
-    result = _get_uvc_probe_result(context, refresh=False)
-    device = _find_probe_device_or_404(result, device_id)
     body = payload or {}
+    replace_id = body.get("replace_camera_id")
+    expected_device = body.get("expected_device")
+    refresh = replace_id is not None or (expected_device is not None and device_id.startswith("v4l2-"))
+    result = _get_uvc_probe_result(context, refresh=refresh)
+    device = _find_probe_device_or_404(result, device_id)
+    state = device.get("probe_state")
+    if state in {"permission_denied", "busy"}:
+        raise HTTPException(409, device.get("mode_warning") or "The camera cannot be opened.")
+    if expected_device is not None and expected_device != (device.get("stable_device") or device["ffmpeg_device"]):
+        raise HTTPException(409, "The detected USB camera changed. Scan for cameras again.")
+
+    replacement = None
+    if replace_id is not None:
+        replacement = next((camera for camera in old_cfg.cameras if camera.id == replace_id and camera.type == "uvc"), None)
+        if replacement is None:
+            raise HTTPException(404, "The saved USB camera could not be found.")
+        matched = _find_camera_by_device(old_cfg, device)
+        if matched and matched.id != replacement.id:
+            raise HTTPException(409, "This device is already assigned to another camera.")
+        if state == "modes_unavailable":
+            raise HTTPException(422, "Verify the new camera’s capture modes before replacing a camera.")
+        body = {}
+
 
     suggestion = _suggest_for_device(
         config=old_cfg,
         device=device,
+        replace_camera=replacement,
         profile=body.get("profile"),
         path=body.get("path"),
         camera_name=body.get("camera_name"),
@@ -1895,11 +1920,13 @@ def post_uvc_device_apply(
     cameras_payload: list[dict[str, Any]] = []
     for cam in old_cfg.cameras:
         if cam.id == matched_id:
+            cameras_payload.append(runtime_camera)
             continue
         if cam.path.lower() == new_path:
             raise HTTPException(409, 'The camera path is already used by another camera.')
         cameras_payload.append(cam.model_dump())
-    cameras_payload.append(runtime_camera)
+    if matched_id is None:
+        cameras_payload.append(runtime_camera)
 
     ignored_device_keys = _ignored_keys_for_device(device)
     ignored_devices = [
@@ -1911,7 +1938,12 @@ def post_uvc_device_apply(
     previous_camera = next((camera for camera in old_cfg.cameras if camera.id == matched_id), None)
     if previous_camera and previous_camera.path != runtime_camera['path']:
         update.update(_camera_path_changes(old_cfg, previous_camera.path, runtime_camera['path']))
-    new_cfg = context.store.patch_runtime(update)
+    try:
+        new_cfg = context.store.patch_runtime(update, expected_revision=revision)
+    except RuntimeRevisionMismatch as error:
+        raise HTTPException(409, str(error)) from error
+    except (ValueError, OSError) as error:
+        raise HTTPException(422, str(error)) from error
     _restart_affected(context, old_cfg, new_cfg)
 
     return {

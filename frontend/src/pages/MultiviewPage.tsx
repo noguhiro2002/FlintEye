@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { ApiClient } from "../api/client";
 import type { MultiviewStatus, MultiviewViewItem } from "../types";
 import { usePolling } from "../hooks/usePolling";
+import { ResponsiveDetails } from "../components/ResponsiveDetails";
 import { WebRtcEmbed } from "../components/WebRtcEmbed";
 import { useMediaPaused } from '../hooks/MonitoringContext';
 
@@ -65,7 +66,12 @@ export function MultiviewPage({ api, onConfigure }: MultiviewPageProps): JSX.Ele
       {error && <div className="panel-error">{error}</div>}
       {!paused && healthError && <div className="panel-note">{healthError}</div>}
       {initialLoading && <p role="status">Loading multiview outputs…</p>}
-      <div className="live-layout">
+      <div className="live-layout multiview-live-layout">
+        {selectedView && <div className="multiview-live-stage"><WebRtcEmbed
+          url={selectedView?.webrtc_url ?? null}
+          title={selectedView ? `Multiview: ${selectedView.id}` : "Multiview"}
+          unavailableMessage="The selected Multiview output has no playback address. Check its configuration and stream status."
+        /></div>}
         <div className="panel-list">
           <div className="panel-list-title">Views</div>
           {views.length === 0 ? (!initialLoading && !error && (
@@ -103,6 +109,7 @@ export function MultiviewPage({ api, onConfigure }: MultiviewPageProps): JSX.Ele
             })
           )}
           {selectedView?.source_items?.length ? (
+            <ResponsiveDetails summary="Source status">
             <div className="source-health-list">
               {selectedView.source_items.map((source) => {
                 const input = selectedStatus?.inputs.find(
@@ -127,13 +134,10 @@ export function MultiviewPage({ api, onConfigure }: MultiviewPageProps): JSX.Ele
                 );
               })}
             </div>
+            </ResponsiveDetails>
           ) : null}
         </div>
-        {selectedView && <WebRtcEmbed
-          url={selectedView?.webrtc_url ?? null}
-          title={selectedView ? `Multiview: ${selectedView.id}` : "Multiview"}
-          unavailableMessage="The selected Multiview output has no playback address. Check its configuration and stream status."
-        />}
+
       </div>
     </div>
   );

@@ -1,6 +1,39 @@
 import { useEffect, useState } from 'react';
 import type { ApiClient } from '../api/client';
 
+type NetworkStatus = Awaited<ReturnType<ApiClient['getNetwork']>>;
+
+function RestartInstructions() {
+  return <details className="restart-instructions">
+    <summary>How to restart FlintEye</summary>
+    <ul>
+      <li>Desktop: choose Quit FlintEye from the app menu, then open it again.</li>
+      <li>Terminal or SSH: stop FlintEye with Ctrl+C, then rerun the same command.</li>
+      <li>systemd: restart the FlintEye service using <code>systemctl restart flinteye</code> with your administrator account.</li>
+      <li>Docker Compose: run <code>docker compose restart</code> in your FlintEye project directory.</li>
+    </ul>
+  </details>;
+}
+
+export function ConnectionReminder({api, onConfigure}: {api: ApiClient; onConfigure: () => void}) {
+  const [status, setStatus] = useState<NetworkStatus | null>(null);
+  useEffect(() => {
+    if (!['127.0.0.1', 'localhost', '[::1]'].includes(window.location.hostname)) return;
+    let active = true;
+    void api.getNetwork().then(value => {
+      if (active && value.saved) setStatus(value);
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [api]);
+  if (!status || (!status.restart_required && status.lan_state !== 'unavailable')) return null;
+  return <section className="connection-reminder panel-note" aria-label="LAN or VPN connection">
+    <p role="status">{status.restart_required ? 'Connection changes are saved. Restart FlintEye to apply them.' :
+      status.error || 'LAN HTTPS could not start. Change the connection settings on this computer.'}</p>
+    {status.restart_required && <RestartInstructions />}
+    <button type="button" onClick={onConfigure}>Open connection settings</button>
+  </section>;
+}
+
 export function NetworkAccess({api, blocked, onDirtyChange, onSaved}: {api: ApiClient; blocked: boolean; onDirtyChange: (dirty: boolean) => void; onSaved: () => Promise<void>}) {
   const [status, setStatus] = useState<Awaited<ReturnType<ApiClient['getNetwork']>> | null>(null);
   const [error, setError] = useState('');
@@ -12,6 +45,9 @@ export function NetworkAccess({api, blocked, onDirtyChange, onSaved}: {api: ApiC
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [open, setOpen] = useState(false);
+  const activeAddress = status?.restart_required ? null : status?.lan_url;
+  const connectionLabel = status?.restart_required ? 'Restart required' : status?.lan_url ? 'Active' :
+    status?.lan_state === 'unavailable' ? 'Listener unavailable' : 'Off';
   const dirty = Boolean(status && (enabled !== status.saved.enabled || rtspEnabled !== Boolean(status.saved.rtsp_enabled) || address !== status.saved.address || sources !== status.saved.allowed_subnets.join(', ')));
   useEffect(() => { onDirtyChange(dirty); return () => onDirtyChange(false); }, [dirty, onDirtyChange]);
   const refresh = async (resetForm = true) => {
@@ -41,36 +77,31 @@ export function NetworkAccess({api, blocked, onDirtyChange, onSaved}: {api: ApiC
     catch (e) { setError(e instanceof Error ? e.message : 'Operation failed'); }
     finally { setBusy(false); }
   };
-  return <details className="runtime-advanced network-access form-span-3" onToggle={e => setOpen(e.currentTarget.open)}>
+  return <details id="lan-connection" className="runtime-advanced network-access form-span-3" onToggle={e => setOpen(e.currentTarget.open)}>
     <summary><span><strong>LAN connection and certificate trust</strong><small>Optional access from other devices on a LAN or VPN.</small></span></summary>
     <div className="network-access-body">
-    <p className="field-help">To connect from another device over LAN or VPN, allow access below, save, and restart FlintEye. Use the active HTTPS address and trust this installation’s certificate on each viewing device.</p>
+    <p className="field-help">Allow access below, save, and restart FlintEye. On each viewing device, trust the public certificate before opening the active HTTPS address.</p>
     {error && <p className="panel-error" role="alert">{error}</p>}
     {status && <>
       <dl className="network-addresses">
         <div><dt>This computer (HTTP)</dt><dd>{status.local_url || 'Unavailable'}</dd></div>
-        <div><dt>Active address for other devices (HTTPS)</dt><dd>{status.lan_url || (status.lan_state === 'unavailable' ? 'Listener unavailable' : 'Off')}</dd></div>
+        <div><dt>LAN or VPN connection</dt><dd>{connectionLabel}</dd></div>
+        {activeAddress && <div><dt>Active address for other devices (HTTPS)</dt><dd><a href={activeAddress}>{activeAddress}</a></dd></div>}
       </dl>
       {status.error && <p className="panel-error" role="alert">{status.error}</p>}
-      {status.restart_required && <p className="panel-note" role="status">Connection changes are saved. Restart FlintEye to apply them.</p>}
+      {status.restart_required && <>
+        <p className="panel-note" role="status">Connection changes are saved. Restart FlintEye to apply them.</p>
+        <RestartInstructions />
+      </>}
       {status.fingerprint && <div className="network-certificate"><strong>CA SHA-256 fingerprint</strong><code>{status.fingerprint}</code><span>Expires: {status.ca_expires}</span></div>}
-      {(status.saved.enabled || enabled) && <details className="runtime-advanced">
-        <summary><strong>Connect an iPhone or iPad</strong></summary>
-        <ol>
-          <li>Once the HTTPS address is active, save the public certificate and connection guide below. Match the CA fingerprint in the guide with the one on this screen.</li>
-          <li>Transfer <code>FlintEye.mobileconfig</code> to your device, open it, and install the profile in Settings → General → VPN &amp; Device Management.</li>
-          <li>In Settings → General → About → Certificate Trust Settings, enable full trust for this FlintEye root. Then open the active HTTPS address above.</li>
-        </ol>
-        <p className="field-help">For ERR_CERT_AUTHORITY_INVALID, verify that full trust is enabled for the current FlintEye CA. After renewing trust, export the guide again following the restart.</p>
-      </details>}
       <form aria-busy={busy} onSubmit={e => {e.preventDefault(); void act(() => api.networkAction('', {enabled, address, rtsp_enabled: enabled && rtspEnabled, allowed_subnets: sources.split(',').map(s => s.trim()).filter(Boolean)}, 'PUT'), true);}}>
         <fieldset className="settings-fields" disabled={busy || blocked}>
           <div className="form-grid">
           <label className="check form-span-3"><input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} /><span>Allow access from other devices on LAN or VPN (HTTPS)</span></label>
           <label>Server IPv4 address<input value={address} onChange={e => setAddress(e.target.value)} placeholder="192.168.1.10" required={enabled} aria-describedby="network-address-help"/></label>
           <label className="form-span-2">Permitted source networks (comma separated)<input value={sources} onChange={e => setSources(e.target.value)} placeholder="192.168.1.0/24" required={enabled} aria-describedby="network-source-help"/></label>
-          <p id="network-source-help" className="field-help form-span-3">Enter client networks as seen by FlintEye. A VPN can give the client a different IP range from the server. Use the narrow range approved for that network.</p>
-          <label className="check form-span-3"><input type="checkbox" disabled={!enabled} checked={enabled && rtspEnabled} onChange={e => setRtspEnabled(e.target.checked)} /><span>Allow external players (RTSPS, TCP 8322)</span></label>
+          <p id="network-source-help" className="field-help form-span-3">Enter client networks as seen by FlintEye. A VPN can give the client a different IP range from the server. For Tailscale, enter this server’s Tailscale IPv4 address and allow the viewing devices’ addresses, using /32 for an individual device.</p>
+          <label className="check form-span-3 advanced-setting"><input type="checkbox" disabled={!enabled} checked={enabled && rtspEnabled} onChange={e => setRtspEnabled(e.target.checked)} /><span>Allow external players (RTSPS, TCP 8322)</span></label>
           <p id="network-address-help" className="field-help form-span-3">Choose an IP assigned to this server. Reserve it in your router to keep the same address after reboot. Saving does not change the current connection.</p>
           </div>
           <div className="button-row">
@@ -81,14 +112,14 @@ export function NetworkAccess({api, blocked, onDirtyChange, onSaved}: {api: ApiC
       </form>
       <div className="button-row">
         <button type="button" disabled={busy} onClick={() => void refresh(false).catch(() => setError('Could not read the active connection status.'))}>Refresh connection status</button>
-        <button disabled={busy || blocked || !status.saved.enabled || status.restart_required || !status.lan_url}
+        <button disabled={busy || blocked || !activeAddress}
           onClick={() => void act(() => api.networkAction('/guide', {}))}>Save public certificate and connection guide</button>
-        <button disabled={busy || blocked || !status.saved.enabled} onClick={() => { if (window.confirm('Allow HTTPS TCP 18080 (or your configured API port) and WebRTC UDP 8189 (plus RTSPS TCP 8322 if enabled) for the selected IP and source ranges, on Private networks only? Windows will request administrator approval.')) void act(() => api.networkAction('/firewall', {action:'apply'})); }}>Windows: allow selected LAN access…</button>
-        <button disabled={busy || blocked} onClick={() => void act(() => api.networkAction('/firewall', {action:'remove'}))}>Windows: remove this installation’s rules…</button>
-        <button disabled={busy || blocked || !status.saved.enabled} onClick={() => {if (window.confirm('Replace the trust certificate? Every viewing device will need to trust the new certificate.')) void act(() => api.networkAction('/renew-trust', {confirm:true}));}}>Renew trust certificate…</button>
+        {status.can_manage_firewall && <button className="advanced-setting" disabled={busy || blocked || !status.saved.enabled} onClick={() => { if (window.confirm('Allow HTTPS TCP 18080 (or your configured API port) and WebRTC UDP 8189 (plus RTSPS TCP 8322 if enabled) for the selected IP and source ranges, on Private networks only? Windows will request administrator approval.')) void act(() => api.networkAction('/firewall', {action:'apply'})); }}>Windows: allow selected LAN access…</button>}
+        {status.can_manage_firewall && <button className="advanced-setting" disabled={busy || blocked} onClick={() => void act(() => api.networkAction('/firewall', {action:'remove'}))}>Windows: remove this installation’s rules…</button>}
+        <button className="advanced-setting" disabled={busy || blocked || !status.saved.enabled} onClick={() => {if (window.confirm('Replace the trust certificate? Every viewing device will need to trust the new certificate.')) void act(() => api.networkAction('/renew-trust', {confirm:true}));}}>Renew trust certificate…</button>
       </div>
       {status.last_denied_source && <p className="panel-note" role="status">Last source outside the permitted ranges <code>{status.last_denied_source}</code>. Compare this address with the permitted source networks above.</p>}
-      {status.saved.rtsp_enabled && <div>
+      {status.saved.rtsp_enabled && <div className="advanced-setting">
         <button type="button" disabled={busy || blocked || dirty} onClick={() => {
           if (!window.confirm('Create a new RTSPS reader password? Existing players will need the new password.')) return;
           void act(async () => {
@@ -103,7 +134,7 @@ export function NetworkAccess({api, blocked, onDirtyChange, onSaved}: {api: ApiC
       <p className="field-help"><a href={status.guide_url} target="_blank" rel="noreferrer">Trust, Firewall and recovery instructions / 日本語の手順</a></p>
       {message && <p className="panel-ok" role="status">{message}</p>}
       {blocked && <p className="field-help">Save or discard your other settings before changing LAN access.</p>}
-      <p className="field-help">Use the public connection guide to transfer the CA certificate; compare its fingerprint on the server. Do not ignore browser certificate warnings or share private keys.</p>
+      <p className="field-help">If your browser reports ERR_CERT_AUTHORITY_INVALID, match the public CA fingerprint against this screen and follow the trust instructions on the viewing device.</p>
     </>}
     </div>
   </details>;

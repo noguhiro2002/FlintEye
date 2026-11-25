@@ -1,3 +1,4 @@
+import { chooseSettingsCategory } from './settings-navigation.mjs';
 // Playwright drives the production Settings form. The real server persists and
 // validates edits; cameras and media processes are disabled in this fixture.
 import assert from 'node:assert/strict';
@@ -15,8 +16,7 @@ const cases = [], pageErrors = [];
 page.on('pageerror', error => pageErrors.push(error.message));
 page.on('dialog', dialog => dialog.accept());
 const header = page.locator('.settings-page-header');
-const nav = page.getByRole('complementary', { name: 'Settings categories' });
-const category = name => nav.getByRole('button', { name, exact: true }).click();
+const category = name => chooseSettingsCategory(page, name);
 const section = name => page.locator(`.settings-section-${name}`);
 const label = name => new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\s|$)`);
 const password = 'settings-fixture-admin-only';
@@ -244,7 +244,7 @@ try {
   assert(!(await save()).cameras.some(item => item.path === 'qa-camera'));
   cases.push({group:'cameras', result:'camera removed and absence verified'});
 
-  await category('Advanced');
+  await category('Runtime JSON');
   const editor = page.getByRole('textbox', {name: 'Full runtime JSON'});
   const before = await effective();
   const configs = JSON.parse(await editor.inputValue());

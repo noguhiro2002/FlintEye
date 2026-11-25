@@ -28,6 +28,8 @@ on:
       - packaging/ci_apt.py
       - packaging/LifecycleLinux.Dockerfile
       - frontend/tests/installed.mjs
+      - frontend/tests/preview10.mjs
+      - tools/verify_before_push.py
       - frontend/tests/settings-*
       - tests/test_macos_lifecycle.py
       - tests/test_install_staging.py

@@ -1,9 +1,11 @@
 import { UpdateNotice } from "./components/UpdateNotice";
 import { StorageStatus } from "./components/StorageStatus";
-import { MonitoringStatus } from "./components/MonitoringStatus";
 import { MonitoringProvider } from './hooks/MonitoringContext';
 import { useConfirmChanges } from "./components/ConfirmChanges";
 import { FirstRun } from "./components/FirstRun";
+import { ConnectionReminder } from "./components/NetworkAccess";
+import { ThemeMenu, useTheme } from "./components/ThemeMenu";
+import type { SettingsTarget } from "./settingsNavigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiClient } from "./api/client";
 import { Sidebar, type PageKey } from "./components/Sidebar";
@@ -22,7 +24,9 @@ const DEFAULT_FOOTER_TEXT = "© 2026 Noguhiro. Sustainable Use License + additio
 
 export default function App(): JSX.Element {
   const { ask, confirmation } = useConfirmChanges();
+  const theme = useTheme();
   const [showGuide, setShowGuide] = useState(false);
+  const [settingsTarget, setSettingsTarget] = useState<SettingsTarget>();
   const [page, setPage] = useState<PageKey>("dashboard");
   const [appTitle, setAppTitle] = useState(DEFAULT_APP_TITLE);
   const [sidebarTitle, setSidebarTitle] = useState(DEFAULT_SIDEBAR_TITLE);
@@ -101,10 +105,15 @@ export default function App(): JSX.Element {
     }
     return !settingsDirty.current || ask("Your changes have not been saved. Discard them to leave Settings.");
   };
-  const navigate = async (next: PageKey): Promise<void> => {
+  const navigate = async (next: PageKey, target?: SettingsTarget): Promise<void> => {
     const request = ++navigationRequest.current;
-    if (next === page || !await canLeaveSettings() || request !== navigationRequest.current) return;
+    if (next === page) {
+      if (next === "settings" && target) setSettingsTarget({ ...target });
+      return;
+    }
+    if (!await canLeaveSettings() || request !== navigationRequest.current) return;
     setSettingsDirty(false);
+    setSettingsTarget(target);
     setPage(next);
   };
 
@@ -121,14 +130,15 @@ export default function App(): JSX.Element {
   }
 
   if (authError || !auth) {
-    return <div className="page loading-page"><h1>FlintEye</h1>
+    return <div className="login-page"><section className="login-card">
+      <div className="login-title"><h1>FlintEye</h1><ThemeMenu {...theme} /></div>
       <p role="alert">Unable to check your session. {authError}</p>
       <button type="button" onClick={() => void refreshSession()}>Retry connection</button>
-    </div>;
+    </section></div>;
   }
 
   if (auth?.setup_required || showLogin || !isViewerAllowed) {
-    return <LoginPage api={api} auth={auth} onLoggedIn={refreshSession} onCancel={isViewerAllowed ? () => setShowLogin(false) : undefined} />;
+    return <LoginPage appearance={<ThemeMenu {...theme} />} api={api} auth={auth} onLoggedIn={refreshSession} onCancel={isViewerAllowed ? () => setShowLogin(false) : undefined} />;
   }
 
   return (
@@ -139,7 +149,8 @@ export default function App(): JSX.Element {
         <header className="topbar">
           <div className="topbar-title">{appTitle}</div>
           <div className="session-box">
-            {hasAdminAccess && <button type="button" onClick={() => setShowGuide(true)}>Getting started</button>}
+            {hasAdminAccess && showGuide && <button type="button" className="topbar-guide" onClick={() => document.querySelector(".first-run")?.scrollIntoView({ block: "start" })}>Getting started</button>}
+            <ThemeMenu {...theme} />
             <div className="session-meta">
               <strong>{auth?.authenticated ? auth.username : "Public viewer"}</strong>
               <span>{auth?.role ?? (auth?.viewer_auth_required ? "guest" : "public")}</span>
@@ -157,19 +168,19 @@ export default function App(): JSX.Element {
           </div>
         </header>
 
+        {hasAdminAccess && page !== "settings" && <ConnectionReminder api={api} onConfigure={() => void navigate("settings", { section: "runtime", anchor: "lan-connection" })} />}
         <StorageStatus />
-        {page === 'dashboard' && <MonitoringStatus api={api} canManage={hasAdminAccess} />}
         {hasAdminAccess && <UpdateNotice />}
         {hasAdminAccess && showGuide && <FirstRun api={api} navigate={navigate} onClose={() => setShowGuide(false)} />}
-        {page === "dashboard" && <DashboardPage api={api} />}
-        {page === "information" && <InformationPage api={api} />}
+        {page === "dashboard" && <DashboardPage api={api} canManage={hasAdminAccess} />}
+        {page === "information" && <InformationPage api={api} onOpenGuide={hasAdminAccess ? () => setShowGuide(true) : undefined} />}
         {page === "settings" && hasAdminAccess && (
-          <SettingsPage api={api} onDirtyChange={setSettingsDirty} onSaveStarted={onSettingsSaveStarted} onUiConfigChanged={() => void refreshSession()} />
+          <SettingsPage api={api} target={settingsTarget} onDirtyChange={setSettingsDirty} onSaveStarted={onSettingsSaveStarted} onUiConfigChanged={() => void refreshSession()} />
         )}
         {page === "live" && (
-          <LiveViewPage api={api} canManage={hasAdminAccess} authRole={auth?.role ?? null} onConfigure={() => navigate("settings")} />
+          <LiveViewPage api={api} canManage={hasAdminAccess} authRole={auth?.role ?? null} onConfigure={() => void navigate("settings", { section: "cameras" })} />
         )}
-        {page === "multiview" && <MultiviewPage api={api} onConfigure={hasAdminAccess ? () => navigate("settings") : undefined} />}
+        {page === "multiview" && <MultiviewPage api={api} onConfigure={hasAdminAccess ? () => void navigate("settings", { section: "multiview" }) : undefined} />}
         {page === "recordings" && <RecordingsPage api={api} canDownload={hasAdminAccess} />}
         <footer className="app-footer">{footerText}</footer>
       </main>

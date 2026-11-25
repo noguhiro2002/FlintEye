@@ -1,17 +1,18 @@
 import { SetupAccount } from "../components/FirstRun";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { ApiClient } from "../api/client";
 import type { AuthMeResponse } from "../types";
 
 interface LoginPageProps {
   api: ApiClient;
+  appearance: ReactNode;
   auth: AuthMeResponse | null;
   onLoggedIn: () => Promise<void> | void;
   onCancel?: () => void;
 }
 
-export function LoginPage({ api, auth, onLoggedIn, onCancel }: LoginPageProps): JSX.Element {
-  const [username, setUsername] = useState(auth?.local.admin_username ?? "admin");
+export function LoginPage({ api, auth, appearance, onLoggedIn, onCancel }: LoginPageProps): JSX.Element {
+  const [username, setUsername] = useState(auth?.local?.admin_username ?? "admin");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -37,8 +38,8 @@ export function LoginPage({ api, auth, onLoggedIn, onCancel }: LoginPageProps): 
   return (
     <div className="login-page">
       <div className="login-card">
-        <h1>FlintEye</h1>
-        <p className="login-subtitle">Sign in to manage cameras, multiview, and recordings.</p>
+        <div className="login-title"><h1>FlintEye</h1>{appearance}</div>
+        {!setupRequired && <p className="login-subtitle">Sign in to manage cameras, multiview, and recordings.</p>}
         {provider === "legacy_token" ? (
           <div className="panel-note">
             Legacy token mode: sign in with username <code>admin</code> or <code>viewer</code>, and use the
@@ -75,8 +76,8 @@ export function LoginPage({ api, auth, onLoggedIn, onCancel }: LoginPageProps): 
               </button>
             )}
             <div className="login-hint">
-              Viewer username: <code>{provider === "legacy_token" ? "viewer" : auth?.local.viewer_username ?? "viewer"}</code>
-              {" | "}Admin username: <code>{provider === "legacy_token" ? "admin" : auth?.local.admin_username ?? "admin"}</code>
+              Viewer username: <code>{provider === "legacy_token" ? "viewer" : auth?.local?.viewer_username ?? "viewer"}</code>
+              {" | "}Admin username: <code>{provider === "legacy_token" ? "admin" : auth?.local?.admin_username ?? "admin"}</code>
             </div>
           </form>
         )}

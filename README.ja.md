@@ -62,15 +62,15 @@ bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap clean
 
 - **Windows** — 一般ユーザーでEXEまたはPowerShellのインストーラーを実行します。インストール先は `%LOCALAPPDATA%\Programs\FlintEye` です。スタートメニューから起動できます。削除するときはFlintEyeを終了し、**設定 → アプリ → FlintEye → アンインストール**を選びます。データを保持する既定の選択を使ってください。
 - **macOS** — 一般ユーザーでワンコマンド版を実行するか、DMG内の `FlintEye.app` を個人用の `~/Applications` にコピーして開きます。必要に応じて[初回起動の承認手順](#macos-trust)に従ってください。削除するときはメニューバーで **Disable start at login and quit** を選び、そのアプリをゴミ箱に移動します。組織管理のMacでは、起動に管理者の承認が必要な場合があります。
-- **Linux** — スクリプトをダウンロードし、次のコマンドを実行します。同じビルドのActions成果物で試す場合は、ZIPを展開し、そのフォルダで `--package-directory .` を付けて実行します。[install.shをダウンロード](https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.9/install.sh)
+- **Linux** — 次の1行で公開済みプレビュー版のスクリプトを取得し、ユーザー権限で導入します。同じビルドのActions成果物を使う場合は、ZIPを展開したフォルダで `bash ./install.sh --user --package-directory .` を実行します。[install.shをダウンロード](https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.9/install.sh)
 
 ```sh
-bash ./install.sh --user
+bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script" --user' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.9/install.sh
 ```
 
 対応するUbuntu、Debian、64ビット版Raspberry Pi OSでは `dpkg-deb`、Rocky Linux、AlmaLinux、RHELでは `rpm2cpio` と `cpio` を使います。[実行に必要なライブラリ](packaging/nfpm.yaml)はOS側に入っている必要があります。インストール先は `~/.local/opt/flinteye-user` です。`"$HOME/.local/opt/flinteye-user/FlintEye"` で起動し、案内されたアドレスを開きます。サーバーでは `--headless` を付けて起動し、Ctrl+Cで終了します。
 
-削除するときはFlintEyeを終了し、同じスクリプトで `bash ./install.sh --user --uninstall` を実行します。設定と録画はプログラムフォルダの外に保存してください。既定のデータ保存先は `$XDG_DATA_HOME/flinteye` で、`XDG_DATA_HOME` が未設定なら `~/.local/share/flinteye` です。カスタムプロファイルでは、削除する前にそのプロファイルのログイン時起動を無効にしてください。
+削除するときはFlintEyeを終了し、同じリリースから `install.sh` を取得して `bash ./install.sh --user --uninstall` を実行します。設定と録画はプログラムフォルダの外に保存してください。既定のデータ保存先は `$XDG_DATA_HOME/flinteye` で、`XDG_DATA_HOME` が未設定なら `~/.local/share/flinteye` です。カスタムプロファイルでは、削除する前にそのプロファイルのログイン時起動を無効にしてください。
 
 同じ端末で使う場合は **This computer only** を選びます。USBカメラやマイクにはOSの利用許可が必要です。別端末から接続する場合、ファイアウォールや証明書の設定に管理者の対応が必要なことがあります。[LAN・VPN接続ガイド](docs/LAN_ACCESS.ja.md)
 

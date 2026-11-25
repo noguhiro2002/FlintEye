@@ -9,6 +9,7 @@ Redistributed artifacts contain a `licenses` directory and a versioned inventory
 | MediaMTX | Media transport and recording | https://github.com/bluenviron/mediamtx |
 | HLS.js | MediaMTX's embedded browser playback | https://github.com/video-dev/hls.js |
 | FreeType / HarfBuzz | Text rendering in FFmpeg | https://freetype.org/ · https://harfbuzz.github.io/ |
+| Noto Sans JP Regular, Sans2.004 (SIL Open Font License 1.1) | Multiview labels | [Noto CJK release](https://github.com/notofonts/noto-cjk/tree/Sans2.004) · [License and notice](flinteye_app/fonts/OFL.txt) |
 | CPython / Tcl/Tk | Application runtime and native dialogs | https://www.python.org/ · https://www.tcl.tk/ |
 | PyInstaller | Runtime packaging, with distribution exception | https://pyinstaller.org/en/stable/license.html |
 | React, Heroicons and other npm packages | Browser interface | See frontend package lock and bundled notices |

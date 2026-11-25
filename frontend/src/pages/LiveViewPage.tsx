@@ -252,7 +252,21 @@ export function LiveViewPage({ api, canManage = false, authRole = null, onConfig
           : " Ask your administrator to add a camera."}
       </div>}
 
-      <div className="live-layout">
+      <div className="live-layout camera-live-layout">
+        <div className="live-view-stage">
+          {selectedCamera?.audio_enabled && !paused && <p className="field-help">
+            {(selectedCamera.audio_live_ready ?? selectedCamera.audio_receiving) ? "Audio available. Use the player’s volume control to listen."
+              : "Camera audio is enabled, but no audio is being received."}
+          </p>}
+          {selectedCamera && <WebRtcEmbed
+            key={selectedCamera.id + ":" + Boolean(selectedCamera.audio_live_ready)}
+            url={selectedCamera?.addresses.webrtc_url ?? null}
+            title={selectedCamera ? `Camera: ${selectedCamera.label || selectedCamera.id}` : "Camera"}
+          />}
+          {selectedCamera && canControlSelectedPtz && !paused ? (
+            <PtzControls key={selectedCamera.id} api={api} camera={selectedCamera} isAdmin={canManage} />
+          ) : null}
+        </div>
         <div className="thumb-grid">
           {cameras.map((camera) => {
             const selected = camera.id === selectedId;
@@ -305,20 +319,7 @@ export function LiveViewPage({ api, canManage = false, authRole = null, onConfig
           })}
         </div>
 
-        <div className="live-view-stage">
-          {selectedCamera?.audio_enabled && !paused && <p className="field-help">
-            {(selectedCamera.audio_live_ready ?? selectedCamera.audio_receiving) ? "Audio available. Use the player’s volume control to listen."
-              : "Camera audio is enabled, but no audio is being received."}
-          </p>}
-          {selectedCamera && <WebRtcEmbed
-            key={selectedCamera.id + ":" + Boolean(selectedCamera.audio_live_ready)}
-            url={selectedCamera?.addresses.webrtc_url ?? null}
-            title={selectedCamera ? `Camera: ${selectedCamera.label || selectedCamera.id}` : "Camera"}
-          />}
-          {selectedCamera && canControlSelectedPtz && !paused ? (
-            <PtzControls key={selectedCamera.id} api={api} camera={selectedCamera} isAdmin={canManage} />
-          ) : null}
-        </div>
+
       </div>
     </div>
   );

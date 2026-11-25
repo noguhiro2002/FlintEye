@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import re
 import subprocess
 from flinteye_app.process_lifetime import run_background
@@ -241,39 +242,73 @@ def _parse_v4l2_modes(text: str) -> list[dict[str, Any]]:
     return list(modes.values())
 
 
-def _probe_v4l2_devices(ffmpeg_bin: str, timeout_sec: float) -> list[dict[str, Any]]:
+def _probe_v4l2_devices(
+    ffmpeg_bin: str, timeout_sec: float, *, device_directory: Path = Path("/dev"),
+) -> list[dict[str, Any]]:
     from flinteye_app.v4l2_modes import enumerate_modes
 
+    aliases: dict[Path, list[str]] = {}
+    for alias in sorted((device_directory / "v4l/by-id").glob("*")):
+        if alias.is_symlink():
+            try:
+                aliases.setdefault(alias.resolve(strict=True), []).append(str(alias))
+            except (OSError, RuntimeError):
+                continue
+
     devices: list[dict[str, Any]] = []
-    for path in sorted(Path("/dev").glob("video[0-9]*")):
-        message = ""
+    for path in sorted(device_directory.glob("video[0-9]*")):
+        if not re.fullmatch(r"video[0-9]+", path.name):
+            continue
+        state, message = "available", ""
         try:
             modes = enumerate_modes(path)
             if modes is None:
                 continue
-        except PermissionError:
-            modes, message = [], "Camera access denied. Check video-device permissions."
-        except OSError:
+        except OSError as error:
             modes = []
-        if not modes and not message:
+            if error.errno in {errno.ENOENT, errno.ENODEV, errno.ENXIO}:
+                continue
+            if error.errno in {errno.EACCES, errno.EPERM} or isinstance(error, PermissionError):
+                state = "permission_denied"
+                message = "Camera access denied for the FlintEye process. Check this account’s access to the video device."
+            elif error.errno == errno.EBUSY:
+                state = "busy"
+                message = "The camera is in use. Close other camera applications and scan again."
+
+        if not modes and state == "available":
             try:
                 result = _run_capture(
                     [ffmpeg_bin, "-hide_banner", "-f", "v4l2", "-list_formats", "all", "-i", str(path)],
                     timeout_sec=timeout_sec,
                 )
-                modes = _parse_v4l2_modes((result.stdout or "") + "\n" + (result.stderr or ""))
+                output = (result.stdout or "") + "\n" + (result.stderr or "")
+                if "not a video capture device" in output.lower():
+                    continue
+                modes = _parse_v4l2_modes(output)
+                if "device or resource busy" in output.lower():
+                    state = "busy"
+                    message = "The camera is in use. Close other camera applications and scan again."
+                elif "permission denied" in output.lower() or "operation not permitted" in output.lower():
+                    state = "permission_denied"
+                    message = "Camera access denied for the FlintEye process. Check this account’s access to the video device."
             except (subprocess.TimeoutExpired, OSError):
-                modes = []
-            message = ("The driver did not report frame rates. Confirm a mode manually." if modes else
-                       "Capture modes could not be read. Check the device and try again.")
-        name = path.name
+                pass
+            if state == "available":
+                state = "modes_unavailable"
+                message = ("The driver did not report frame rates. Confirm a mode manually." if modes else
+                           "Capture modes could not be read. Check the device and try again.")
+
+        device_aliases = aliases.get(path, [])
         devices.append({
-            "device_id": f"v4l2-{_slug(name)}",
+            "device_id": f"v4l2-{_slug(path.name)}",
             "driver": "v4l2",
-            "display_name": name,
+            "display_name": path.name,
             "index": None,
             "ffmpeg_device": str(path),
             "ffmpeg_device_index": str(path),
+            "device_aliases": device_aliases,
+            "stable_device": device_aliases[0] if len(device_aliases) == 1 else None,
+            "probe_state": state,
             "modes": modes,
             "mode_warning": message,
             "recommended": _pick_recommended_mode(modes),

@@ -1,3 +1,4 @@
+import { chooseSettingsCategory } from './settings-navigation.mjs';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync } from 'node:fs';
 process.chdir(fileURLToPath(new URL('../..', import.meta.url)));
@@ -160,7 +161,7 @@ try {
     });
     await run('8 encoder search', async () => { let { ctx, p } = await context('admin'); await p.locator('.sidebar').getByRole('button', { name: 'Settings', exact: true }).click(); const search = p.getByRole('searchbox', { name: 'Find a setting' }); await search.fill('Encoder'); await p.waitForTimeout(200); assert.doesNotMatch(await p.locator('.settings-page').innerText(), /0 settings found/i); await ctx.close(); });
     await run('10 mandatory login', async () => { let { ctx, p } = await context('viewer'); assert.equal(await p.getByRole('button', { name: 'Back', exact: true }).count(), 0); await ctx.close(); });
-    await run('13 unsaved summary', async () => { let { ctx, p } = await context('admin'); await p.locator('.sidebar').getByRole('button', { name: 'Settings', exact: true }).click(); let nav = p.getByRole('complementary', { name: 'Settings categories' }); await nav.getByRole('button', { name: 'General', exact: true }).click(); await p.getByRole('textbox', { name: /^App Title/ }).fill('Draft'); await nav.getByRole('button', { name: 'Quick settings', exact: true }).click(); const recording = p.locator('.quick-setting-row').filter({ hasText: 'Recording' }).getByRole('checkbox'); await recording.uncheck(); const txt = await p.locator('.settings-page').innerText(); assert.doesNotMatch(txt, /1 pending change\b/i); await ctx.close(); });
+    await run('13 unsaved summary', async () => { let { ctx, p } = await context('admin'); await p.locator('.sidebar').getByRole('button', { name: 'Settings', exact: true }).click(); await chooseSettingsCategory(p, 'General'); await p.getByRole('textbox', { name: /^App Title/ }).fill('Draft'); await chooseSettingsCategory(p, 'Recording', { advanced: false }); const recording = p.getByRole('checkbox', { name: 'Recording Enabled', exact: true }); await recording.setChecked(!await recording.isChecked()); const pending = p.locator('.settings-pending'); await pending.locator('summary').click(); assert.equal(await pending.locator('li').count(), 2); await ctx.close(); });
     await run('5 empty mobile navigation', async () => { let { ctx, p } = await context('admin', 390, 844); for (const name of ['Live View', 'Multiview']) {
         await p.locator('.sidebar').getByRole('button', { name, exact: true }).click();
         const box = await p.locator('.sidebar').boundingBox();

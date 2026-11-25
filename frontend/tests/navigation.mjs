@@ -94,7 +94,18 @@ catch (e) {
 try {
     await run('6 removed camera', async () => { const { ctx, p, removeFirst } = await start('admin', 390); await p.locator('.sidebar').getByRole('button', { name: 'Live View', exact: true }).click(); await p.locator('.thumb-select').filter({ hasText: 'Front entrance' }).waitFor(); removeFirst(); await p.waitForTimeout(4800); assert.match(await p.locator('.webrtc-title').innerText(), /Back door/); await ctx.close(); });
     await run('6 removed multiview', async () => { const { ctx, p, removeView } = await start('admin', 390); await p.locator('.sidebar').getByRole('button', { name: 'Multiview', exact: true }).click(); await p.getByText('all-cameras', { exact: true }).first().waitFor(); removeView(); await p.waitForTimeout(4800); assert.match(await p.locator('.webrtc-title').innerText(), /other-cameras/); await ctx.close(); });
-    await run('14 guide navigation', async () => { const { ctx, p } = await start('admin', 390); await p.locator('.sidebar').getByRole('button', { name: 'Recordings', exact: true }).click(); await p.getByRole('button', { name: 'Getting started' }).click(); assert.equal(await p.locator('.sidebar').getByRole('button', { name: 'Recordings', exact: true }).getAttribute('aria-current'), 'page'); assert.equal(await p.locator('.sidebar').getByRole('button', { name: 'Dashboard', exact: true }).getAttribute('aria-current'), null); await ctx.close(); });
+    await run('14 guide navigation', async () => {
+        const { ctx, p } = await start('admin', 390);
+        try {
+            await p.locator('.sidebar').getByRole('button', { name: 'Recordings', exact: true }).click();
+            assert.equal(await p.getByRole('button', { name: 'Getting started' }).count(), 0);
+            const information = p.locator('.sidebar').getByRole('button', { name: 'Information', exact: true });
+            await information.click();
+            await p.getByRole('button', { name: 'Getting started', exact: true }).click();
+            await p.getByRole('complementary', { name: 'Getting started' }).waitFor();
+            assert.equal(await information.getAttribute('aria-current'), 'page');
+        } finally { await ctx.close(); }
+    });
     await run('failed camera operations stay visible through a refresh', async () => {
         let release;
         const { ctx, p } = await start('admin', 390, 900, {

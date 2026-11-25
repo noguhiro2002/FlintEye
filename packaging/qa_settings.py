@@ -11,7 +11,7 @@ from lifecycle_common import ROOT, request_quit, seed_runtime, stop_process, wai
 
 def main(output):
     output.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix='flinteye-settings-qa-') as directory:
+    with tempfile.TemporaryDirectory(prefix='flinteye-settings-qa-', dir=output) as directory:
         profile = Path(directory)/'profile'
         owned_profile(profile)
         port = seed_runtime(profile, str(profile), 'unused-qa-command')

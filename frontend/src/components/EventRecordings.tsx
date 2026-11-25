@@ -133,7 +133,7 @@ export function EventRecordingList({ api, canDownload, onPlay, busy }: {
     {error && <p role="alert" className="panel-error">{error}</p>}
     {!items && !error && <p role="status">Loading event recordings…</p>}
     {items?.length === 0 && <p>No event recordings yet.</p>}
-    {items?.slice(0, PAGE_SIZE).map(event => <article key={event.id} className="configuration-card">
+    {items?.slice(0, PAGE_SIZE).map(event => <article key={event.id} className="configuration-card event-recording-card">
       <h4>{event.label || "Equipment event"} · {date(event.occurred_at)}</h4>
       <p>{statusLabels[event.status] ?? event.status} · {event.detail}</p>
       <p>Requested {date(event.requested_from)} – {date(event.occurred_at)}</p>

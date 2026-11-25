@@ -86,7 +86,7 @@ export function CameraAudioSettings({ api, cameraId, blocked, saved, current }: 
         <button type="button" onClick={() => void check()} disabled={dirty}>Check audio input</button>
         {dirty && <button type="button" onClick={() => void save()}>Save camera audio</button>}
       </div>
-      {draft.enabled && <div className="form-grid">
+      {draft.enabled && <div className="form-grid advanced-setting">
         <label>Audio preset<select value={draft.preset} onChange={e => changePreset(e.target.value as CameraAudioConfig["preset"])}>
           <option value="standard">Standard · 16 kHz · 16 bit</option>
           <option value="high">High · 48 kHz · 24 bit</option>

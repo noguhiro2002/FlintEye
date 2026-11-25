@@ -138,7 +138,7 @@ export class ApiClient {
     saved: {enabled: boolean; address: string; allowed_subnets: string[]; rtsp_enabled?: boolean};
     rtsp_status?: string; restart_required: boolean; local_url: string; lan_url: string | null;
     lan_state?: 'listening' | 'unavailable' | 'disabled'; last_denied_source?: string | null;
-    error: string; fingerprint?: string; ca_expires?: string; guide_url: string;
+    error: string; fingerprint?: string; ca_expires?: string; guide_url: string; can_manage_firewall?: boolean;
   }> { return this.request('/api/v1/network'); }
   networkAction(action: string, body: unknown, method = 'POST'): Promise<{message?: string; path?: string}> {
     return this.request('/api/v1/network' + action, {method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});

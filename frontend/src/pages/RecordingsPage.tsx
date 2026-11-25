@@ -210,6 +210,7 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
   const [recordedTo, setRecordedTo] = useState("");
   const [timeBasis, setTimeBasis] = useState<"recorded" | "updated">("recorded");
   const [showEvents, setShowEvents] = useState(false);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const timeLabel = timeBasis === "recorded" ? "Recorded" : "Updated";
   const rangeInvalid = Boolean(recordedFrom && recordedTo && recordedFrom > recordedTo);
   const queryKey = JSON.stringify([selectedStream, statusFilter, recordedFrom, recordedTo, timeBasis, sortKey, sortDir, pageIndex, pageSize]);
@@ -450,7 +451,11 @@ export function RecordingsPage({ api, canDownload = false }: RecordingsPageProps
       {streamError && <div className="panel-error" role="alert">{streamError}</div>}
       {showingPrevious && <div role="status">Showing previous results; they may not match the current filters.</div>}
 
-      <section className="recording-toolbar" aria-label="Recording filters and sorting">
+      <button type="button" className="recording-filter-toggle" aria-expanded={mobileFiltersOpen}
+        aria-controls="recording-toolbar" onClick={() => setMobileFiltersOpen(open => !open)}>
+        {mobileFiltersOpen ? "Hide filters and sorting" : "Show filters and sorting"}
+      </button>
+      <section id="recording-toolbar" className={"recording-toolbar" + (mobileFiltersOpen ? " is-open" : "")} aria-label="Recording filters and sorting">
         <div className="recording-toolbar-group recording-filter-group" aria-label="Filters">
           <div className="recording-toolbar-group-title">Filters</div>
           <div className="recording-filter-controls">

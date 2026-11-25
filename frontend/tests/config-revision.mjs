@@ -1,3 +1,4 @@
+import { chooseSettingsCategory } from './settings-navigation.mjs';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
@@ -116,7 +117,7 @@ try {
     const page = test.page;
     await page.locator('.sidebar').getByRole('button', { name: 'Settings', exact: true }).click();
     await page.getByText('127.0.0.1:18765', { exact: true }).waitFor();
-    await page.getByRole('complementary', { name: 'Settings categories' }).getByRole('button', { name: 'General', exact: true }).click();
+    await chooseSettingsCategory(page, 'General');
     const title = page.getByRole('textbox', { name: /^App Title/ });
     await title.fill('Protected edit');
     if (conflict) {
@@ -132,7 +133,7 @@ try {
       await page.getByText('All changes saved', { exact: true }).waitFor();
       assert.deepEqual(test.patches.at(-1).payload.cameras.map(camera => camera.path), ['first', 'second']);
       assert.equal(await title.inputValue(), 'Protected edit');
-      await page.getByRole('complementary', { name: 'Settings categories' }).getByRole('button', { name: 'MediaMTX', exact: true }).click();
+      await chooseSettingsCategory(page, 'MediaMTX');
       await page.getByRole('textbox', { name: /^Service Name/ }).fill('QA media server');
       await page.getByRole('button', { name: 'Save changes', exact: true }).first().click();
       await page.getByText('All changes saved', { exact: true }).waitFor();
@@ -145,8 +146,8 @@ try {
     const test = await scenario({ lan: true });
     const { page } = test;
     await page.locator('.sidebar').getByRole('button', { name: 'Settings', exact: true }).click();
-    const categories = page.getByRole('complementary', { name: 'Settings categories' });
-    await categories.getByRole('button', { name: 'Cameras', exact: true }).click();
+
+    await chooseSettingsCategory(page, 'Cameras');
     await page.getByRole('button', { name: 'Add IP Camera' }).click();
     const source = page.locator('.ip-camera-card').last().getByRole('textbox', { name: /^Source URL/ });
     await source.fill('rtsp://example.test/lan-camera');
@@ -161,7 +162,7 @@ try {
     assert.equal(expected, '"2"');
     assert.equal(payload.cameras.at(-1).ip.source_url, 'rtsp://example.test/lan-camera');
     assert.ok(!('mediamtx' in payload), 'Camera edits should omit unchanged MediaMTX settings');
-    await categories.getByRole('button', { name: 'Advanced', exact: true }).click();
+    await chooseSettingsCategory(page, 'Runtime JSON');
     const runtime = JSON.parse(await page.getByRole('textbox', { name: 'Full runtime JSON' }).inputValue());
     assert.deepEqual(runtime.mediamtx, media, 'Advanced JSON should use the server-compatible MediaMTX keys');
     await test.close();

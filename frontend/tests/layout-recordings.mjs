@@ -113,6 +113,11 @@ try {
             const page = result.p;
             await page.locator('.recording-card').nth(1).waitFor();
             await checkWidth(page, 'Recordings', width);
+            if (width <= 900) {
+                const toggle = page.getByRole('button', {name: 'Show filters and sorting'});
+                assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
+                await toggle.click();
+            }
             const stream = page.locator('.recording-filter-controls select').first();
             await reachable(stream, width);
             await stream.selectOption('rear');

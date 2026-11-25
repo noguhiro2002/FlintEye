@@ -699,6 +699,50 @@ class ApiContractTests(unittest.TestCase):
                     self.assertEqual(admin.get(camera_url).status_code, 200)
                     self.assertEqual(admin.delete(camera_url).status_code, 200)
 
+    def test_usb_rebind_preserves_camera_identity_and_recording_references(self):
+        admin = self.clients["admin"]
+        context = self.app.state.context
+        context.store.patch_runtime({
+            "cameras": [{"id": "retained-usb", "path": "retained-usb", "type": "uvc",
+                         "display_name": "Retained name", "enabled": True,
+                         "uvc": {"profile": "cam9", "env": {"DEVICE": "/dev/video91", "WIDTH": "1920"},
+                                 "extra_args": ["-threads", "2"]}}],
+            "recording": {"record_paths": ["retained-usb"]},
+            "multiview": {"source_paths": ["retained-usb"]},
+        })
+        mode = {"width": 640, "height": 480, "fps": 30.0, "input_format": "mjpeg"}
+        alias = "/dev/v4l/by-id/usb-new-video-index0"
+        device = {"device_id": "v4l2-video4", "driver": "v4l2", "display_name": "video4",
+                  "ffmpeg_device": "/dev/video4", "device_aliases": [alias], "stable_device": alias,
+                  "probe_state": "available", "modes": [mode], "recommended": mode}
+        path = "/api/v1/uvc/devices/v4l2-video4/apply"
+        with patch.object(context.uvc_probe_cache, "get", return_value={"devices": [device]}) as probe, \
+             patch.object(core, "_restart_affected"):
+            body = {"replace_camera_id": "retained-usb", "expected_device": alias}
+            original = self.runtime.read_bytes()
+            self.assertEqual(admin.post(path, json={**body, "expected_device": "/dev/video91"}).status_code, 409)
+            device["probe_state"] = "permission_denied"
+            self.assertEqual(admin.post(path, json=body).status_code, 409)
+            self.assertEqual(self.runtime.read_bytes(), original)
+            device["probe_state"] = "available"
+            response = admin.post(path, json=body)
+            self.assertEqual(response.status_code, 200, response.text)
+            probe.assert_called_with(refresh=True)
+            saved = context.store.get_effective()
+            [camera] = saved.cameras
+            self.assertEqual((camera.id, camera.path, camera.display_name), ("retained-usb", "retained-usb", "Retained name"))
+            self.assertEqual(camera.uvc.profile, "cam9")
+            self.assertEqual(camera.uvc.env["DEVICE"], alias)
+            self.assertEqual(camera.uvc.env["WIDTH"], "640")
+            self.assertEqual(camera.uvc.extra_args, ["-threads", "2"])
+            self.assertEqual(saved.recording.record_paths, ["retained-usb"])
+            self.assertEqual(saved.multiview.source_paths, ["retained-usb"])
+            # The stable alias also re-identifies a camera after a Linux node renumbering.
+            device["ffmpeg_device"] = "/dev/video8"
+            result = admin.get("/api/v1/uvc/devices").json()["items"][0]["suggestion"]
+            self.assertEqual(result["matched_camera_id"], "retained-usb")
+            self.assertEqual(result["runtime_camera"]["uvc"]["env"]["DEVICE"], alias)
+
     def test_download_ranges_and_hidden_previous_location(self):
         admin = self.clients['admin']
         clip = self.runtime.parent/'recordings'/'camera'/'2026-01-01'/'clip.ts'

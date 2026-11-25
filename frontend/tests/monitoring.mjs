@@ -1,3 +1,4 @@
+import { chooseSettingsCategory } from './settings-navigation.mjs';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync } from 'node:fs';
 process.chdir(fileURLToPath(new URL('../..', import.meta.url)));
@@ -176,8 +177,8 @@ try {
   await ctx.close();
   ({ctx, p} = await context('admin'));
   await p.locator('.sidebar').getByRole('button', {name:'Settings', exact:true}).click();
-  const nav = p.getByRole('complementary', {name:'Settings categories'});
-  await nav.getByRole('button', {name:'Quick settings', exact:true}).click();
+
+  await chooseSettingsCategory(p, 'Runtime & access', { advanced: false });
   const resume = p.getByRole('checkbox', {name:'Always resume monitoring when FlintEye starts'});
   assert.equal(await resume.isChecked(), false);
   await resume.click();
@@ -186,7 +187,7 @@ try {
   assert.ok(calls.some(([method, path, body]) => method === 'PATCH' && path === '/api/v1/monitoring/preferences' && JSON.parse(body).resume_on_startup === true));
   await p.keyboard.press('Meta+k');
   assert.equal(await p.evaluate(() => document.activeElement?.getAttribute('placeholder')), 'Find a setting...');
-  await nav.getByRole('button', {name:'General', exact:true}).click();
+  await chooseSettingsCategory(p, 'General');
   await p.getByRole('textbox', {name:/^App Title/}).fill('Leave draft');
   await p.locator('.sidebar').getByRole('button', {name:'Dashboard', exact:true}).click();
   await p.getByRole('button', {name:'Continue editing'}).click();
@@ -194,7 +195,7 @@ try {
   await p.locator('.sidebar').getByRole('button', {name:'Dashboard', exact:true}).click();
   await p.getByRole('button', {name:'Discard changes'}).click();
   await p.locator('.sidebar').getByRole('button', {name:'Settings', exact:true}).click();
-  await nav.getByRole('button', {name:'General', exact:true}).click();
+  await chooseSettingsCategory(p, 'General');
   assert.equal(await p.getByRole('textbox', {name:/^App Title/}).inputValue(), 'FlintEye');
   await ctx.close();
   console.log('PASS monitoring');

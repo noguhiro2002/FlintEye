@@ -2,13 +2,16 @@ import { useState } from "react";
 import type { ApiClient } from "../api/client";
 import type { DashboardStatus } from "../types";
 import { usePolling } from "../hooks/usePolling";
+import { MonitoringStatus } from "../components/MonitoringStatus";
+import { ResponsiveDetails } from "../components/ResponsiveDetails";
 import { StatusBadge } from "../components/StatusBadge";
 
 interface DashboardPageProps {
   api: ApiClient;
+  canManage?: boolean;
 }
 
-export function DashboardPage({ api }: DashboardPageProps): JSX.Element {
+export function DashboardPage({ api, canManage = false }: DashboardPageProps): JSX.Element {
   const [status, setStatus] = useState<DashboardStatus | null>(null);
   const [error, setError] = useState("");
 
@@ -23,13 +26,10 @@ export function DashboardPage({ api }: DashboardPageProps): JSX.Element {
     }
   }, 3000);
 
-  if (!status && error) {
-    return <div className="panel-error">{error}</div>;
-  }
-
   return (
     <div className="page">
       <h2>Dashboard</h2>
+      <MonitoringStatus api={api} canManage={canManage} />
       {error && <div className="panel-error">{error}</div>}
       {status ? (
         <>
@@ -56,7 +56,7 @@ export function DashboardPage({ api }: DashboardPageProps): JSX.Element {
           </div>
 
           <div className="section">
-            <h3>Process List</h3>
+            <ResponsiveDetails summary="Process List">
             <div className="table-scroll">
             <table className="table responsive-table dashboard-process-table">
               <thead>
@@ -81,11 +81,10 @@ export function DashboardPage({ api }: DashboardPageProps): JSX.Element {
               </tbody>
             </table>
             </div>
+            </ResponsiveDetails>
           </div>
         </>
-      ) : (
-        <div>Loading...</div>
-      )}
+      ) : !error && <div role="status">Loading dashboard…</div>}
     </div>
   );
 }

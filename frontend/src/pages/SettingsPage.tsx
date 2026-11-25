@@ -13,12 +13,11 @@ import {
   CameraIcon,
   CheckCircleIcon,
   ChevronRightIcon,
+  ExclamationTriangleIcon,
   CodeBracketIcon,
   Cog6ToothIcon,
   DocumentTextIcon,
-  ExclamationTriangleIcon,
   MagnifyingGlassIcon,
-  MinusIcon,
   PlusIcon,
   ShieldCheckIcon,
   SignalIcon,
@@ -29,11 +28,13 @@ import {
 import { ApiClient, ApiError } from "../api/client";
 import type { IpCameraProbeResult, MultiviewStatus, RuntimeConfigResponse, UvcDeviceItem, UvcSuggestion } from "../types";
 import { SettingsHelp } from "../components/SettingsHelp";
+import type { SettingsSection, SettingsTarget, SettingsTier } from "../settingsNavigation";
 
 type ConfiguredCamera = NonNullable<RuntimeConfigResponse["cameras"]>[number];
 
 interface SettingsPageProps {
   api: ApiClient;
+  target?: SettingsTarget;
   onUiConfigChanged?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
   onSaveStarted?: () => (saved: boolean) => void;
@@ -164,49 +165,40 @@ interface UvcModeOption {
   label: string;
 }
 
-type SettingsMode =
-  | "quick"
-  | "general"
-  | "runtime"
-  | "logging"
-  | "mediamtx"
-  | "recording"
-  | "multiview"
-  | "cameras"
-  | "advanced";
-
 const SETTINGS_NAV_ITEMS = [
-  { key: "quick", label: "Quick settings", icon: BoltIcon },
-  { key: "general", label: "General", icon: Cog6ToothIcon },
-  { key: "runtime", label: "Runtime & access", icon: ShieldCheckIcon },
-  { key: "mediamtx", label: "MediaMTX", icon: SignalIcon },
-  { key: "recording", label: "Recording", icon: VideoCameraIcon },
-  { key: "logging", label: "Logging", icon: DocumentTextIcon },
-  { key: "multiview", label: "Multiview", icon: Squares2X2Icon },
-  { key: "cameras", label: "Cameras", icon: CameraIcon },
-  { key: "advanced", label: "Advanced", icon: CodeBracketIcon },
+  { key: "cameras", label: "Cameras", icon: CameraIcon, basic: true },
+  { key: "recording", label: "Recording", icon: VideoCameraIcon, basic: true },
+  { key: "multiview", label: "Multiview", icon: Squares2X2Icon, basic: true },
+  { key: "runtime", label: "Runtime & access", icon: ShieldCheckIcon, basic: true },
+  { key: "general", label: "General", icon: Cog6ToothIcon, basic: false },
+  { key: "mediamtx", label: "MediaMTX", icon: SignalIcon, basic: false },
+  { key: "logging", label: "Logging", icon: DocumentTextIcon, basic: false },
+  { key: "integrations", label: "Integrations & API", icon: BoltIcon, basic: false },
+  { key: "advanced", label: "Runtime JSON", icon: CodeBracketIcon, basic: false },
 ] as const;
 
-const SETTINGS_SEARCH_INDEX: Array<{
-  label: string;
-  description: string;
-  section: SettingsMode;
-  terms: string;
-}> = [
-  { label: "Application branding", description: "App, sidebar, and footer titles", section: "general", terms: "app title sidebar title footer text branding web app" },
-  { label: "Software updates", description: "Check and download releases", section: "general", terms: "update upgrade version release download" },
-  { label: "API endpoint", description: "API host and port", section: "runtime", terms: "api host port server endpoint" },
-  { label: "Viewer access", description: "Authentication provider and viewer requirement", section: "runtime", terms: "auth provider authentication viewer username password access" },
-  { label: "API access", description: "Issue and revoke REST API keys", section: "runtime", terms: "bearer token key curl permission monitoring integration" },
-  { label: "Session settings", description: "TTL and cookie name", section: "runtime", terms: "session ttl cookie timeout" },
-  { label: "Thumbnail refresh", description: "Snapshot timeout and refresh interval", section: "runtime", terms: "snapshot thumbnail refresh interval timeout" },
-  { label: "MediaMTX endpoints", description: "RTSP, internal RTSP, and WebRTC URLs", section: "mediamtx", terms: "mediamtx rtsp webrtc url service control mode" },
-  { label: "Recording behavior", description: "Enablement, cameras, format, and segment duration", section: "recording", terms: "recording enabled cameras format segment path" },
-  { label: "Storage & retention", description: "Recording folder, capacity, retention, and previous locations", section: "recording", terms: "storage retention record root folder browse capacity quota GB days previous locations delete playback cache" },
-  { label: "Logging", description: "Log level, directory, and retention", section: "logging", terms: "logging log level directory retention error debug" },
-  { label: "Multiview", description: "Sources, layout, encoder, quality, and synchronization", section: "multiview", terms: "multiview sources layout tile sync buffer quality encoder bitrate fps resolution canvas width height hardware gpu preset watchdog restart" },
-  { label: "Camera discovery", description: "UVC devices and IP cameras", section: "cameras", terms: "camera uvc discovery ip onvif ptz" },
-  { label: "Full runtime JSON", description: "Expert-level configuration editor", section: "advanced", terms: "advanced json runtime expert raw" },
+function tierFor(section: SettingsSection): SettingsTier {
+  return SETTINGS_NAV_ITEMS.find(item => item.key === section)?.basic ? "basic" : "advanced";
+}
+
+const SETTINGS_SEARCH_INDEX: Array<SettingsTarget & { label: string; terms: string }> = [
+  { label: "Camera discovery", section: "cameras", terms: "usb uvc ip camera add カメラ 検出" },
+  { label: "Camera conversion and ONVIF", section: "cameras", tier: "advanced", anchor: "ip-cameras", terms: "camera ptz onvif timestamp relay encoder watchdog マイク 音声" },
+  { label: "Storage & retention", section: "recording", anchor: "recording-folder", terms: "recording folder capacity quota limit days previous storage 保存先 保持期間 容量" },
+  { label: "Recording format and segments", section: "recording", tier: "advanced", anchor: "record-format", terms: "recording format segment part playback cache 録画 形式" },
+  { label: "Multiview camera layout", section: "multiview", anchor: "multiview-layout", terms: "multiview sources cameras layout placement 配置" },
+  { label: "Multiview timing and encoder", section: "multiview", tier: "advanced", anchor: "multiview-source-mode", terms: "multiview sync buffer quality encoder bitrate fps resolution canvas hardware gpu preset watchdog" },
+  { label: "LAN and VPN connection", section: "runtime", anchor: "lan-connection", terms: "lan vpn tailscale https certificate trust ネットワーク 接続 証明書" },
+  { label: "Viewer access", section: "runtime", anchor: "viewer-access", terms: "viewer login user password authentication access 閲覧 パスワード" },
+  { label: "Monitoring and startup", section: "runtime", anchor: "startup-settings", terms: "resume startup log in 監視 起動" },
+  { label: "API endpoint and session settings", section: "runtime", tier: "advanced", anchor: "runtime-api", terms: "api host port server endpoint ttl cookie timeout" },
+  { label: "Thumbnail refresh", section: "runtime", tier: "advanced", anchor: "runtime-advanced", terms: "snapshot thumbnail refresh interval timeout サムネイル" },
+  { label: "Event recordings", section: "integrations", anchor: "event-settings", terms: "event recordings equipment signal archive event token lookback イベント録画 機器連携" },
+  { label: "API access", section: "integrations", anchor: "api-access", terms: "rest api key bearer token curl permission monitoring integration APIキー" },
+  { label: "MediaMTX endpoints", section: "mediamtx", terms: "mediamtx rtsp webrtc url service control mode" },
+  { label: "Logging", section: "logging", terms: "log logging level directory retention error debug ログ" },
+  { label: "Application branding", section: "general", terms: "app title sidebar title footer text branding 名前" },
+  { label: "Full runtime JSON", section: "advanced", terms: "advanced json runtime expert raw" },
 ];
 
 const DEFAULT_RUNTIME: RuntimeConfigResponse = {
@@ -438,6 +430,24 @@ function parsePositiveInt(value: unknown, fallback: number): number {
   return Math.round(numeric);
 }
 
+function usbProbeLabel(device: UvcDeviceItem): string {
+  switch (device.probe_state) {
+    case "permission_denied": return "Access denied";
+    case "busy": return "In use";
+    case "modes_unavailable": return "Capture modes unavailable";
+    default: return "Detected";
+  }
+}
+
+function usbProbeStyle(device: UvcDeviceItem): string {
+  return device.probe_state && device.probe_state !== "available" ? "warn" : "ok";
+}
+
+const MULTIVIEW_GRIDS = [
+  { columns: 2, rows: 1 }, { columns: 2, rows: 2 }, { columns: 3, rows: 2 },
+  { columns: 3, rows: 3 }, { columns: 4, rows: 4 },
+];
+
 function getUvcDeviceMatchKeys(device: UvcDeviceItem): string[] {
   const out: string[] = [];
   const add = (raw: string | null | undefined): void => {
@@ -457,6 +467,7 @@ function getUvcDeviceMatchKeys(device: UvcDeviceItem): string[] {
   add(device.ffmpeg_device);
   add(device.ffmpeg_device_index);
   add(device.display_name);
+  device.device_aliases?.forEach(add);
   return uniqueIdentifiers(out);
 }
 
@@ -586,11 +597,14 @@ function retentionDays(value: string): number {
   return Number(match[1]) * seconds[match[2]] / 86400;
 }
 
-export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange, onSaveStarted }: SettingsPageProps): JSX.Element {
+export function SettingsPage({ api: sharedApi, target, onUiConfigChanged, onDirtyChange, onSaveStarted }: SettingsPageProps): JSX.Element {
   const { ask, confirmation } = useConfirmChanges();
   // Keep this editor's revision separate from onboarding and branding requests.
   const api = useMemo(() => sharedApi.configSession(), [sharedApi]);
-  const [mode, setMode] = useState<SettingsMode>("quick");
+  const [mode, setMode] = useState<SettingsSection>(target?.section ?? "cameras");
+  const [tier, setTier] = useState<SettingsTier>(target?.tier ?? tierFor(target?.section ?? "cameras"));
+  const [focusAnchor, setFocusAnchor] = useState(target?.anchor);
+  const availableSections = SETTINGS_NAV_ITEMS.filter(item => tier === "advanced" || item.basic);
   const [settingsSearch, setSettingsSearch] = useState("");
   const [cameras, setCameras] = useState<ConfiguredCamera[]>([]);
   const [runtime, setRuntime] = useState<RuntimeConfigResponse>(DEFAULT_RUNTIME);
@@ -599,7 +613,6 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
   const [savedRuntimeText, setSavedRuntimeText] = useState("");
   const [savedRuntimeSnapshot, setSavedRuntimeSnapshot] = useState<RuntimeConfigResponse | null>(null);
   const [savedIpDraftsText, setSavedIpDraftsText] = useState("");
-  const [lastRefreshedAt, setLastRefreshedAt] = useState("");
   const [uvcDevices, setUvcDevices] = useState<UvcDeviceItem[]>([]);
   const [uvcWarning, setUvcWarning] = useState("");
   const [loading, setLoading] = useState(true);
@@ -610,7 +623,6 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
   const [viewerPassword, setViewerPassword] = useState("");
   const [networkDirty, setNetworkDirty] = useState(false);
   const [completedSave, setCompletedSave] = useState<{ finish: (saved: boolean) => void; saved: boolean } | null>(null);
-  const [updateMessage, setUpdateMessage] = useState("");
   const [listener, setListener] = useState<{ host?: string; port?: number; source?: string }>({});
 
   useEffect(() => {
@@ -620,6 +632,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
   }, [api]);
 
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
+  const [replacementId, setReplacementId] = useState("");
   const [suggestProfile, setSuggestProfile] = useState("cam1");
   const [suggestPath, setSuggestPath] = useState("uvc_cam1");
   const [suggestName, setSuggestName] = useState("UVC-CAM-01");
@@ -628,9 +641,12 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
   const [suggestFps, setSuggestFps] = useState(30);
   const [suggestBitrate, setSuggestBitrate] = useState("");
   const [selectedModeKey, setSelectedModeKey] = useState("");
+  const [suggestEnabled, setSuggestEnabled] = useState(true);
   const [suggestion, setSuggestion] = useState<UvcSuggestion | null>(null);
 
   const [ipDrafts, setIpDrafts] = useState<IpCameraDraft[]>([]);
+  const [selectedIpId, setSelectedIpId] = useState("");
+  const visibleIpId = ipDrafts.some(draft => draft.id === selectedIpId) ? selectedIpId : (ipDrafts[0]?.id ?? "");
   const [ipProbeStates, setIpProbeStates] = useState<Record<string, IpCameraProbeState>>({});
   const probeRequests = useRef(new Map<string, symbol>());
   const loadRequest = useRef(0);
@@ -652,6 +668,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
     () => uvcDevices.find((item) => item.device_id === selectedDeviceId) ?? null,
     [uvcDevices, selectedDeviceId],
   );
+  const selectedDeviceBlocked = selectedDevice?.probe_state === "busy" || selectedDevice?.probe_state === "permission_denied";
   const selectedModeOptions = useMemo(() => toModeOptions(selectedDevice), [selectedDevice]);
   const selectedMatchedCamera = useMemo(() => {
     const matchedCameraId = selectedDevice?.suggestion?.matched_camera_id;
@@ -684,6 +701,9 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
       }),
     [managedUvcCameras, uvcDevices],
   );
+  const replacementChoices = managedUvcCameraStates.filter(item => !item.detectedDevice);
+  const canReplaceDevice = Boolean(selectedDevice && !selectedMatchedCamera && replacementChoices.length
+    && !selectedDeviceBlocked && selectedDevice.probe_state !== "modes_unavailable");
   const sourceOptions = useMemo((): SourceOption[] => {
     const out: SourceOption[] = [];
     const seen = new Set<string>();
@@ -794,12 +814,12 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
     () =>
       normalizedSettingsSearch
         ? SETTINGS_SEARCH_INDEX.filter((item) =>
-            `${item.label} ${item.description} ${item.terms}`.toLowerCase().includes(normalizedSettingsSearch),
+            `${item.label} ${item.terms}`.toLowerCase().includes(normalizedSettingsSearch),
           )
         : [],
     [normalizedSettingsSearch],
   );
-  const quickChangeItems = useMemo(() => {
+  const pendingChanges = useMemo(() => {
     if (!savedRuntimeSnapshot) {
       return [] as Array<{ label: string; value: string }>;
     }
@@ -837,13 +857,41 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
     if (formDirty) {
       items.push({ label: "Configuration", value: "Unsaved form changes; saving applies all edited fields." });
     }
-    if (jsonDirty) items.push({ label: "Advanced JSON", value: "Unsaved JSON edits; use Replace Runtime & Apply in Advanced." });
+    if (jsonDirty) items.push({ label: "Advanced JSON", value: "Unsaved JSON edits. Open Advanced → Runtime JSON to apply them." });
     return items;
   }, [formDirty, jsonDirty, runtime, savedRuntimeSnapshot]);
 
-  const selectSettingsSection = (section: SettingsMode): void => {
+  const selectSettingsSection = (section: SettingsSection): void => {
     setMode(section);
     setSettingsSearch("");
+  };
+
+  const openSetting = (setting: SettingsTarget): void => {
+    setTier(setting.tier ?? tierFor(setting.section));
+    selectSettingsSection(setting.section);
+    setFocusAnchor(setting.anchor);
+  };
+
+  useEffect(() => {
+    if (target) openSetting(target);
+  }, [target]);
+
+  useEffect(() => {
+    if (!focusAnchor || !configReady) return;
+    const element = document.getElementById(focusAnchor);
+    if (!element) return;
+    const details = element.closest("details");
+    if (details) details.open = true;
+    const focus = element.matches("input,select,button,summary") ? element : element.querySelector("summary");
+    if (focus instanceof HTMLElement) focus.focus({ preventScroll: true });
+    element.scrollIntoView({ block: "nearest" });
+    setFocusAnchor(undefined);
+  }, [configReady, focusAnchor, mode, tier]);
+
+  const selectTier = (next: SettingsTier): void => {
+    setTier(next);
+    setSettingsSearch("");
+    if (next === "basic" && tierFor(mode) !== "basic") setMode("cameras");
   };
 
   const applySelectedDeviceDraft = (
@@ -852,6 +900,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
     nextCameras: ConfiguredCamera[],
   ): void => {
     setSelectedDeviceId(deviceId);
+    setReplacementId("");
     const device = nextDevices.find((item) => item.device_id === deviceId) ?? null;
     if (!device) {
       setSuggestBitrate("");
@@ -893,9 +942,33 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
     setSuggestWidth(width);
     setSuggestHeight(height);
     setSuggestFps(fps);
+    setSuggestEnabled(matchedCamera?.enabled ?? true);
     setSuggestBitrate(typeof env.BITRATE === "string" ? env.BITRATE.trim() : "");
     setSelectedModeKey(selectedMode?.key ?? "");
     setSuggestion(device.suggestion ?? null);
+  };
+
+  const tileCount = runtime.multiview?.tile_count ?? 4;
+  const explicitGridColumns = runtime.multiview?.layout?.grid_columns;
+  const gridColumns = explicitGridColumns ?? Math.ceil(Math.sqrt(tileCount));
+  const gridPreset = MULTIVIEW_GRIDS.find(grid => grid.columns === gridColumns && grid.columns * grid.rows === tileCount);
+  const setMultiviewGrid = (tile_count: number, columns?: number) => {
+    setRuntime(previous => {
+      const layout = previous.multiview?.layout;
+      const previousCount = previous.multiview?.tile_count ?? 4;
+      let source_slots = layout?.source_slots;
+      if (source_slots && tile_count >= 2 && tile_count <= 32 && Number.isInteger(tile_count)) {
+        if (tile_count < previousCount) {
+          const ordered = source_slots.flat().filter((source): source is string => source !== null);
+          source_slots = Array.from({ length: Math.max(1, Math.ceil(ordered.length / tile_count)) }, (_, page) =>
+            Array.from({ length: tile_count }, (_, slot) => ordered[page * tile_count + slot] ?? null));
+        } else {
+          source_slots = source_slots.map(page => Array.from({ length: tile_count }, (_, slot) => page[slot] ?? null));
+        }
+      }
+      return {...previous, multiview: {...previous.multiview, tile_count,
+        layout: {...layout, source_slots, grid_columns: columns ?? layout?.grid_columns}}};
+    });
   };
 
   const setMultiviewSourcePaths = (paths: string[]): void => {
@@ -1134,9 +1207,6 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
       setIpDrafts(nextIpDrafts);
       setSavedIpDraftsText(JSON.stringify(nextIpDrafts));
       setConfigReady(true);
-      setLastRefreshedAt(
-        new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(new Date()),
-      );
       setError("");
       return true;
     } catch (e) {
@@ -1167,6 +1237,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
         profile: suggestProfile,
         path: suggestPath,
         camera_name: suggestName,
+        enabled: suggestEnabled,
         width: suggestWidth,
         height: suggestHeight,
         fps: suggestFps,
@@ -1182,23 +1253,31 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
   };
 
   const onApplyUvc = async (): Promise<void> => {
-    if (!requireSavedDraft() || loading) return;
-    if (!selectedDeviceId) {
-      return;
-    }
+    if (!requireSavedDraft() || loading || !selectedDevice || selectedDeviceBlocked) return;
+    const replacement = canReplaceDevice ? replacementChoices.find(item => item.camera.id === replacementId)?.camera : undefined;
+    if (replacement && !await ask("Replace the capture device for " + getCameraLabel(replacement) + "? Its name, stream and recordings will stay linked.", {
+      heading: "Reconnect saved USB camera?",
+      cancel: "Cancel",
+      confirm: "Confirm replacement",
+    })) return;
+    const expected_device = selectedDevice.stable_device ?? selectedDevice.ffmpeg_device;
     setLoading(true);
     try {
-      await api.applyUvcDevice(selectedDeviceId, {
+      await api.applyUvcDevice(selectedDeviceId, replacement ? {
+        replace_camera_id: replacement.id, expected_device,
+      } : {
+        expected_device,
         profile: suggestProfile,
         path: suggestPath,
         camera_name: suggestName,
+        enabled: suggestEnabled,
         width: suggestWidth,
         height: suggestHeight,
         fps: suggestFps,
         input_format: selectedModeOptions.find((mode) => mode.key === selectedModeKey)?.inputFormat,
         bitrate: suggestBitrate,
       });
-      setNotice("UVC device applied.");
+      setNotice(replacement ? "Saved USB camera reconnected." : "UVC device applied.");
       await loadAll(true);
     } catch (e) {
       saveError(e, "Failed to apply UVC device");
@@ -1209,6 +1288,8 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
     const used = new Set([...cameras.flatMap(c => [c.id, c.path]), ...ipDrafts.flatMap(c => [c.id, c.path])].map(value => value.toLowerCase()));
     let idx = 1;
     while (used.has(`ipcam${idx}`)) idx++;
+    setSelectedIpId("ipcam" + idx);
+    setFocusAnchor("ip-name-ipcam" + idx);
     setIpDrafts((prev) => [
       ...prev,
       {
@@ -1550,7 +1631,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
           <span className="settings-eyebrow">System preferences</span>
           <h2>Settings</h2>
         </div>
-        <div className="settings-header-actions">
+        <div className={"settings-header-actions" + (hasUnsavedChanges ? " has-edits" : "")}>
           <span className={hasUnsavedChanges ? "settings-save-state is-dirty" : "settings-save-state"}>
             {!configReady ? (loading ? "Loading settings…" : "Settings unavailable") : hasUnsavedChanges ? "Unsaved changes" : "All changes saved"}
           </span>
@@ -1577,6 +1658,10 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
         </div>
       </div>
 
+      <div className="settings-level" role="group" aria-label="Settings level">
+        <button type="button" aria-pressed={tier === "basic"} onClick={() => selectTier("basic")}>Basic</button>
+        <button type="button" aria-pressed={tier === "advanced"} onClick={() => selectTier("advanced")}>Advanced</button>
+      </div>
       <div className="settings-search">
         <MagnifyingGlassIcon aria-hidden="true" />
         <input
@@ -1592,8 +1677,13 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
 
       <div className="settings-workspace">
         <aside className="settings-local-nav" aria-label="Settings categories">
-          <div className="settings-local-nav-title">Configuration</div>
-          {SETTINGS_NAV_ITEMS.map((item) => {
+          <label className="settings-category-select">
+            <span>Category</span>
+            <select aria-label="Settings category" value={mode} onChange={event => selectSettingsSection(event.target.value as SettingsSection)}>
+              {availableSections.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}
+            </select>
+          </label>
+          {availableSections.map((item) => {
             const Icon = item.icon;
             return (
               <button
@@ -1610,7 +1700,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
           })}
         </aside>
 
-        <main className="settings-main">
+        <div className={"settings-main settings-tier-" + tier}>
           {notice && <div className="panel-ok">{notice}</div>}
           {error && <div className="panel-error">{error}</div>}
           {!savedRuntimeSnapshot && <p role="status">{loading ? "Loading saved settings…" : "Settings could not be loaded. Use Refresh to retry."}</p>}
@@ -1631,11 +1721,11 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                   <button
                     type="button"
                     key={item.label}
-                    onClick={() => selectSettingsSection(item.section)}
+                    onClick={() => openSetting(item)}
                   >
                     <span>
                       <strong>{item.label}</strong>
-                      <small>{item.description}</small>
+                      <small>{(item.tier ?? tierFor(item.section)) === "advanced" ? "Advanced" : "Basic"}</small>
                     </span>
                     <ChevronRightIcon aria-hidden="true" />
                   </button>
@@ -1651,240 +1741,12 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
             </section>
           )}
 
-          {!normalizedSettingsSearch && mode === "quick" && (
-            <div className="quick-settings">
-              <div className="settings-content-heading">
-                <div>
-                  <span className="settings-eyebrow">Overview</span>
-                  <h3>Quick settings</h3>
-                  <p>The controls used most often during day-to-day operation.</p>
-                </div>
-                <button type="button" onClick={() => selectSettingsSection("general")}>
-                  View all settings
-                </button>
-              </div>
+          {hasUnsavedChanges && <details className="settings-pending">
+            <summary>Pending changes</summary>
+            <ul>{pendingChanges.map(item => <li key={item.label}><strong>{item.label}</strong> · {item.value}</li>)}</ul>
+          </details>}
 
-              <div className="quick-status-strip" aria-label="System configuration status">
-                <div className="ok">
-                  <CheckCircleIcon aria-hidden="true" />
-                  <span><strong>API listening now</strong><small>{listener.host && listener.port ? `${listener.host}:${listener.port}` : "Unavailable"}</small></span>
-                </div>
-                <div className={runtime.mediamtx?.autostart_on_api_start ? "ok" : "muted"}>
-                  <CheckCircleIcon aria-hidden="true" />
-                  <span><strong>MediaMTX Configured</strong><small>{runtime.mediamtx?.control_mode}</small></span>
-                </div>
-                <div className={runtime.recording?.enabled ? "ok" : "muted"}>
-                  <CheckCircleIcon aria-hidden="true" />
-                  <span><strong>Recording {runtime.recording?.enabled ? "Enabled" : "Disabled"}</strong><small>{runtime.recording?.record_format}</small></span>
-                </div>
-              </div>
-
-              <div className="quick-settings-grid">
-                <section className="quick-settings-primary">
-                  <StartupSettings api={api} />
-                  <h4>Frequently used</h4>
-                  <div className="quick-setting-list">
-                    <div className="quick-setting-row">
-                      <span className="quick-setting-icon"><ShieldCheckIcon aria-hidden="true" /></span>
-                      <span className="quick-setting-copy">
-                        <strong>Viewer access</strong>
-                        <small>Require viewers to sign in before opening camera streams.</small>
-                      </span>
-                      <label className="quick-toggle">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(runtime.auth?.viewer_auth_required)}
-                          onChange={(event) =>
-                            setRuntime((prev) => ({
-                              ...prev,
-                              auth: { ...(prev.auth ?? {}), viewer_auth_required: event.target.checked },
-                            }))
-                          }
-                        />
-                        <span>{runtime.auth?.viewer_auth_required ? "Required" : "Public"}</span>
-                      </label>
-                      <button type="button" className="quick-row-link" onClick={() => selectSettingsSection("runtime")} aria-label="Open viewer access settings">
-                        <ChevronRightIcon aria-hidden="true" />
-                      </button>
-                    </div>
-
-                    <div className="quick-setting-row">
-                      <span className="quick-setting-icon"><VideoCameraIcon aria-hidden="true" /></span>
-                      <span className="quick-setting-copy">
-                        <strong>Recording</strong>
-                        <small>{recordAllCameras ? "All configured cameras" : "Selected camera paths"} · {runtime.recording?.record_format}</small>
-                      </span>
-                      <label className="quick-toggle">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(runtime.recording?.enabled)}
-                          onChange={(event) =>
-                            setRuntime((prev) => ({
-                              ...prev,
-                              recording: { ...(prev.recording ?? {}), enabled: event.target.checked },
-                            }))
-                          }
-                        />
-                        <span>{runtime.recording?.enabled ? "Enabled" : "Disabled"}</span>
-                      </label>
-                      <button type="button" className="quick-row-link" onClick={() => selectSettingsSection("recording")} aria-label="Open recording settings">
-                        <ChevronRightIcon aria-hidden="true" />
-                      </button>
-                    </div>
-
-                    <div className="quick-setting-row">
-                      <span className="quick-setting-icon"><DocumentTextIcon aria-hidden="true" /></span>
-                      <span className="quick-setting-copy">
-                        <strong>Log level</strong>
-                        <small>Choose how much diagnostic detail is written to logs.</small>
-                      </span>
-                      <select
-                        aria-label="Log level"
-                        value={runtime.logging?.level ?? "ERROR"}
-                        onChange={(event) =>
-                          setRuntime((prev) => ({
-                            ...prev,
-                            logging: {
-                              ...(prev.logging ?? {}),
-                              level: event.target.value as "DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL",
-                            },
-                          }))
-                        }
-                      >
-                        <option value="DEBUG">DEBUG</option>
-                        <option value="INFO">INFO</option>
-                        <option value="WARNING">WARNING</option>
-                        <option value="ERROR">ERROR</option>
-                        <option value="CRITICAL">CRITICAL</option>
-                      </select>
-                      <button type="button" className="quick-row-link" onClick={() => selectSettingsSection("logging")} aria-label="Open logging settings">
-                        <ChevronRightIcon aria-hidden="true" />
-                      </button>
-                    </div>
-
-                    <div className="quick-setting-row">
-                      <span className="quick-setting-icon"><ArrowPathIcon aria-hidden="true" /></span>
-                      <span className="quick-setting-copy">
-                        <strong>Thumbnail refresh</strong>
-                        <small>How often Live View thumbnails refresh automatically.</small>
-                      </span>
-                      <div className="quick-stepper" aria-label="Thumbnail refresh interval">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setRuntime((prev) => ({
-                              ...prev,
-                              snapshot: {
-                                ...(prev.snapshot ?? {}),
-                                thumbnail_refresh_interval_sec: Math.max(
-                                  0.5,
-                                  (prev.snapshot?.thumbnail_refresh_interval_sec ?? 10) - 5,
-                                ),
-                              },
-                            }))
-                          }
-                          aria-label="Decrease thumbnail refresh interval"
-                        >
-                          <MinusIcon aria-hidden="true" />
-                        </button>
-                        <span>{runtime.snapshot?.thumbnail_refresh_interval_sec ?? 10} sec</span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setRuntime((prev) => ({
-                              ...prev,
-                              snapshot: {
-                                ...(prev.snapshot ?? {}),
-                                thumbnail_refresh_interval_sec: Math.min(
-                                  3600,
-                                  (prev.snapshot?.thumbnail_refresh_interval_sec ?? 10) + 5,
-                                ),
-                              },
-                            }))
-                          }
-                          aria-label="Increase thumbnail refresh interval"
-                        >
-                          <PlusIcon aria-hidden="true" />
-                        </button>
-                      </div>
-                      <button type="button" className="quick-row-link" onClick={() => selectSettingsSection("runtime")} aria-label="Open thumbnail refresh settings">
-                        <ChevronRightIcon aria-hidden="true" />
-                      </button>
-                    </div>
-                  </div>
-
-                  <h4>Configuration shortcuts</h4>
-                  <div className="settings-shortcuts">
-                    <button type="button" onClick={() => selectSettingsSection("mediamtx")}>
-                      <SignalIcon aria-hidden="true" />
-                      <span><strong>Network endpoints</strong><small>API, RTSP, and WebRTC URLs</small></span>
-                      <ChevronRightIcon aria-hidden="true" />
-                    </button>
-                    <button type="button" onClick={() => selectSettingsSection("recording")}>
-                      <VideoCameraIcon aria-hidden="true" />
-                      <span><strong>Storage & retention</strong><small>Formats and deletion policies</small></span>
-                      <ChevronRightIcon aria-hidden="true" />
-                    </button>
-                    <button type="button" onClick={() => selectSettingsSection("general")}>
-                      <Cog6ToothIcon aria-hidden="true" />
-                      <span><strong>Branding</strong><small>Titles and footer text</small></span>
-                      <ChevronRightIcon aria-hidden="true" />
-                    </button>
-                  </div>
-                </section>
-
-                <aside className="quick-settings-aside">
-                  <section>
-                    <div className="quick-aside-heading">
-                      <div>
-                        <span className="settings-eyebrow">This session</span>
-                        <h4>Pending changes</h4>
-                      </div>
-                    </div>
-                    {quickChangeItems.length > 0 ? (
-                      <div className="quick-change-list">
-                        {quickChangeItems.map((item) => (
-                          <div key={item.label}>
-                            <span className="change-dot" />
-                            <span><strong>{item.label}</strong><small>{item.value}</small></span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="quick-empty-state">
-                        <CheckCircleIcon aria-hidden="true" />
-                        <span><strong>No pending changes</strong><small>Last refreshed at {lastRefreshedAt || "—"}</small></span>
-                      </div>
-                    )}
-                    <div className="quick-aside-actions">
-                      <button type="button" onClick={async () => { if (await confirmDiscard()) void loadAll(); }} disabled={!hasUnsavedChanges}>Discard</button>
-                      <button type="button" className="primary" onClick={() => void onSaveBasic()} disabled={!hasUnsavedChanges}>Save changes</button>
-                    </div>
-                  </section>
-
-                  <section className="quick-search-help">
-                    <MagnifyingGlassIcon aria-hidden="true" />
-                    <div>
-                      <strong>Need an advanced setting?</strong>
-                      <p>Search settings categories and common keywords.</p>
-                      <small>Try “Session TTL”, “RTSP Base URL”, or “Snapshot Timeout”.</small>
-                    </div>
-                    <button type="button" onClick={() => settingsSearchRef.current?.focus()}>Search settings categories</button>
-                  </section>
-                </aside>
-              </div>
-            </div>
-          )}
-
-          {!normalizedSettingsSearch && mode !== "quick" && mode !== "advanced" && (
-          <div className="settings-detail" data-settings-filter={mode}>
-            <div className="settings-content-heading">
-              <div>
-                <span className="settings-eyebrow">Configuration</span>
-                <h3>{SETTINGS_NAV_ITEMS.find((item) => item.key === mode)?.label}</h3>
-                <p>Edit this category without losing your place in the rest of the system settings.</p>
-              </div>
-            </div>
+          <div className="settings-detail" data-settings-filter={mode} hidden={Boolean(normalizedSettingsSearch) || mode === "advanced"}>
           <div className="section settings-section settings-section-general">
             <h3>Web App</h3>
             <div className="form-grid">
@@ -1927,37 +1789,18 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
             </div>
           </div>
 
-          {installation && (
-            <div className="section settings-section settings-section-general">
-              <h3>Software updates</h3>
-              <div className="settings-field-actions">
-                <button type="button" disabled={loading} onClick={() => void onInstallationAction(async () => {
-                  const release = await api.getUpdates();
-                  setUpdateMessage(release.message ?? (release.available
-                    ? `Version ${release.version} is available. Stop monitoring before installing the update.`
-                    : `You are using version ${release.current_release ?? release.current}${release.channel === 'preview' ? ' (Under Development)' : ''}. No newer release is available.`));
-                })}>Check for updates</button>
-                <a href="https://github.com/noguhiro2002/FlintEye/releases" target="_blank" rel="noreferrer">Download community releases</a>
-              </div>
-              {updateMessage && <p className="field-help" role="status">{updateMessage}</p>}
-            </div>
-          )}
-
           <div className="section settings-section settings-section-runtime">
             <NetworkAccess api={api} blocked={hasUnsavedChanges} onDirtyChange={setNetworkDirty} onSaved={reloadSettings} />
-            {runtime.auth?.provider === "local" && <ApiAccess api={api} />}
-            <div className="button-row">
-              <a href={api.buildUrl('/api/v1/diagnostics')} download="FlintEye-diagnostics.zip">Save diagnostics (no raw logs or secrets)</a>
-              {installation && <button type="button" disabled={loading || hasUnsavedChanges} onClick={() => { if (window.confirm('Use the MediaMTX bundled with this installation? Custom media commands will be replaced; recordings and accounts are preserved.')) void onInstallationAction(async () => {await api.useBundledMedia(); setNotice('Saved bundled MediaMTX. Use Start or Restart on Dashboard to apply it.');}); }}>Repair media command using bundled MediaMTX…</button>}
-            </div>
-            <h3>Core Runtime</h3>
+            <div id="startup-settings"><StartupSettings api={api} /></div>
+            {installation && <button type="button" className="advanced-setting" disabled={loading || hasUnsavedChanges}
+              onClick={() => { if (window.confirm('Use the MediaMTX bundled with this installation? Custom media commands will be replaced; recordings and accounts are preserved.')) void onInstallationAction(async () => {await api.useBundledMedia(); setNotice('Saved bundled MediaMTX. Use Start or Restart on Dashboard to apply it.');}); }}>Repair media command using bundled MediaMTX…</button>}
             <div className="form-grid">
-              <div className="runtime-subsection-title form-span-3">
+              <div id="runtime-api" className="runtime-subsection-title form-span-3 advanced-setting">
                 <h4>API & Session</h4>
                 <span>Saved connection and browser-session defaults for the FlintEye API.</span>
                 <span>Listening now: {listener.host && listener.port ? `${listener.host}:${listener.port} (${listener.source})` : "Unavailable"}. Host and port changes apply after restarting FlintEye. A command-line override takes precedence for that launch.</span>
               </div>
-              <label>
+              <label data-setting-level="advanced">
                 API Host
                 <input
                   value={runtime.api?.host ?? "127.0.0.1"}
@@ -1970,7 +1813,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                 />
                 <small className="field-help">Saved listening interface for the next launch.</small>
               </label>
-              <label>
+              <label data-setting-level="advanced">
                 API Port
                 <input
                   type="number"
@@ -1986,7 +1829,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                 />
                 <small className="field-help">Saved TCP port for the next launch; --port can override it.</small>
               </label>
-              <label>
+              <label data-setting-level="advanced">
                 Session TTL (sec)
                 <input
                   type="number"
@@ -2001,7 +1844,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                 />
                 <small className="field-help">Time-to-live for authenticated browser sessions.</small>
               </label>
-              <label>
+              <label data-setting-level="advanced">
                 Session Cookie Name
                 <input
                   value={runtime.auth?.session_cookie_name ?? "orch_session"}
@@ -2014,11 +1857,11 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                 />
                 <small className="field-help">Cookie name used to store the authenticated session.</small>
               </label>
-              <div className="runtime-subsection-title form-span-3">
-                <h4>Authentication</h4>
+              <div id="viewer-access" className="runtime-subsection-title form-span-3">
+                <h4>Viewer access</h4>
                 <span>Choose the authentication backend and whether viewers must sign in.</span>
               </div>
-              <label>
+              <label data-setting-level="advanced">
                 Auth Provider
                 <select
                   value={runtime.auth?.provider ?? "legacy_token"}
@@ -2069,7 +1912,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                   {hasUnsavedChanges && <small className="field-help">Save or discard your other changes before changing the password.</small>}
                 </div>
               )}
-              <details className="runtime-advanced form-span-3">
+              <details id="runtime-advanced" className="runtime-advanced form-span-3 advanced-setting">
                 <summary>
                   <span>
                     <strong>Advanced runtime options</strong>
@@ -2323,7 +2166,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                 />
                 Record all configured cameras
               </label>
-              <label className="check">
+              <label className="check" data-setting-level="advanced">
                 <input
                   type="checkbox"
                   checked={Boolean(runtime.recording?.auto_apply)}
@@ -2391,7 +2234,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                   </small>
                 </div>
               )}
-              <label className="form-span-3">
+              <label className="form-span-3" data-setting-level="advanced">
                 Additional Record Paths
                 <textarea
                   rows={3}
@@ -2438,7 +2281,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                 <p className="panel-note form-span-3">Oldest completed recordings are deleted when either limit is reached.
                   Hiding previous locations does not stop their automatic cleanup. Use Save changes to apply your choices.</p>
               </>}
-              <label>
+              <label id="record-format" data-setting-level="advanced">
                 Record Format
                 <select
                   value={runtime.recording?.record_format ?? "fmp4"}
@@ -2456,7 +2299,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                   <option value="mpegts">mpegts</option>
                 </select>
               </label>
-              <label>
+              <label data-setting-level="advanced">
                 Segment Duration
                 <input
                   value={runtime.recording?.record_segment_duration ?? "10m"}
@@ -2488,7 +2331,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                 />
               </label>
               )}
-              <label>
+              <label data-setting-level="advanced">
                 Playback Cache Delete After
                 <input
                   value={runtime.recording?.playback_cache_delete_after ?? "24h"}
@@ -2506,7 +2349,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                   Playback-friendly MP4 files are internal, omitted from Recordings, and deleted after this period.
                 </small>
               </label>
-              <label>
+              <label data-setting-level="advanced">
                 Record Part Duration
                 <input
                   value={runtime.recording?.record_part_duration ?? "1s"}
@@ -2521,7 +2364,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                   }
                 />
               </label>
-              <label>
+              <label data-setting-level="advanced">
                 Record Max Part Size
                 <input
                   value={runtime.recording?.record_max_part_size ?? "50M"}
@@ -2541,7 +2384,13 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
               Recording Enabled controls the `record: yes/no` flag for the resolved MediaMTX recording paths.
               Unselected orchestrator-managed paths are now forced to `record: no`.
             </div>
-            <EventRecordingOptions api={api} onSaveStarted={onSaveStarted} />
+            <button type="button" onClick={() => openSetting({section: "integrations", anchor: "event-settings"})}>Equipment integrations and API</button>
+          </div>
+
+          <div className="section settings-section settings-section-integrations">
+            <h3>Integrations &amp; API</h3>
+            <div id="event-settings"><EventRecordingOptions api={api} onSaveStarted={onSaveStarted} /></div>
+            {runtime.auth?.provider === "local" && <ApiAccess api={api} />}
           </div>
 
           <div className="section settings-section settings-section-multiview">
@@ -2563,7 +2412,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                 />
                 Multiview Enabled
               </label>
-              <label>
+              <label id="multiview-source-mode" data-setting-level="advanced">
                 Source Mode
                 <select
                   value={runtime.multiview?.source_mode ?? "hybrid"}
@@ -2583,7 +2432,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                 </select>
                 <small className="field-help">env = selected paths only, api = MediaMTX API only, hybrid = both.</small>
               </label>
-              <label>
+              <label data-setting-level="advanced">
                 MediaMTX API URL
                 <input
                   value={runtime.multiview?.mtx_api_url ?? ""}
@@ -2603,7 +2452,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                   `127.0.0.1` when multiview runs on the same machine.
                 </small>
               </label>
-              <label>
+              <label data-setting-level="advanced">
                 Output Prefix
                 <input
                   value={runtime.multiview?.output_prefix ?? "multiview"}
@@ -2619,7 +2468,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                 />
                 <small className="field-help">Output paths become {`<prefix>_1, <prefix>_2, ...`}.</small>
               </label>
-              <label className="check form-span-3">
+              <label className="check form-span-3" data-setting-level="advanced">
                 <input
                   type="checkbox"
                   checked={runtime.multiview?.auto_placeholder_missing_sources ?? true}
@@ -2667,7 +2516,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                 )}
                 <small className="field-help">Multiview needs at least 2 usable source paths.</small>
               </div>
-              <label className="form-span-3">
+              <label className="form-span-3" data-setting-level="advanced">
                 Extra Source Paths
                 <textarea
                   rows={3}
@@ -2677,27 +2526,17 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                 />
                 <small className="field-help">Use this for paths that are not listed above but should still feed multiview.</small>
               </label>
-              <label>
+              <label data-setting-level="advanced">
                 Tile Count
                 <input
                   type="number"
                   min={2}
                   max={32}
                   value={runtime.multiview?.tile_count ?? 4}
-                  onChange={(e) => {
-                    const tile_count = Number(e.target.value);
-                    setRuntime((prev) => {
-                      const layout = prev.multiview?.layout;
-                      const source_slots = tile_count >= 2 && tile_count <= 32 && Number.isInteger(tile_count)
-                        ? layout?.source_slots?.map(page => Array.from({length: tile_count}, (_, slot) => page[slot] ?? null))
-                        : undefined;
-                      return {...prev, multiview: {...prev.multiview, tile_count,
-                        ...(source_slots ? {layout: {...layout, source_slots}} : {})}};
-                    });
-                  }}
+                  onChange={event => setMultiviewGrid(Number(event.target.value))}
                 />
               </label>
-              <label>
+              <label data-setting-level="advanced">
                 Max Sources
                 <input
                   type="number"
@@ -2715,10 +2554,23 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                   }
                 />
               </label>
+              <label>
+                Layout preset
+                <select value={gridPreset ? MULTIVIEW_GRIDS.indexOf(gridPreset) : "custom"} onChange={event => {
+                  const grid = MULTIVIEW_GRIDS[Number(event.target.value)];
+                  if (grid) setMultiviewGrid(grid.columns * grid.rows, grid.columns);
+                }}>
+                  {!gridPreset && <option value="custom">Current layout</option>}
+                  {MULTIVIEW_GRIDS.map((grid, index) => <option key={index} value={index}>
+                    {grid.columns} × {grid.rows}
+                  </option>)}
+                </select>
+              </label>
+              <div id="multiview-layout" className="form-span-3">
               <MultiviewLayoutEditor
                 sources={(multiviewSourcePaths.length ? multiviewSourcePaths : sourceOptions.filter(item => item.enabled).map(item => item.path))
                   .map(path => ({path, label: sourceOptions.find(item => item.path.toLowerCase() === path.toLowerCase())?.label ?? path}))}
-                tileCount={Math.max(2, Math.min(32, Math.floor(runtime.multiview?.tile_count ?? 4)))}
+                tileCount={Math.max(2, Math.min(32, Math.floor(tileCount)))}
                 columns={runtime.multiview?.layout?.grid_columns}
                 placements={runtime.multiview?.layout?.source_slots ?? null}
                 onChange={source_slots => setRuntime(prev => ({
@@ -2731,7 +2583,8 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                   },
                 }))}
               />
-              <label>
+              </div>
+              <label data-setting-level="advanced">
                 Default IP Input
                 <select
                   value={runtime.multiview?.input_defaults?.mode ?? "primary"}
@@ -2753,7 +2606,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                 </select>
                 <small className="field-help">Primary keeps one camera connection. Other modes may start an internal CFR worker.</small>
               </label>
-              <label>
+              <label data-setting-level="advanced">
                 Normalized Input FPS
                 <input
                   type="number"
@@ -2774,7 +2627,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                   }
                 />
               </label>
-              <label>
+              <label data-setting-level="advanced">
                 Normalized Resolution
                 <input
                   value={runtime.multiview?.input_defaults?.resolution ?? "auto"}
@@ -2793,7 +2646,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                   }
                 />
               </label>
-              <label>
+              <label data-setting-level="advanced">
                 Normalized Input Quality
                 <select
                   value={runtime.multiview?.input_defaults?.quality_preset ?? "standard"}
@@ -2815,7 +2668,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                   <option value="low">low</option>
                 </select>
               </label>
-              <details className="ip-camera-details form-span-2">
+              <details className="ip-camera-details form-span-2 advanced-setting">
                 <summary>Normalized input conversion details</summary>
                 <div className="ip-detail-grid">
                   {(["encoder", "bitrate", "maxrate", "bufsize", "x264_preset"] as const).map((field) => (
@@ -2840,7 +2693,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                   ))}
                 </div>
               </details>
-              <label className="table-check">
+              <label className="table-check" data-setting-level="advanced">
                 <input
                   type="checkbox"
                   checked={runtime.multiview?.input_defaults?.fallback_to_primary ?? true}
@@ -2859,7 +2712,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                 />
                 Fall back to the public primary path
               </label>
-              <section className="panel-note form-span-3 sync-buffer-settings">
+              <section className="panel-note form-span-3 sync-buffer-settings advanced-setting">
                 <div className="sync-buffer-heading">
                   <div>
                     <strong>Raw wall-clock compositor</strong>
@@ -2917,7 +2770,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                     </select>
                   </label>
                 </div>
-                <details className="ip-camera-details">
+                <details className="ip-camera-details advanced-setting">
                   <summary>Sync buffer details</summary>
                   <div className="ip-detail-grid">
                     <label>
@@ -2944,7 +2797,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                   </div>
                 </details>
               </section>
-              <label>
+              <label data-setting-level="advanced">
                 FPS
                 <input
                   type="number"
@@ -2988,7 +2841,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                   <option value="low">low</option>
                 </select>
               </label>
-              <label>
+              <label data-setting-level="advanced">
                 Encoder
                 <input
                   value={runtime.multiview?.quality?.encoder ?? "auto"}
@@ -3006,7 +2859,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                   }
                 />
               </label>
-              <label>
+              <label data-setting-level="advanced">
                 Latency Preset
                 <select
                   value={runtime.multiview?.latency_preset ?? "low"}
@@ -3025,7 +2878,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                 </select>
                 <small className="field-help">low reduces buffering. normal is safer if inputs are unstable.</small>
               </label>
-              <label>
+              <label data-setting-level="advanced">
                 Input Stall Timeout (sec)
                 <input
                   type="number"
@@ -3044,7 +2897,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                 />
                 <small className="field-help">Restarts multiview when an RTSP input stops responding. Use 0 to disable.</small>
               </label>
-              <label>
+              <label data-setting-level="advanced">
                 Input Stall Option
                 <select
                   value={runtime.multiview?.input_stall_timeout_option ?? "auto"}
@@ -3071,7 +2924,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                 </select>
                 <small className="field-help">auto chooses an FFmpeg timeout option supported by this build.</small>
               </label>
-              <label className="table-check">
+              <label className="table-check" data-setting-level="advanced">
                 <input
                   type="checkbox"
                   checked={runtime.multiview?.input_healthcheck_enabled ?? true}
@@ -3084,7 +2937,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                 />
                 Monitor every Multiview input
               </label>
-              <label>
+              <label data-setting-level="advanced">
                 Health Check / Isolation / Retry
                 <div className="ip-inline-fields">
                   <input
@@ -3120,7 +2973,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                 </div>
                 <small className="field-help">Seconds between checks / failures before No Stream / retry seconds.</small>
               </label>
-              <label>
+              <label data-setting-level="advanced">
                 Input Queue
                 <input
                   type="number"
@@ -3133,7 +2986,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                 />
                 <small className="field-help">Normal uses this value; Low caps it at 32 packets.</small>
               </label>
-              <label>
+              <label data-setting-level="advanced">
                 Bitrate
                 <input
                   value={runtime.multiview?.quality?.bitrate ?? ""}
@@ -3153,7 +3006,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                 />
                 <small className="field-help">FFmpeg rate syntax. Examples: 2M, 800k, 4000000.</small>
               </label>
-              <label>
+              <label data-setting-level="advanced">
                 Maxrate
                 <input
                   value={runtime.multiview?.quality?.maxrate ?? ""}
@@ -3173,7 +3026,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                 />
                 <small className="field-help">Peak encoder bitrate. Usually equal to or slightly above bitrate.</small>
               </label>
-              <label>
+              <label data-setting-level="advanced">
                 Buffer Size
                 <input
                   value={runtime.multiview?.quality?.bufsize ?? ""}
@@ -3193,7 +3046,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                 />
                 <small className="field-help">Encoder rate-control buffer size, using the same units as bitrate/maxrate.</small>
               </label>
-              <label>
+              <label data-setting-level="advanced">
                 Input RTSP Base URL
                 <input
                   value={runtime.multiview?.input_rtsp_base_url ?? ""}
@@ -3208,7 +3061,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                   }
                 />
               </label>
-              <label>
+              <label data-setting-level="advanced">
                 Output RTSP Base URL
                 <input
                   value={runtime.multiview?.output_rtsp_base_url ?? ""}
@@ -3223,7 +3076,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                   }
                 />
               </label>
-              <label>
+              <label data-setting-level="advanced">
                 Grid Columns
                 <input
                   type="number"
@@ -3248,7 +3101,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                   Leave blank for auto packing. Auto uses 2 columns for 2-4 tiles, 3 for 5-9, and 4 for 10+.
                 </small>
               </label>
-              <label className="check">
+              <label className="check" data-setting-level="advanced">
                 <input
                   type="checkbox"
                   checked={Boolean(runtime.multiview?.maintenance?.enabled)}
@@ -3267,7 +3120,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                 />
                 Periodic multiview restart
               </label>
-              <label>
+              <label data-setting-level="advanced">
                 Restart Interval (sec)
                 <input
                   type="number"
@@ -3288,7 +3141,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                   }
                 />
               </label>
-              <label className="check">
+              <label className="check" data-setting-level="advanced">
                 <input
                   type="checkbox"
                   checked={Boolean(runtime.multiview?.maintenance?.align_with_record_segments)}
@@ -3307,7 +3160,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                 />
                 Align with record segments
               </label>
-              <label>
+              <label data-setting-level="advanced">
                 Restart Offset (sec)
                 <input
                   type="number"
@@ -3339,7 +3192,10 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
           </div>
 
           <div className="section settings-section settings-section-cameras">
-            <h3>UVC Camera Discovery</h3>
+            <div className="section-head">
+              <h3>UVC Camera Discovery</h3>
+              <button type="button" onClick={async () => { if (await confirmDiscard()) void loadAll(true); }}>Scan USB cameras</button>
+            </div>
             {uvcWarning && <div className="panel-note">{uvcWarning}</div>}
             <div className="panel-list">
               <div className="panel-list-title">Managed UVC Cameras</div>
@@ -3357,8 +3213,8 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                     {managedUvcCameraStates.map(({ camera, detectedDevice }) => (
                       <tr key={camera.id}>
                         <td data-label="Status">
-                          <span className={`status-tag ${detectedDevice ? "ok" : "muted"}`}>
-                            {detectedDevice ? "detected" : "missing"}
+                          <span className={"status-tag " + (detectedDevice ? usbProbeStyle(detectedDevice) : "muted")}>
+                            {detectedDevice ? usbProbeLabel(detectedDevice) : "Missing"}
                           </span>
                         </td>
                         <td data-label="Camera">
@@ -3416,7 +3272,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                       >
                         <div className="panel-list-item-title">
                           <span>{device.display_name}</span>
-                          <span className="status-tag ok">{device.driver}</span>
+                          <span className={"status-tag " + usbProbeStyle(device)}>{usbProbeLabel(device)}</span>
                         </div>
                         <small>
                           {device.modes.some((mode) => mode.fps !== undefined)
@@ -3458,17 +3314,18 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                   <div className="uvc-device-summary form-span-3">
                     <div className="uvc-device-title-row">
                       <strong>{selectedDevice.display_name}</strong>
-                      <span className={`status-tag ${selectedDevice.ignored ? "muted" : "ok"}`}>
-                        {selectedDevice.ignored ? "ignored" : selectedDevice.driver}
+                      <span className={"status-tag " + (selectedDevice.ignored ? "muted" : usbProbeStyle(selectedDevice))}>
+                        {selectedDevice.ignored ? "ignored" : usbProbeLabel(selectedDevice)}
                       </span>
-                      <span className="status-tag">{selectedModeOptions.length} modes</span>
+                      <span className="status-tag">{selectedModeOptions.length} {selectedModeOptions.length === 1 ? 'mode' : 'modes'}</span>
                     </div>
                     <div className="uvc-device-meta">
-                      <span>FFmpeg device: {selectedDevice.ffmpeg_device}</span>
+                      <span>Device: {selectedDevice.stable_device ?? selectedDevice.ffmpeg_device}</span>
                       {selectedDevice.modes.some((mode) => mode.fps !== undefined) && <span>
                         Recommended: {selectedDevice.recommended.width}x{selectedDevice.recommended.height} @{" "}
                         {formatFps(selectedDevice.recommended.fps)} fps
                       </span>}
+                      {selectedDevice.mode_warning && <span role="status">{selectedDevice.mode_warning}</span>}
                       {selectedMatchedCamera && (
                         <span>
                           Current managed camera: {getCameraLabel(selectedMatchedCamera)} (/{selectedMatchedCamera.path})
@@ -3479,19 +3336,33 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                 ) : (
                   <div className="panel-empty form-span-3">Select a detected device to configure it.</div>
                 )}
-                <label>
+                {canReplaceDevice && <label className="form-span-3">
+                  Use this device for
+                  <select value={replacementId} onChange={event => setReplacementId(event.target.value)}>
+                    <option value="">Add a new camera</option>
+                    {replacementChoices.map(({camera}) => <option key={camera.id} value={camera.id}>
+                      Reconnect {getCameraLabel(camera)}
+                    </option>)}
+                  </select>
+                </label>}
+                <label data-setting-level="advanced">
                   Profile
                   <input value={suggestProfile} onChange={(e) => setSuggestProfile(e.target.value)} />
                 </label>
-                <label>
+                <label data-setting-level="advanced">
                   Path
                   <input value={suggestPath} onChange={(e) => setSuggestPath(e.target.value)} />
                 </label>
                 <label>
                   Camera Name
-                  <input value={suggestName} onChange={(e) => setSuggestName(e.target.value)} />
+                  <input value={suggestName} disabled={selectedDeviceBlocked || Boolean(replacementId)} onChange={(e) => setSuggestName(e.target.value)} />
                 </label>
-                <label>
+                {selectedDevice && !replacementId && <label className="table-check">
+                  <input type="checkbox" checked={suggestEnabled} disabled={selectedDeviceBlocked}
+                    onChange={event => setSuggestEnabled(event.target.checked)} />
+                  Enable USB camera
+                </label>}
+                <label data-setting-level="advanced">
                   Supported Mode
                   <select
                     value={selectedModeKey}
@@ -3519,15 +3390,15 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                 </label>
                 {selectedModeOptions.some((mode) => mode.key === selectedModeKey && mode.fps !== undefined) ? (
                   <>
-                    <label>
+                    <label data-setting-level="advanced">
                       Width
                       <input type="number" min={1} value={suggestWidth} readOnly />
                     </label>
-                    <label>
+                    <label data-setting-level="advanced">
                       Height
                       <input type="number" min={1} value={suggestHeight} readOnly />
                     </label>
-                    <label>
+                    <label data-setting-level="advanced">
                       FPS
                       <input type="number" min={0.001} max={1000} step="any" value={suggestFps} readOnly />
                       <small className="field-help">Width, height, and FPS follow the selected capture mode.</small>
@@ -3535,7 +3406,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                   </>
                 ) : (
                   <>
-                    <label>
+                    <label data-setting-level="advanced">
                       Width
                       <input
                         type="number"
@@ -3544,7 +3415,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                         onChange={(e) => setSuggestWidth(Number(e.target.value))}
                       />
                     </label>
-                    <label>
+                    <label data-setting-level="advanced">
                       Height
                       <input
                         type="number"
@@ -3553,7 +3424,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                         onChange={(e) => setSuggestHeight(Number(e.target.value))}
                       />
                     </label>
-                    <label>
+                    <label data-setting-level="advanced">
                       FPS
                       <input
                         type="number"
@@ -3567,7 +3438,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                     </label>
                   </>
                 )}
-                <label>
+                <label data-setting-level="advanced">
                   Bitrate
                   <input
                     value={suggestBitrate}
@@ -3576,7 +3447,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                   />
                   <small className="field-help">Optional per-camera video bitrate. Leave blank to use preset/default behavior.</small>
                 </label>
-                <div className="form-span-3 panel-note">
+                <div className="form-span-3 panel-note advanced-setting">
                   {selectedDevice
                     ? selectedModeOptions.length > 0
                       ? `Probe returned ${selectedModeOptions.length} capture modes for this device. Select one from the list above.`
@@ -3584,11 +3455,11 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                     : "Select a device to see suggested settings and supported capture modes."}
                 </div>
                 <div className="button-row wrap form-span-3">
-                  <button type="button" onClick={() => void onPreviewSuggestion()} disabled={!selectedDevice}>
+                  <button type="button" className="advanced-setting" onClick={() => void onPreviewSuggestion()} disabled={!selectedDevice || Boolean(replacementId)}>
                     Preview Suggestion
                   </button>
-                  <button type="button" onClick={() => void onApplyUvc()} disabled={!selectedDevice}>
-                    Apply Device
+                  <button type="button" onClick={() => void onApplyUvc()} disabled={!selectedDevice || selectedDeviceBlocked}>
+                    {replacementId ? "Reconnect camera" : "Apply Device"}
                   </button>
                   <button
                     type="button"
@@ -3600,7 +3471,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                   </button>
                 </div>
                 {suggestion && (
-                  <div className="code-block">
+                  <div className="code-block advanced-setting">
                     <div>Suggested .env lines</div>
                     <pre>{suggestion.env_lines.join("\n")}</pre>
                   </div>
@@ -3620,7 +3491,13 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                 Add IP Camera
               </button>
             </div>
-            <div className="ip-camera-list">
+            {ipDrafts.length > 1 && <label className="camera-picker">
+              IP camera
+              <select aria-label="IP camera to configure" value={visibleIpId} onChange={event => setSelectedIpId(event.target.value)}>
+                {ipDrafts.map(draft => <option key={draft.id} value={draft.id}>{draft.display_name || draft.path}</option>)}
+              </select>
+            </label>}
+            <div id="ip-cameras" className="ip-camera-list">
               {ipDrafts.map((draft, idx) => {
                 const probeState = ipProbeStates[draft.id];
                 const probe = probeState?.requestKey === ipInspectionKey(draft.ip) ? probeState.result : null;
@@ -3642,7 +3519,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                 const encodeEnabled =
                   draft.ip.relay_mode === "libx264" || ["auto", "cfr"].includes(draft.ip.timestamp_mode);
                 return (
-                  <article className="ip-camera-card" key={draft.id}>
+                  <article className="ip-camera-card" hidden={draft.id !== visibleIpId} key={draft.id}>
                     <header className="ip-camera-card-head">
                       <label className="ip-camera-enable">
                         <input
@@ -3664,12 +3541,12 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                       <label>
                         Display Name
                         <input
-                          value={draft.display_name}
+                          id={"ip-name-" + draft.id} value={draft.display_name}
                           onChange={(e) => onUpdateIpDraft(idx, { display_name: e.target.value })}
                           placeholder="Lobby IP Camera"
                         />
                       </label>
-                      <label>
+                      <label data-setting-level="advanced">
                         MediaMTX Path
                         <input value={draft.path} onChange={(e) => onUpdateIpDraft(idx, { path: e.target.value })} />
                       </label>
@@ -3707,7 +3584,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                         />
                       </label>
                       <div className="ip-onvif-grid">
-                        <label>
+                        <label data-setting-level="advanced">
                           ONVIF discovery
                           <select
                             value={draft.ip.onvif_mode}
@@ -3723,7 +3600,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                           </select>
                         </label>
                         {draft.ip.onvif_mode === "manual" && (
-                          <label className="ip-onvif-address-field">
+                          <label className="ip-onvif-address-field" data-setting-level="advanced">
                             ONVIF device service address
                             <input
                               value={draft.ip.onvif_address}
@@ -3735,7 +3612,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                         )}
                         {draft.ip.onvif_mode !== "disabled" && (
                           <>
-                            <label>
+                            <label data-setting-level="advanced">
                               ONVIF Username <small>Optional</small>
                               <input
                                 value={draft.ip.onvif_username}
@@ -3744,7 +3621,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                                 autoComplete="off"
                               />
                             </label>
-                            <label>
+                            <label data-setting-level="advanced">
                               ONVIF Password <small>Optional</small>
                               <input
                                 type="password"
@@ -3893,7 +3770,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                               <option value="viewer">Admin + authenticated Viewer</option>
                             </select>
                           </label>
-                          <label>
+                          <label data-setting-level="advanced">
                             ONVIF media profile
                             <select
                               value={draft.ip.ptz.profile_token}
@@ -3921,7 +3798,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                               ))}
                             </select>
                           </label>
-                          <label>
+                          <label data-setting-level="advanced">
                             Pan / Tilt speed <span>{Math.round(draft.ip.ptz.pan_tilt_speed * 100)}%</span>
                             <input
                               type="range"
@@ -3937,7 +3814,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                               }
                             />
                           </label>
-                          <label>
+                          <label data-setting-level="advanced">
                             Zoom speed <span>{Math.round(draft.ip.ptz.zoom_speed * 100)}%</span>
                             <input
                               type="range"
@@ -3953,7 +3830,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                               }
                             />
                           </label>
-                          <label>
+                          <label data-setting-level="advanced">
                             Relative step <span>{Math.round(draft.ip.ptz.relative_step * 100)}%</span>
                             <input
                               type="range"
@@ -3976,7 +3853,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                       </section>
                     </section>
 
-                    <section className="ip-camera-panel ip-multiview-input-panel">
+                    <section className="ip-camera-panel ip-multiview-input-panel advanced-setting">
                       <div className="ip-camera-panel-title">
                         <div>
                           <h4>Multiview input</h4>
@@ -4017,7 +3894,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                           </select>
                         </label>
                         {draft.ip.multiview_input.mode === "onvif" && (
-                          <label>
+                          <label data-setting-level="advanced">
                             ONVIF media profile
                             <select
                               value={draft.ip.multiview_input.profile_token}
@@ -4128,7 +4005,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
                           <span>This opens a second RTSP stream from the camera and falls back to the primary path on failure.</span>
                         </div>
                       )}
-                      <details className="ip-camera-details">
+                      <details className="ip-camera-details advanced-setting">
                         <summary>Conversion details</summary>
                         <div className="ip-detail-grid">
                           {(["encoder", "bitrate", "maxrate", "bufsize", "x264_preset"] as const).map((field) => (
@@ -4324,7 +4201,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
             </div>
           </div>
 
-          <details className="settings-restart-options">
+          <details className="settings-restart-options advanced-setting">
             <summary>Restart options</summary>
             <p>Most changes apply without interrupting streams. Use a full restart only when a runtime change requires it.</p>
             <button type="button" className="button-danger" onClick={() => void onSaveBasic(true)}>
@@ -4332,7 +4209,6 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
             </button>
           </details>
         </div>
-      )}
 
       {!normalizedSettingsSearch && mode === "advanced" && (
         <div className="settings-detail">
@@ -4369,7 +4245,7 @@ export function SettingsPage({ api: sharedApi, onUiConfigChanged, onDirtyChange,
         </div>
       )}
           </fieldset>}
-        </main>
+        </div>
       </div>
     </div>
     </SettingsHelp>

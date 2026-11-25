@@ -1,3 +1,4 @@
+import { chooseSettingsCategory, chooseIpCamera } from './settings-navigation.mjs';
 // Exercises a REAL installed API. Do not add route.fulfill or an API mock here.
 import assert from 'node:assert/strict';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
@@ -24,6 +25,7 @@ const eventFolder = values['archive-folder'];
 const eventApi = '/api/v1/recording-events';
 const eventLabel = 'Synthetic equipment fault';
 const preview9 = values['preview-9'];
+const modernSettings = () => page.getByRole('group', { name: 'Settings level' }).isVisible();
 if (onvif) assert.equal(onvif.hostname, '127.0.0.1');
 const renamedIp = '入口 IP – QA';
 const renamedSecond = '作業台 カメラ – QA';
@@ -75,7 +77,7 @@ async function nav(name) {
   await button.click();
   await until(() => button.getAttribute('aria-current'), value => value === 'page', 'Navigation to '+name, 30);
 }
-async function category(name) { await page.getByRole('complementary', { name: 'Settings categories' }).getByRole('button', { name, exact: true }).click(); }
+async function category(name, options) { await chooseSettingsCategory(page, name, options); }
 async function login(username, secret) {
   await page.getByLabel('Username', { exact: true }).fill(username);
   await page.getByLabel('Password', { exact: true }).fill(secret);
@@ -109,7 +111,7 @@ async function addIpCamera(index) {
 }
 
 function usbDiscovery() {
-  return page.getByRole('heading', { name: 'UVC Camera Discovery', exact: true }).locator('..');
+  return page.locator('.settings-section-cameras').filter({has: page.getByRole('heading', {name: 'UVC Camera Discovery', exact: true})});
 }
 
 async function archivePlayback() {
@@ -138,10 +140,11 @@ async function archivePlayback() {
   await video.evaluate(v => { v.muted = true; void v.play().catch(() => {}); });
   await until(() => video.evaluate(v => ({ width: v.videoWidth, time: v.currentTime, duration: v.duration })),
     v => v.width > 0 && v.time > .1 && Math.abs(v.duration - 1) <= .15, 'Event video playback and duration', 30);
+  await page.screenshot({path: join(output, 'Event-recording-playing.png')});
 }
 
 async function archiveEvent() {
-  await nav('Settings'); await settingsReady(); await category('Recording');
+  await nav('Settings'); await settingsReady(); await category(await modernSettings() ? 'Integrations & API' : 'Recording');
   await page.getByLabel('Enable event recordings', { exact: true }).check();
   await page.getByLabel('Event recording folder', { exact: true }).fill(eventFolder);
   await page.getByLabel('Maximum lookback (seconds)', { exact: true }).fill('90');
@@ -184,7 +187,7 @@ async function archiveEvent() {
   await writeFile(join(output, 'event-selection.json'), JSON.stringify({ event_id: result.id,
     clip_index: Number(result.clips[0].file_id.split('.').at(-1)) }));
   await page.getByRole('button', { name: 'Close player', exact: true }).click();
-  await nav('Settings'); await settingsReady(); await category('Recording');
+  await nav('Settings'); await settingsReady(); await category(await modernSettings() ? 'Integrations & API' : 'Recording');
   const rotated = page.waitForResponse(r => r.url().endsWith(eventApi+'/settings') && r.request().method() === 'PUT');
   await page.getByRole('button', { name: 'Replace event token', exact: true }).click();
   assert.equal((await rotated).status(), 200, 'Could not replace event recording token');
@@ -216,13 +219,23 @@ async function configureSettings() {
   for (const [label, key] of [['App Title', 'app_title'], ['Sidebar Title', 'sidebar_title'], ['Footer Text', 'footer_text']]) {
     await page.getByRole('textbox', { name: new RegExp('^'+label) }).fill(branding[key]);
   }
-  await category('Quick settings');
-  await page.getByRole('combobox', { name: 'Log level', exact: true }).selectOption('WARNING');
-  await category('Logging');
-  assert.equal(await page.getByRole('combobox', { name: /^Log Level/ }).inputValue(), 'WARNING');
-  await page.getByRole('combobox', { name: /^Log Level/ }).selectOption('INFO');
-  await category('Quick settings');
-  assert.equal(await page.getByRole('combobox', { name: 'Log level', exact: true }).inputValue(), 'INFO');
+  if (await modernSettings()) {
+    await category('Logging');
+    const logLevel = page.getByRole('combobox', { name: /^Log Level/ });
+    await logLevel.selectOption('WARNING');
+    await category('Recording', { advanced: false });
+    await category('Logging');
+    assert.equal(await logLevel.inputValue(), 'WARNING');
+    await logLevel.selectOption('INFO');
+  } else {
+    await category('Quick settings');
+    await page.getByRole('combobox', { name: 'Log level', exact: true }).selectOption('WARNING');
+    await category('Logging');
+    assert.equal(await page.getByRole('combobox', { name: /^Log Level/ }).inputValue(), 'WARNING');
+    await page.getByRole('combobox', { name: /^Log Level/ }).selectOption('INFO');
+    await category('Quick settings');
+    assert.equal(await page.getByRole('combobox', { name: 'Log level', exact: true }).inputValue(), 'INFO');
+  }
   await category('Runtime & access');
   await page.getByLabel(/^Session TTL/).fill('7200');
   await page.getByText('Advanced runtime options', { exact: true }).click();
@@ -272,7 +285,7 @@ async function configureMultiview() {
 }
 
 async function verifyApiKeys() {
-  await nav('Settings'); await category('Runtime & access'); await settingsReady();
+  await nav('Settings'); await category(await modernSettings() ? 'Integrations & API' : 'Runtime & access'); await settingsReady();
   const panel = page.locator('.api-access');
   await panel.locator('summary').click();
   const name = panel.getByLabel('API key name', { exact: true });
@@ -312,7 +325,7 @@ async function verifyApiKeys() {
 }
 
 async function verifyRetainedApiKeys() {
-  await nav('Settings'); await category('Runtime & access'); await settingsReady();
+  await nav('Settings'); await category(await modernSettings() ? 'Integrations & API' : 'Runtime & access'); await settingsReady();
   const panel = page.locator('.api-access');
   await panel.locator('summary').click();
   const items = panel.getByRole('listitem');
@@ -411,9 +424,11 @@ async function renameCameras() {
   const clipIds = (await json('/api/v1/recordings?status=stable&limit=100')).items.map(clip => clip.file_id);
   assert(clipIds.length > 0, 'Camera rename must run with existing finalized clips');
   await nav('Settings'); await category('Cameras'); await settingsReady();
+  await chooseIpCamera(page, 'qa-camera-1');
   const ip = page.locator('.ip-camera-card').filter({hasText: 'QA camera 1'});
   await ip.getByLabel('Display Name', { exact: true }).fill(renamedIp);
   if (!values['synthetic-uvc']) {
+    await chooseIpCamera(page, 'qa-camera-2');
     await page.locator('.ip-camera-card').filter({hasText: 'QA camera 2'}).getByLabel('Display Name', { exact: true }).fill(renamedSecond);
   }
   await saveCameraForm();
@@ -446,6 +461,7 @@ async function verifyPathChange() {
   // Run while monitoring is stopped so this case does not create a second
   // stream in the recording/hash acceptance check.
   await nav('Settings'); await category('Cameras'); await settingsReady();
+  await chooseIpCamera(page, 'qa-camera-1');
   const path = page.locator('.ip-camera-card').filter({hasText: renamedIp}).getByLabel('MediaMTX Path', { exact: true });
   await path.fill('qa-camera-2');
   await header.getByRole('button', { name: 'Save changes', exact: true }).click();
@@ -591,6 +607,7 @@ try {
         quality: { fps: 5, encoder: 'libx264', gop: 5, quality_preset: 'low' }, layout: { canvas_width: 640, canvas_height: 360, grid_columns: 2 } } });
     stages.push('GUI-register-two-cameras-and-save');
     await nav('Information'); await nav('Settings'); await category('Cameras');
+    await chooseIpCamera(page, 'qa-camera-1');
     const audioCard = page.locator('.ip-camera-card').first();
     if (preview9) {
       const panel = audioCard.locator('.camera-audio-toolbar');
@@ -665,6 +682,7 @@ try {
     await player.waitFor();
     await player.evaluate(v => { v.muted = true; void v.play().catch(() => {}); });
     await until(() => player.evaluate(v => ({ width: v.videoWidth, time: v.currentTime })), v => v.width > 0 && v.time > .1, 'Recorded video playback');
+    await page.screenshot({path: join(output, 'Recording-playing.png')});
     const downloadEvent = page.waitForEvent('download');
     await page.getByRole('dialog').getByRole('link', { name: 'Download', exact: true }).click();
     const download = await downloadEvent;
@@ -683,6 +701,7 @@ try {
       await usbDiscovery().getByRole('row', { name: /QA camera 2/ }).getByRole('button', { name: 'Ignore / Remove', exact: true }).click();
       await settingsReady();
     } else {
+      await chooseIpCamera(page, 'qa-camera-2');
       await page.locator('.ip-camera-card').filter({ hasText: 'QA camera 2' }).getByRole('button', { name: 'Remove', exact: true }).click();
       await saveCameraForm();
     }

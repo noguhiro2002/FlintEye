@@ -1,3 +1,4 @@
+import { chooseSettingsCategory } from './settings-navigation.mjs';
 import { fileURLToPath } from 'node:url';
 import { mkdirSync } from 'node:fs';
 process.chdir(fileURLToPath(new URL('../..', import.meta.url)));
@@ -130,7 +131,7 @@ async function context(scenario, width = 1440, height = 900, colorScheme = 'ligh
 try {
     for (const width of [320, 1440]) {
         const { ctx, p } = await context('setup', width, 844);
-        await p.locator('.login-card input').first().waitFor();
+        await p.locator('.login-form input').first().waitFor();
         const card = p.locator('.login-card');
         assert.match(await card.innerText(), /FlintEye/);
         const inputs = card.locator('input');
@@ -178,16 +179,15 @@ try {
         let pending = false;
         await ctx.route('**/api/v1/network', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ saved: { enabled: true, address: '192.168.1.10', allowed_subnets: ['192.168.1.0/24'] }, restart_required: pending, local_url: 'http://127.0.0.1:18080', lan_url: 'https://192.168.1.10:18080', fingerprint: '0123456789abcdef'.repeat(4), ca_expires: '2031-11-16T00:00:00Z', guide_url: 'https://example.test/guide', error: '' }) }));
         await p.locator('.sidebar').getByRole('button', { name: 'Settings', exact: true }).click();
-        await p.getByRole('complementary', { name: 'Settings categories' }).getByRole('button', { name: 'Runtime & access', exact: true }).click();
+        await chooseSettingsCategory(p, 'Runtime & access');
         await p.getByText('LAN connection and certificate trust', { exact: true }).click();
         const address = p.getByRole('textbox', { name: 'Server IPv4 address', exact: true });
         await address.waitFor();
         const exportGuide = p.getByRole('button', {name: 'Save public certificate and connection guide', exact: true});
         assert(await exportGuide.isEnabled());
-        await p.getByText('Connect an iPhone or iPad', {exact: true}).click();
-        await p.getByText('FlintEye.mobileconfig', {exact: true}).waitFor();
-        assert(await p.getByText(/Certificate Trust Settings, enable full trust/).isVisible());
-        assert(await p.getByText(/ERR_CERT_AUTHORITY_INVALID/).isVisible());
+        assert.equal(await p.getByText('Connect an iPhone or iPad', {exact: true}).count(), 0);
+        assert(await p.getByText(/trust the public certificate before opening/).isVisible());
+        await p.getByRole('link', {name: 'https://192.168.1.10:18080', exact: true}).waitFor();
         const widths = await p.evaluate(() => [innerWidth, document.documentElement.scrollWidth]);
         assert.ok(widths[1] <= widths[0] + 1, `LAN settings overflow: ${widths}`);
         const fields = p.locator('.network-access form label');
@@ -210,6 +210,7 @@ try {
         await p.getByText('Install the new trust certificate on every viewing device. Restart FlintEye to apply connection changes.', { exact: true }).waitFor();
         await p.getByText('Connection changes are saved. Restart FlintEye to apply them.', {exact: true}).waitFor();
         assert(await exportGuide.isDisabled());
+        assert.equal(await p.getByRole('link', {name: 'https://192.168.1.10:18080', exact: true}).count(), 0);
         pending = false;
         await p.getByRole('button', {name: 'Refresh connection status', exact: true}).click();
         await p.getByText('Connection changes are saved. Restart FlintEye to apply them.', {exact: true}).waitFor({state: 'hidden'});

@@ -100,6 +100,7 @@ try {
             const result = await start('admin', width, 844);
             ctx = result.ctx;
             const page = result.p;
+            if (width <= 900) await page.getByText('Process List', { exact: true }).click();
             await page.getByText('camera-cam1', { exact: true }).waitFor();
             await checkWidth(page, 'Dashboard', width);
             const control = page.locator('.sidebar').getByRole('button', { name: 'Information', exact: true });

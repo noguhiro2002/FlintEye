@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ApiClient, ApiError } from '../api/client';
 import type { PageKey } from './Sidebar';
+import type { SettingsTarget } from '../settingsNavigation';
 
 export function SetupAccount({api, onDone, desktop, handoffReady}: {
   api: ApiClient; onDone: () => void; desktop: boolean; handoffReady: boolean;
@@ -47,11 +48,11 @@ export function SetupAccount({api, onDone, desktop, handoffReady}: {
     <label>Confirm password<input type="password" required minLength={12} value={confirm} onChange={e => setConfirm(e.target.value)} autoComplete="new-password" /></label>
     {['127.0.0.1', 'localhost', '[::1]'].includes(window.location.hostname) && <details>
       <summary>Optional LAN or VPN access for other devices</summary>
-      <label className="check"><input type="checkbox" checked={lan} onChange={e => setLan(e.target.checked)}/>Allow access from other devices on LAN or VPN (HTTPS)</label>
+      <label className="check setup-lan-toggle"><input type="checkbox" checked={lan} onChange={e => setLan(e.target.checked)}/>Allow access from other devices on LAN or VPN (HTTPS)</label>
       {lan && <>
         <label>Server IPv4 address<input required value={address} onChange={e=>setAddress(e.target.value)} placeholder="192.168.1.10"/></label>
         <label>Permitted source networks<input required value={sources} onChange={e=>setSources(e.target.value)} placeholder="192.168.1.0/24"/></label>
-        <p>After setup, save the certificate guide in Settings → Runtime & access, approve the necessary Firewall access, and restart FlintEye. Each viewing device must trust this installation’s certificate before using https://SERVER-IP:18080. No network access is enabled until restart.</p>
+        <p>This saves the connection settings. Restart FlintEye to activate HTTPS, then save the public certificate from Settings → Runtime & access. Each viewing device needs to trust that certificate before opening the shared address.</p>
       </>}
     </details>}
     {error && <p role="alert">{error}</p>}
@@ -59,22 +60,22 @@ export function SetupAccount({api, onDone, desktop, handoffReady}: {
   </form>;
 }
 
-const steps: { title: string; body: string; page: PageKey }[] = [
+const steps: { title: string; body: string; page: PageKey; target?: SettingsTarget }[] = [
   { title: 'Welcome to FlintEye', body: 'Closing this browser does not stop recording. Use Stop monitoring to pause cameras and recording while keeping settings available. In the desktop menu or control window, Quit FlintEye stops the application completely. A stopped session stays stopped after restarting unless Resume monitoring on startup is enabled. For Docker or systemd, stop the service on the server. Monitoring requires the computer to remain awake and the service to keep running.', page: 'dashboard' },
-  { title: 'Add your first camera', body: 'In Settings, find USB cameras to detect a connected device, or add an IP camera using its address and credentials. You can add cameras later.', page: 'settings' },
-  { title: 'Choose where to save recordings', body: 'Open Settings → Recording to choose a recording folder on the computer running FlintEye. The suggested limit is half its free space, up to 50 GB. Choose Save changes to apply your choices.', page: 'settings' },
-  { title: 'Understand loop recording', body: 'FlintEye deletes the oldest completed recordings when either the retention period (7 days by default) or storage limit is reached. Storage limits can shorten the actual history. Previous recording locations are also cleaned even when hidden.', page: 'settings' },
+  { title: 'Add your first camera', body: 'In Settings, find USB cameras to detect a connected device, or add an IP camera using its address and credentials. You can add cameras later.', page: 'settings', target: { section: 'cameras' } },
+  { title: 'Choose where to save recordings', body: 'Open Settings → Recording to choose a recording folder on the computer running FlintEye. The suggested limit is half its free space, up to 50 GB. Choose Save changes to apply your choices.', page: 'settings', target: { section: 'recording', anchor: 'recording-folder' } },
+  { title: 'Understand loop recording', body: 'FlintEye deletes the oldest completed recordings when either the retention period (7 days by default) or storage limit is reached. Storage limits can shorten the actual history. Previous recording locations are also cleaned even when hidden.', page: 'settings', target: { section: 'recording' } },
   { title: 'View your cameras', body: 'Open Live View to watch cameras and Recordings to play saved footage. Other devices on your LAN must sign in. Set the viewer password in Settings → Runtime & access before sharing access.', page: 'live' },
 ];
 
-export function FirstRun({ api, navigate, onClose }: { api: ApiClient; navigate: (page: PageKey) => void; onClose: () => void }) {
+export function FirstRun({ api, navigate, onClose }: { api: ApiClient; navigate: (page: PageKey, target?: SettingsTarget) => void; onClose: () => void }) {
   const [step, setStep] = useState(0);
   const [error, setError] = useState('');
   const close = async () => {
     try { await api.patchRuntimeConfig({ ui: { onboarding_done: true } }); onClose(); }
     catch (err) { setError(String(err)); }
   };
-  const go = (index: number) => { setStep(index); navigate(steps[index].page); };
+  const go = (index: number) => { setStep(index); navigate(steps[index].page, steps[index].target); };
   return <aside className="first-run" aria-label="Getting started">
     <strong>{step + 1} / {steps.length} — {steps[step].title}</strong>
     <p>{steps[step].body}</p>

@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import type { ApiClient } from "../api/client";
+import { ResponsiveDetails } from "../components/ResponsiveDetails";
 import type { ViewerInfoResponse } from "../types";
 
 interface InformationPageProps {
   api: ApiClient;
+  onOpenGuide?: () => void;
 }
 
 function RtspAddress({ url, status }: { url?: string | null; status?: string }) {
@@ -28,12 +30,29 @@ function RtspAddress({ url, status }: { url?: string | null; status?: string }) 
   </>;
 }
 
-export function InformationPage({ api }: InformationPageProps): JSX.Element {
+export function InformationPage({ api, onOpenGuide }: InformationPageProps): JSX.Element {
   const [build, setBuild] = useState<Awaited<ReturnType<ApiClient['getBuildInfo']>> | null>(null);
   const [info, setInfo] = useState<ViewerInfoResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const requestId = useRef(0);
   const [error, setError] = useState("");
+  const [checkingUpdates, setCheckingUpdates] = useState(false);
+  const [updateMessage, setUpdateMessage] = useState("");
+
+  const checkUpdates = async () => {
+    setCheckingUpdates(true);
+    try {
+      const release = await api.getUpdates();
+      const current = release.current_release ?? release.current;
+      setUpdateMessage(release.message ?? (release.available
+        ? "Version " + release.version + " is available. Stop monitoring before installing the update."
+        : "You are using version " + current + ". No newer release is available."));
+    } catch (error) {
+      setUpdateMessage(error instanceof Error ? error.message : "Could not check for updates. Try again.");
+    } finally {
+      setCheckingUpdates(false);
+    }
+  };
 
   const load = async (): Promise<void> => {
     const request = ++requestId.current;
@@ -74,6 +93,17 @@ export function InformationPage({ api }: InformationPageProps): JSX.Element {
           {loading ? "Refreshing..." : "Refresh"}
         </button>
       </div>
+      {onOpenGuide && <section className="section">
+        <div className="button-row">
+          <button type="button" onClick={onOpenGuide}>Getting started</button>
+          <button type="button" disabled={checkingUpdates} onClick={() => void checkUpdates()}>
+            {checkingUpdates ? "Checking for updates…" : "Check for updates"}
+          </button>
+          <a href={api.buildUrl("/api/v1/diagnostics")} download="FlintEye-diagnostics.zip">Save diagnostics</a>
+          <a href="https://github.com/noguhiro2002/FlintEye/releases" target="_blank" rel="noreferrer">FlintEye releases</a>
+        </div>
+        {updateMessage && <p className="field-help" role="status">{updateMessage}</p>}
+      </section>}
       {error && <div className="panel-error">{error}</div>}
       {!info ? (
         <div className="panel-empty" role="status">{loading ? "Loading information…" : "Information is unavailable. Use Refresh to retry."}</div>
@@ -82,6 +112,7 @@ export function InformationPage({ api }: InformationPageProps): JSX.Element {
           <div className="section">
             <h3>System</h3>
             <p>FlintEye {build?.release ?? build?.version ?? 'version unavailable'} · {build?.channel ?? 'channel unavailable'}</p>
+            <ResponsiveDetails summary="System and API details">
             <p className="panel-note">Build: <code>{build?.commit ?? 'source commit not recorded'}</code>{build?.dirty ? ' (local changes)' : ''}</p>
             <div className="form-grid">
               <label>
@@ -124,10 +155,12 @@ export function InformationPage({ api }: InformationPageProps): JSX.Element {
               <p className="panel-note">This address is for internal publishing and diagnostics. For a player on another device, use the camera's RTSPS address below.</p>
               <code>{info.rtsp_base_url}</code>
             </details>
+            </ResponsiveDetails>
           </div>
 
           <div className="section">
             <h3>Cameras</h3>
+            <ResponsiveDetails summary="Camera addresses and specifications">
             <p className="panel-note">For VLC or another network player, enable LAN access and RTSPS in Settings → Runtime &amp; access, then use the reader credentials and trust the server certificate. WebRTC opens in your browser.</p>
             {info.cameras.length === 0 && <p className="panel-note">No cameras are configured. An administrator can add cameras in Settings.</p>}
             <div className="table-scroll">
@@ -167,10 +200,12 @@ export function InformationPage({ api }: InformationPageProps): JSX.Element {
               </tbody>
             </table>
             </div>
+            </ResponsiveDetails>
           </div>
 
           <div className="section">
             <h3>Multiview</h3>
+            <ResponsiveDetails summary="Multiview details and output addresses">
             <div className="form-grid">
               <label>
                 Enabled
@@ -236,6 +271,7 @@ export function InformationPage({ api }: InformationPageProps): JSX.Element {
                 </table>
               </div>
             )}
+            </ResponsiveDetails>
           </div>
         </>
       )}

@@ -65,6 +65,7 @@ command = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', '--one
            '--add-data', f'{identity}{sep}.',
            '--add-data', f'{ROOT / "THIRD_PARTY_NOTICES.md"}{sep}.',
            '--add-data', f'{ROOT / "images/icons"}{sep}images/icons',
+           '--add-data', f'{ROOT / "flinteye_app/fonts"}{sep}flinteye_app/fonts',
            '--add-data', f'{ROOT / "docs/LAN_ACCESS.md"}{sep}docs',
            '--add-data', f'{ROOT / "docs/LAN_ACCESS.ja.md"}{sep}docs',
            '--add-data', f'{ROOT / "packaging/firewall_windows.ps1"}{sep}packaging',
