@@ -6,7 +6,9 @@ FROM golang:1.27.4-bookworm@sha256:4fa7c968ba93f1635670522dbb01a2c78150443e13857
 FROM scratch AS vendor-downloads
 COPY packaging/empty-cache/ /
 FROM rockylinux:9@sha256:d7be1c094cc5845ee815d4632fe377514ee6ebcf8efaed6892889657e5ddaaa6 AS builder
-RUN dnf install -y dnf-plugins-core && dnf config-manager --set-enabled crb \
+# Refresh installed libraries before packaging so their exact source RPMs are available.
+RUN dnf upgrade -y --refresh \
+    && dnf install -y dnf-plugins-core && dnf config-manager --set-enabled crb \
     && dnf install -y gcc gcc-c++ make cmake ninja-build pkgconf-pkg-config nasm \
        python3.12 python3.12-pip openssl-devel bzip2-devel libffi-devel zlib-devel \
        xz-devel readline-devel sqlite-devel tk-devel libuuid-devel libX11-devel \

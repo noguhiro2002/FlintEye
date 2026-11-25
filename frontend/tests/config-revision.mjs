@@ -116,7 +116,8 @@ try {
     const test = await scenario({ conflict });
     const page = test.page;
     await page.locator('.sidebar').getByRole('button', { name: 'Settings', exact: true }).click();
-    await page.getByText('127.0.0.1:18765', { exact: true }).waitFor();
+    await chooseSettingsCategory(page, 'Runtime & access');
+    await page.getByText(/Listening now: 127\.0\.0\.1:18765 \(command line\)/).waitFor();
     await chooseSettingsCategory(page, 'General');
     const title = page.getByRole('textbox', { name: /^App Title/ });
     await title.fill('Protected edit');

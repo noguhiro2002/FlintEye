@@ -39,6 +39,7 @@ class VerificationContractTests(unittest.TestCase):
         self.assertEqual(list(verify.GROUPS), required)
         release = yaml.load((verify.ROOT / ".github/workflows/build-release.yml").read_text(), Loader=yaml.BaseLoader)
         self.assertTrue(any(job.get("uses") == "./.github/workflows/check.yml" for job in release["jobs"].values()))
+        self.assertIn("packaging/LinuxBuilder.Dockerfile", release["on"]["push"]["paths"])
 
     def test_default_gate_executes_real_checks_not_only_inventory(self):
         commands = []

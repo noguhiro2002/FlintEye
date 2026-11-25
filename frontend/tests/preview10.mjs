@@ -115,6 +115,9 @@ async function scenario(options, test) {
       case '/api/v1/recordings': json = {items: [recording], record_root: '/sample/recordings', total: 1}; break;
       case '/api/v1/recordings/streams': json = {items: ['one'], record_root: '/sample/recordings'}; break;
       case '/api/v1/recordings/files/clip-1/prepare': json = {ok: true, has_audio: false}; break;
+      case '/api/v1/recordings/files/clip-1/playable':
+        // Keep the request pending while checking the controls. Installed QA decodes real recordings.
+        return;
       case '/api/v1/recording-events':
         json = {items: [{id: 'fixture-event', label: longName, status: 'completed', occurred_at: now,
           requested_from: now - 60, detail: 'Fixture', cameras: [], clips: []}]};
@@ -297,6 +300,13 @@ try {
       const close = modal.getByRole('button', {name: 'Close player', exact: true});
       const closeBox = await close.boundingBox();
       assert(closeBox.y >= 0 && closeBox.y + closeBox.height <= height+1);
+      if (height === 390) {
+        const download = modal.getByRole('link', {name: 'Download', exact: true});
+        await download.scrollIntoViewIfNeeded();
+        const box = await download.boundingBox();
+        assert(box.y >= 0 && box.y + box.height <= height + 1, 'Download is unreachable in landscape');
+        assert(await modal.locator('video').evaluate(video => video.controls));
+      }
       await close.click();
       await navigate(page, 'Settings');
       if (mobile) await page.getByRole('combobox', {name: 'Settings category'}).waitFor();

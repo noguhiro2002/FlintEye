@@ -27,6 +27,7 @@ on:
       - packaging/qa_settings.py
       - packaging/ci_apt.py
       - packaging/LifecycleLinux.Dockerfile
+      - packaging/LinuxBuilder.Dockerfile
       - frontend/tests/installed.mjs
       - frontend/tests/preview10.mjs
       - tools/verify_before_push.py
