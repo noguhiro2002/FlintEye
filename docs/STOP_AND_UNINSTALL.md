@@ -131,7 +131,7 @@ Run the matching command from the original deployment directory or checkout root
 
 Wait for the command to finish so recordings can finalize. It removes the containers and their owned processes, including FastAPI, FFmpeg and MediaMTX. Named volumes and bind-mounted recordings remain. Do not add `--volumes` / `-v` for a normal uninstall.
 
-The downloaded image stays cached after `down`. To reclaim that space, optionally remove only the FlintEye image you used, for example `docker image rm ghcr.io/noguhiro2002/flinteye:1.2.0-preview.3`, or `docker image rm flinteye:development` for the development image. Adjust the version to your installed tag; do not force removal if another container uses it. Docker itself and images/layers used by other applications stay installed. Keep the Compose files and `.env` for a later reinstall; remove them only if you no longer need the deployment definition.
+The downloaded image stays cached after `down`. To reclaim that space, optionally remove only the FlintEye image you used, for example `docker image rm ghcr.io/noguhiro2002/flinteye:1.2.0-preview.10`, or `docker image rm flinteye:development` for the development image. Adjust the version to your installed tag; do not force removal if another container uses it. Docker itself and images/layers used by other applications stay installed. Keep the Compose files and `.env` for a later reinstall; remove them only if you no longer need the deployment definition.
 
 ## systemd
 
@@ -180,7 +180,7 @@ Uninstalling the server does not remove the certificate you trusted on other com
 
 ## Which builds contain this change?
 
-These fixes require a rebuilt installer. Previously downloaded installers are unchanged. Check the source commit in the build information: the application version alone does not identify these changes. The [M1 build guide](LOCAL_MACOS_BUILD.md) builds the current committed source without GitHub Actions.
+Preview 10 includes these shutdown and removal fixes. Older downloaded installers retain their original behavior. Check the complete release version and source commit in **Information**. The [M1 build guide](LOCAL_MACOS_BUILD.md) can also build the current committed source without GitHub Actions.
 
 Automated checks cover owned-process cleanup, an exited worker with a surviving child, Windows job ownership under Wine, and the installed-bundle shutdown request. Wine does not replace a real Windows uninstall test. Verify quit, camera release and restart on each target device; check that unrelated applications remain running and that uninstall retains accounts and recordings.
 

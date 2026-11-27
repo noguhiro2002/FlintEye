@@ -40,7 +40,7 @@ ssh -L 18080:127.0.0.1:18080 your-server
 ```
 
 セットアップトークンをIssueに投稿したり、パスワードをコマンド引数に入力したりしないでください。
-その他のLANユーザー向けには、[HTTPSリバースプロキシ](DISTRIBUTION.ja.md#user-installation)を設定してください。
+その他のLANユーザー向けには、[組み込み HTTPS と閲覧端末の証明書](LAN_ACCESS.ja.md#アクセスの有効化)を設定してください。
 HTTP/API/MediaMTXリスナーはループバック上で動作し続けます。また、WebRTCにはUDP 8189も必要です。
 
 <a id="finish-setup-over-https"></a>
@@ -140,4 +140,4 @@ docker compose -f deploy/compose.dev.yaml up -d --build
 
 ## 1.2.0 development: Docker Desktop
 
-1.2.0で再ビルドされたイメージを使用する場合は、チェックアウトから`docker compose -f deploy/compose.desktop.yaml up -d`を使用してください。配布後は、同じリリースの`compose.desktop.yaml`とその正確なイメージタグを使用してください。この個別のブリッジ設定では、HTTP TCP 18080およびWebRTC UDP 8189がホストのループバックに対してのみ公開されます。コンテナはHTTPリスナーを自身のインターフェースにバインドし、ホストループバックのICE候補をアドバタイズします。ホストのブラウザで http://127.0.0.1:18080 を開いてください。USB転送およびONVIFマルチキャスト検出は含まれていないため、アクセス可能なIPカメラを手動で設定してください。これはLANサーバー設定ではありません。既存のルートComposeは、Linuxホストネットワーキングとそのボリュームを維持します。更新時にプロジェクト名を変更したり、ボリュームを消去したりしないでください。どちらのルートも、停止時の通常の録画終了処理に60秒を要します。終了コード143のみを完了の証拠とするのではなく、停止の受付を確認し、最後の録画をデコードして確認してください。[LANサーバーのセットアップ](LAN_ACCESS.ja.md) · [必要な承認](DEVELOPMENT_1_2_0.ja.md)
+Preview 10 の [compose.desktop.yaml](https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.10/compose.desktop.yaml) を取得し、`docker compose -f compose.desktop.yaml up -d` で起動します。チェックアウトでは `docker compose -f deploy/compose.desktop.yaml up -d` を使います。このブリッジ設定は HTTP の TCP 18080 と WebRTC の UDP 8189 をホストのループバックに公開します。ホストのブラウザーで `http://127.0.0.1:18080` を開き、到達できる IP カメラを手動で設定します。USB 転送と ONVIF マルチキャスト探索には別の構成が必要です。Linux のホストネットワーク構成にはルートの Compose ファイルを使います。どちらも停止時に録画を完了するため最大60秒を確保します。停止記録と最後の録画のデコード結果を確認してください。[LAN サーバーの設定](LAN_ACCESS.ja.md) · [実機確認](DEVELOPMENT_1_2_0.ja.md)

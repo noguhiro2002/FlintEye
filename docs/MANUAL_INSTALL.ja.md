@@ -74,11 +74,10 @@ APIおよびViteリスナーをループバックに維持してください。
 <a id="verify-changes"></a>
 ## 変更の検証
 
+[プッシュ前のテスト項目](testing/CI_ACCEPTANCE.md#run-the-same-distribution-checks-before-pushing)に従い、Python のテスト・カバレッジ用依存関係、ブラウザーエンジン、コンテナ用ツールを先に用意してください。
+
 ```sh
-python -m unittest discover -s tests -v
-npm --prefix frontend ci
-npm --prefix frontend run build
-python packaging/check_docs.py
+python tools/verify_before_push.py
 ```
 
 pipを通したアプリケーションの配布は後回しにされています。`requirements.txt`のインストールでは、スタンドアロンのFlintEyeアプリケーションではなく依存関係がインストールされます。

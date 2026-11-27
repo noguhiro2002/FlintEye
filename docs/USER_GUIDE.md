@@ -8,12 +8,13 @@
 
 Open FlintEye from the Start menu (Windows), Applications (macOS), or application launcher (Linux). On first launch the app opens your browser and authorizes setup. Choose an administrator password of 12–1024 characters and enter it twice. If you close the setup tab, choose **Open FlintEye** in the desktop menu to resume. The local address is normally `http://127.0.0.1:18080`. Use `admin` to sign in after setup. [Server setup for Docker and systemd](LAN_ACCESS.md#initial-ownership-and-everyday-use)
 
-The English getting-started tour introduces cameras and storage.
-You can skip it and reopen it from the application.
+The English getting-started tour introduces cameras and storage. You can skip it and reopen it from **Information → Getting started**. The [illustrated Preview 10 guide (Japanese)](PREVIEW_10_FIRST_RUN.ja.md) follows the current screens.
+
+Settings opens in **Basic** for cameras, recording, Multiview and access. **Advanced** adds detailed options, MediaMTX, logging, **Integrations & API**, and Runtime JSON. Switching between Basic and Advanced keeps unsaved edits. On a phone, use **Category** to select a settings section. The top-bar theme icon offers **System**, **Light** and **Dark**, saved for each browser.
 
 ## Add cameras
 
-In **Settings**, discover a connected USB camera or add an IP camera.
+In **Settings → Basic → Cameras**, discover a connected USB camera or add an IP camera.
 For an IP camera, enter its address and credentials on this screen; avoid placing credentials in terminal commands.
 Apply the settings and check **Live View**. For a supported ONVIF camera, discovery and PTZ controls are available.
 
@@ -22,7 +23,7 @@ Only the administrator can change camera and system settings.
 
 ## Arrange cameras in Multiview
 
-Choose sources and set the number of slots per view in **Settings → Multiview**. The automatic layout places a pair side by side. To choose positions, open **Camera layout → Arrange cameras**, then drag each camera or select a camera and its destination. **Save changes** saves the positions and any empty slots. New Multiview recordings use the saved layout when composite recording is enabled.
+Choose sources and set the number of slots per view in **Settings → Basic → Multiview**. The automatic layout places a pair side by side. To choose positions, open **Camera layout → Arrange cameras**, then drag each camera or select a camera and its destination. **Save changes** saves the positions and any empty slots. New Multiview recordings use the saved layout when composite recording is enabled.
 
 ## Recording and storage
 
@@ -32,7 +33,7 @@ The initial retention limit is **7 days**. The initial capacity suggestion is **
 It is saved as a fixed setting; it does not grow automatically with free space.
 Whichever limit comes first removes the oldest completed recordings. Seven days is a maximum, not a guaranteed history length.
 
-Choose another folder or adjust the limits in **Settings → Recording**, then click **Save changes**. The folder picker is available when using the desktop app on the installation computer; remote browsers enter a path on the server. **Suggest from free space** fills in a proposed capacity without saving it. All recording settings now share the main Settings form; the separate installation settings panel has been removed.
+Choose another folder or adjust the limits in **Settings → Basic → Recording**, then click **Save changes**. The folder picker is available when using the desktop app on the installation computer; remote browsers enter a path on the server. **Suggest from free space** fills in a proposed capacity without saving it. Basic contains storage and retention controls. Advanced adds the recording format, segment duration and playback cache options.
 Changing folders does not move existing files. **Show recordings from previous locations** is on by default.
 Turning it off hides those recordings from lists and playback; it does not delete them or disable their existing retention rules.
 An unavailable disk makes recordings inaccessible until it is reconnected.
@@ -43,7 +44,7 @@ A banner explains the condition. See the [storage details](DISTRIBUTION.md#recor
 <a id="event-recordings"></a>
 ## Keep the video leading up to an equipment event
 
-1. As an administrator, open **Settings → Recording → Event recordings**. Enable the feature and enter an existing, writable folder on the FlintEye server outside the current and previous loop recording folders. For Docker, use a path inside a persistent mount.
+1. As an administrator, open **Settings → Advanced → Integrations & API → Event recordings**. Enable the feature and enter an existing, writable folder on the FlintEye server outside the current and previous loop recording folders. For Docker, use a path inside a persistent mount.
 2. Save the settings and copy the event token. Set the maximum lookback if the default of 600 seconds is insufficient. Camera recording must already be enabled for the relevant cameras.
 3. Send the camera IDs and lookback from the equipment. If you omit the event timestamp, FlintEye uses the time it receives the request. [Equipment API example](advanced/API.md#equipment-recording-events)
 
@@ -51,8 +52,8 @@ Open **Recordings → Event recordings** to see what was saved. If the requested
 
 ## Viewer access and other devices
 
-Set the `viewer` password in **Settings → Runtime & access** before sharing access. Save or discard other pending changes first. Updating the password signs everyone out; sign in again as administrator afterward. Viewers can watch but cannot change configuration.
-For access from another device, enable **Allow access from other devices on LAN or VPN (HTTPS)** in **Settings → Runtime & access**. Save the settings, restart FlintEye and establish trust for the FlintEye CA on each viewing device. [LAN and VPN setup](LAN_ACCESS.md#enable-access)
+Set the `viewer` password in **Settings → Basic → Runtime & access** before sharing access. Save or discard other pending changes first. Updating the password signs everyone out; sign in again as administrator afterward. Viewers can watch but cannot change configuration.
+For access from another device, enable **Allow access from other devices on LAN or VPN (HTTPS)** in **Settings → Basic → Runtime & access**. Save the settings, restart FlintEye and establish trust for the FlintEye CA on each viewing device. [LAN and VPN setup](LAN_ACCESS.md#enable-access)
 Keep the local HTTP and MediaMTX listeners on loopback. Do not expose them directly to the Internet.
 
 ## Stop, update, or uninstall
@@ -62,12 +63,13 @@ Choose **Stop monitoring** to pause cameras and recording while keeping settings
 Desktop startup runs after login; use systemd or Docker for unattended server operation.
 Manual sleep, logout, or shutdown interrupts monitoring.
 
-Check for updates in **Settings → General → Software updates**. Updates are installed manually. The **Getting started** button in the top bar reopens the introductory tour.
+As an administrator, use **Information → Check for updates**. Updates are installed manually. **Information → Getting started** reopens the introductory tour.
 Quit FlintEye, back up configuration and recording inventory, install the replacement package, and restart.
 Uninstalling normally keeps settings and recordings. Data deletion requires a separate explicit choice.
 
-## Camera audio (next development build)
+<a id="camera-audio-next-development-build"></a>
+## Camera audio
 
-In **Settings → Cameras**, open **Camera audio** for a saved USB or IP camera and select **Check audio input**. Audio starts off for each camera. If the camera has no detected microphone or audio stream, the checkbox stays disabled. On Linux, USB microphones use ALSA device permissions. On macOS and Windows, allow microphone access for the application if prompted.
+In **Settings → Basic → Cameras**, open **Camera audio** for a saved USB or IP camera and select **Check audio input**. Audio starts off for each camera. If the camera has no detected microphone or audio stream, the checkbox stays disabled. On Linux, USB microphones use ALSA device permissions. On macOS and Windows, allow microphone access for the application if prompted.
 
-Choose **Standard** (16 kHz, 16-bit mono PCM), **High** (48 kHz, 24-bit), **Middle** (12 kHz, 16-bit), **Low** (8 kHz, 16-bit), or **Custom**. Custom can change the sample rate and channel count and use PCM depth or AAC target bitrate. Higher rates may increase file size without improving a source that captures at a lower rate. Save the setting. Use the player volume control in **Live View**, and open a new completed recording in **Recordings** to play its audio. The volume control starts muted in Live View.
+Switch to **Settings → Advanced → Cameras** to choose **Standard** (16 kHz, 16-bit mono PCM), **High** (48 kHz, 24-bit), **Middle** (12 kHz, 16-bit), **Low** (8 kHz, 16-bit), or **Custom**. Custom can change the sample rate and channel count and use PCM depth or AAC target bitrate. Higher rates may increase file size without improving a source that captures at a lower rate. Save the setting. Use the player volume control in **Live View**, and open a new completed recording in **Recordings** to play its audio. The volume control starts muted in Live View.

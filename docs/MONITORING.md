@@ -43,7 +43,7 @@ The separate `recording-events.sqlite3` ledger tracks segment creation/completio
 
 ## Startup preferences
 
-Open **Settings → Quick settings → Monitoring and startup**. These preferences save immediately.
+Open **Settings → Basic → Runtime & access → Monitoring and startup**. These preferences save immediately.
 
 - **Always resume monitoring when FlintEye starts:** off by default. With it off, an explicit Stop remains stopped across app and computer restarts. Quitting while running preserves the running preference, so reopening resumes monitoring. Turn this option on to start monitoring even after a prior Stop.
 - **Start FlintEye when I log in:** starts the desktop application for the current user. It is independent of the monitoring preference. This setting is available only to an administrator using the local desktop installation. A registration belonging to another profile or installation is preserved.
@@ -58,4 +58,4 @@ The desktop WebApp listens on loopback by default. A Windows firewall prompt can
 
 `GET /api/v1/status/monitoring` requires viewer access and reports the same state as the desktop controls. The existing administrator-only `POST /api/v1/control/start`, `stop` and `restart` routes use the shared controller. `GET /api/v1/health` continues to mean that the API is alive; it does not certify camera reception.
 
-**Information** shows the application version, development channel and bundled source commit. A source checkout without packaged build metadata explicitly shows that the commit was not recorded. The Recordings date is labeled **Updated**, because it currently comes from the file modification time, not a verified capture-start timestamp.
+**Information** shows the application version, development channel and bundled source commit. A source checkout without packaged build metadata shows that the commit was not recorded. In **Recordings**, **Date basis → Recording time** uses the capture time registered when a segment is finalized. **File update time** uses the file modification time and is labeled **Updated**. Files without capture metadata show **Recording time unavailable**.

@@ -44,7 +44,7 @@ TMPDIR="/path/to/writable-directory" bash ./install.sh --user
 <a id="screen-recording-requests-in-older-previews"></a>
 ### 以前のプレビュー版における画面収録リクエスト
 
-FlintEye はデスクトップを録画しません。以前のカメラ検出では FFmpeg の `Capture screen` 入力が含まれており、カメラモードの照会中にこれらを開いていたため、繰り返しの **画面収録 (Screen Recording)** 許可ダイアログが発生していました。**1.2.0-preview.3** では、スクリーン入力はプローブ（調査）前に除外されます。また、保存されたカメラインデックスはキャプチャ前に確認されるため、削除されたカメラが古いインデックスを使って画面を選択することはありません。OBS 仮想カメラは引き続きカメラ入力としてサポートされます。FlintEye に画面収録の許可を与える必要はありません。マイクアクセスは別個のものであり、カメラの音声が有効な場合にのみ使用されます。実機での品質保証の一環として、Mac 上で繰り返しプロンプトが表示されないことを確認してください。
+FlintEye はデスクトップを録画しません。以前のカメラ検出では FFmpeg の `Capture screen` 入力が含まれており、カメラモードの照会中にこれらを開いていたため、繰り返しの **画面収録 (Screen Recording)** 許可ダイアログが発生していました。**1.2.0-preview.3** 以降、画面入力は撮影モードの調査前に除外されます。また、保存されたカメラインデックスはキャプチャ前に確認されるため、削除されたカメラが古いインデックスを使って画面を選択することはありません。OBS 仮想カメラは引き続きカメラ入力としてサポートされます。FlintEye に画面収録の許可を与える必要はありません。マイクアクセスは別個のものであり、カメラの音声が有効な場合にのみ使用されます。実機での品質保証の一環として、Mac 上で繰り返しプロンプトが表示されないことを確認してください。
 
 デスクトップパッケージには **MediaMTX、FFmpeg、FFprobe** が含まれています。個別の Homebrew や MediaMTX のインストールは不要です。macOS アプリでは、実行ファイルは `FlintEye.app/Contents/Frameworks/bin/` にあります。以前のプライベート ARM64 ビルドは検査され、3つすべてが含まれていました。
 
@@ -53,7 +53,7 @@ FlintEye はデスクトップを録画しません。以前のカメラ検出�
 これらの既存のインストーラーの場合:
 
 1. メニューバーアイコンから **Quit FlintEye** を選択します。完全な `FlintEye.app` を `/Applications` に配置し、DMGを取り出し、インストールされたアプリを開きます。ブラウザを閉じただけでは FlintEye は停止しません。
-2. 管理者としてサインインし、**Settings → Advanced** を開きます。ランタイム JSON で、`mediamtx.direct.command` の最初のアイテムのみを `/Applications/FlintEye.app/Contents/Frameworks/bin/mediamtx` に変更します。2番目のアイテム（お客様の `mediamtx.yml` パス）およびその他の設定はすべて変更しないでください。個人の Applications フォルダの場合は、`~` ではなく、フルパスの `/Users/YOUR_NAME/Applications/...` を使用してください。
+2. 管理者としてサインインし、**Settings → Advanced → Runtime JSON** を開きます。ランタイム JSON で、`mediamtx.direct.command` の最初のアイテムのみを `/Applications/FlintEye.app/Contents/Frameworks/bin/mediamtx` に変更します。2番目のアイテム（お客様の `mediamtx.yml` パス）およびその他の設定はすべて変更しないでください。個人の Applications フォルダの場合は、`~` ではなく、フルパスの `/Users/YOUR_NAME/Applications/...` を使用してください。
 3. **Replace Runtime & Restart** をクリックします。MediaMTX のステータスを確認し、Live View、録画、および再生を再試行します。このワークアラウンドを使用している間は、アプリをその場所に維持してください。
 
 復旧のために `runtime.json` やデータディレクトリを削除しないでください。これらにはアカウントと設定が含まれています。別のデータディレクトリを選択していない場合、ログは `~/Library/Application Support/FlintEye/logs/` の下にあります。それでも起動に失敗する場合は、`orchestrator.log` および（存在する場合は）新しいエラーに関する `mediamtx.log` を確認してください。
@@ -63,7 +63,7 @@ FlintEye はデスクトップを録画しません。以前のカメラ検出�
 GitHub Actions を使用せずに独自の M1 Mac で更新されたソースをテストするには、[ローカル DMG ビルドガイド](LOCAL_MACOS_BUILD.ja.md)に従ってください。これには起動修復と統合された Settings インターフェイスが含まれており、既存のリリースダウンロードは変更されません。
 
 <a id="unsigned-packages"></a>
-## 未署名のパッケージ
+## 発行元の信頼と初回起動の承認
 
 初期の Windows パッケージにはパブリッシャー署名がありません。このリポジトリから想定通りのパッケージをダウンロードしたことを確認してください。
 Windows で許可されている場合は、SmartScreenによって表示されるアプリケーションごとの確認を使用してください。

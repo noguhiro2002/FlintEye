@@ -2,7 +2,9 @@
 
 [日本語](DEVICE_QA_FOLLOWUP.ja.md) · [Acceptance checklist](ACCEPTANCE.md)
 
-The supplied review tested commit `fc95bea3732f84c38e1c7a5d8a806e9fb0824548` (application 1.1.2). The shared WebApp fixes in `778a334` came afterward. Neither that update nor this follow-up changes installers already downloaded from the earlier Actions run. Rebuild from this source before repeating acceptance checks.
+This is the historical follow-up to the November 15 review. Current Preview 10 downloads are on the [release page](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.2.0-preview.10); current results and pending checks are in the [device checklist](RELEASE_CHECKLIST_1_2_0.md). The findings and passes below apply to their recorded builds.
+
+The supplied review tested commit `fc95bea3732f84c38e1c7a5d8a806e9fb0824548` (application 1.1.2). The shared WebApp fixes in `778a334` came afterward. Neither that update nor this follow-up changes installers already downloaded from the earlier Actions run. When repeating acceptance, use the current published build or record the commit of a new test build.
 
 The review confirmed short USB capture, recording and UI playback on one Windows x64 machine, and synthetic recording/download on Mac ARM64 and Linux source installations. It did not certify all platforms, long-running recording, IP cameras or all installation routes. Those results remain useful evidence for that exact earlier build, not a blanket pass for a replacement build.
 

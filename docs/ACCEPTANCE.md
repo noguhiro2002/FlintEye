@@ -4,7 +4,7 @@
 
 [Documentation](README.md) · [Build/release procedure](RELEASING.md)
 
-For current 1.2.0 validation, start with the pinned build and eight gates in the [1.2.0 device checklist](RELEASE_CHECKLIST_1_2_0.md). The default-branch build steps below describe formal distribution builds; do not substitute unrelated main-branch artifacts for this development build.
+Use the published [Preview 10 release](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.2.0-preview.10) and the eight gates in the [1.2.0 device checklist](RELEASE_CHECKLIST_1_2_0.md). Record the application commit `6508296ff967bbb5505dc51936fe0c85d144a8c7`. The build steps below apply when preparing a new candidate; keep its results separate from Preview 10.
 
 ## Obtain the exact build
 
@@ -14,9 +14,9 @@ For current 1.2.0 validation, start with the pinned build and eight gates in the
 4. Record its run ID, commit SHA and version from `build-manifest.json`.
 5. On each computer, install the matching package from its `public` directory.
 
-Build artifacts in this public repository are visible to repository readers; downloading them requires GitHub sign-in. They are unapproved development builds, not published releases.
-Artifacts expire after 30 days; keep a local copy while testing.
-Default script mode downloads published Release URLs. Before 1.2.0 publication, test both the downloaded EXE/DMG/DEB/RPM and the local-artifact one-command mode described in the [1.2.0 device checklist](RELEASE_CHECKLIST_1_2_0.md). This does not require publishing that version first.
+GitHub Actions artifacts require GitHub sign-in and expire after 30 days. Keep a local copy while testing. Publication status is recorded separately; the current Preview 10 files are available without sign-in from its GitHub Release.
+
+Default script mode downloads published Release URLs. For a future candidate, test both the native installer and the local-artifact script mode in the [device checklist](RELEASE_CHECKLIST_1_2_0.md) before publishing it.
 
 Use a clean account/VM with no Python, Node.js, Git, FFmpeg or MediaMTX installed.
 Use test cameras and a disposable recording folder; capacity/retention checks intentionally remove eligible test recordings.
@@ -72,14 +72,14 @@ Review the source/license archives, installer inventory and checksums.
 Confirm that the source commit and build run ID are exactly those you tested.
 Do not edit/rebuild the packages after sign-off. A code change requires a new build and appropriate rechecks.
 
-The source repository is public already. Only after this review, enable the matching public-preview flag and use both phases of **Publish tested release**. The first public preview requires Windows x64, M1 Mac and Linux x64 device acceptance, including camera recording/playback, complete GUI quit, and Windows uninstall with data retention. Mark other platforms as not tested where applicable. Public previews use GitHub Pre-release and never Latest.
-After public launch, verify the README one-command install routes from clean computers and confirm that all advertised release assets are accessible.
+Public development previews require a successful complete build and the corresponding source/license review, followed by both phases of **Publish tested release**. Record pending macOS first-launch and physical checks explicitly. Stable promotion requires the device gates in the [1.2.0 checklist](RELEASE_CHECKLIST_1_2_0.md). Public previews use GitHub Pre-release and never Latest.
+After publication, verify the README install commands and advertised release assets from clean environments.
 
 ## Follow-up to the November device review
 
 Use the [device QA follow-up](DEVICE_QA_FOLLOWUP.md) alongside this checklist. Its reported passes apply to the reviewed commit only. Recheck macOS signature integrity versus Gatekeeper trust, actual versus saved API ports, custom-profile shutdown results, active recording finalization and removal of login startup registrations on the new build.
 
-## Monitoring controls in 1.1.3
+## Monitoring controls
 
 - [ ] Test one commit across all installers; record the version, channel and commit from Information.
 - [ ] Compare native and Web status: no cameras, receiving, recording, one/all disconnected, MediaMTX down, unavailable health, starting, stopping and stopped. Confirm the 15-second stall threshold and distinct configured/target/receiving/recording counts.
@@ -91,7 +91,7 @@ Use the [device QA follow-up](DEVICE_QA_FOLLOWUP.md) alongside this checklist. I
 - [ ] Docker/headless starts without Tk/tray/login registration; Compose recreation preserves accounts, recording inventory and stopped-state preference.
 - [ ] Repeat physical USB disconnect/reconnect and manual sleep/resume. Record a separate 24-hour soak result; a short test does not pass this item.
 
-Signing contracts, notarization and public Release promotion are outside this development-build test cycle.
+Developer ID signing and notarization remain deferred. This checklist records device acceptance separately from preview publication.
 
 
 ## 1.2.0 development acceptance

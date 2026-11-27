@@ -68,11 +68,10 @@ Preserve `.env`, `runtime.json`, recordings and any other data inside the checko
 
 ## Verify changes
 
+Install the gate’s Python test/coverage dependencies, browser engines and container tools first, as described in the [pre-push test inventory](testing/CI_ACCEPTANCE.md#run-the-same-distribution-checks-before-pushing).
+
 ```sh
-python -m unittest discover -s tests -v
-npm --prefix frontend ci
-npm --prefix frontend run build
-python packaging/check_docs.py
+python tools/verify_before_push.py
 ```
 
 Application distribution through pip is deferred. Installing `requirements.txt` installs dependencies, not a standalone FlintEye application.

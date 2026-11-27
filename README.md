@@ -25,7 +25,7 @@ Monitor USB and IP cameras, watch live video, and find recordings in your browse
 
 ![Live View, two-camera Multiview, and recording playback](images/camera-workflow.gif)
 
-*Two real USB cameras: **Live View → Multiview → Recordings**. Captured on Linux from the current development build. [Watch/download the MP4](images/camera-workflow.mp4?raw=true).*
+*Two real USB cameras: **Live View → Multiview → Recordings**. Captured on Linux from the 1.1.3 source on 2026-11-15. [Watch/download the MP4](images/camera-workflow.mp4?raw=true).*
 
 ## Quick Install
 
@@ -51,7 +51,7 @@ bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap clean
 bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.10/install.sh
 ```
 
-You can also download the script from the selected release, inspect it, and run it locally. Packaged builds include Python, FFmpeg, FFprobe and MediaMTX. No separate copies are required. Windows/macOS packages are unsigned/not notarized; see [OS confirmation screens](docs/INSTALL.md#unsigned-packages).
+You can also download the script from the selected release, inspect it, and run it locally. Packaged builds include Python, FFmpeg, FFprobe and MediaMTX. No separate copies are required. Windows packages have no publisher signature. macOS apps have an ad-hoc integrity signature, without Developer ID signing or notarization; see [OS confirmation screens](docs/INSTALL.md#unsigned-packages).
 
 **macOS first launch:** after trying to open this community preview, use **System Settings → Privacy & Security → Open Anyway → Open** if offered. The app is ad-hoc signed and not notarized; installation alone does not grant permission to run it. [If macOS says the file cannot be found →](docs/INSTALL.md#unsigned-packages)
 
@@ -101,11 +101,15 @@ Then continue with [Quick Usage](#quick-usage). To remove an installation later,
 
 1. **Open the address shown by FlintEye.** On the computer running FlintEye, open the local browser address. Choose a trusted network at first launch; FlintEye shows the HTTPS address when it is ready. On another device, [trust the installation's certificate](docs/LAN_ACCESS.md) before opening that address.
 2. **Create your administrator account.** With a desktop installation, set your password in the browser opened by FlintEye. If you closed it, choose **Open FlintEye** in the app menu to resume. With Docker or a headless server, enter the one-use code from the server's private `setup-token` file. Sign in as `admin`.
-3. **Add a camera in Settings.** Follow the getting-started tour for USB and IP cameras.
+3. **Add a camera in Settings → Basic → Cameras.** Follow the getting-started tour for USB and IP cameras. Reopen the tour from **Information → Getting started**.
 4. **Open Live View.** Enable recording if needed, then open **Recordings** to play saved footage.
 
+[Preview 10 illustrated first-run guide (Japanese)](docs/PREVIEW_10_FIRST_RUN.ja.md)
+
+Settings opens in **Basic** for cameras, recording, Multiview and access. **Advanced** provides detailed controls and **Integrations & API** for event recordings and API keys. The theme icon in the top bar offers **System**, **Light** and **Dark**.
+
 <details>
-<summary>Five-step first-run guide</summary>
+<summary>Earlier five-step tour — 1.1.3</summary>
 
 ![FlintEye's five-step English first-run guide](images/getting-started.gif)
 

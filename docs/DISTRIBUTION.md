@@ -23,23 +23,17 @@ If the window closes before setup finishes, choose **Open FlintEye** in the desk
 app. Use **Address and setup assistance** for manual token entry. The password is
 hashed locally and omitted from installer arguments and logs.
 
-The English getting-started guide can be skipped and reopened. Configure USB/IP cameras in Settings. Configure the `viewer`
-password in **Settings → Runtime & access → Viewer access**; viewers cannot sign in until
-that password exists. Changing it invalidates existing sessions.
+The English getting-started guide can be skipped and reopened from **Information → Getting started**. Configure USB/IP cameras in **Settings → Basic → Cameras**. Set the viewer password in **Settings → Basic → Runtime & access → Viewer access**; viewers cannot sign in until it exists. Changing it invalidates existing sessions.
 
-The Settings interface is shared by Windows, macOS, Linux, Docker and source installations. Recording location, quota and retention are in **Settings → Recording**; update checks are in **Settings → General**. Older installers retain their embedded interface until rebuilt and reinstalled. For a local Apple Silicon build, follow the [DMG build guide](LOCAL_MACOS_BUILD.md).
+The Settings interface is shared by desktop, Docker and source installations. **Settings → Basic → Recording** contains storage, quota and retention. **Settings → Advanced → Integrations & API** contains event recording and API keys. Check for updates and save diagnostics from **Information**. For a local Apple Silicon build, follow the [DMG build guide](LOCAL_MACOS_BUILD.md).
 
 Closing the browser leaves monitoring running. Windows/macOS desktop menus provide Open FlintEye, Start/Stop/Restart monitoring, logs, login startup and Quit FlintEye. Linux has a compact control window and a tray icon where supported. Stop monitoring keeps settings and the API available; Quit exits everything. The stop preference is remembered unless Always resume monitoring on startup is enabled. See [monitoring controls](MONITORING.md).
 
 Login autostart belongs to the current desktop user and installation. Automatic sleep is inhibited while monitoring/finalizing, and released when stopped. Manual sleep/logout/shutdown interrupts monitoring. Linux inhibition requires a working systemd/logind session. Docker/systemd/headless execution creates no desktop controls or login registration.
 
-FlintEye accepts local connections at `http://127.0.0.1:18080` by default. For access
-from other LAN devices, put an HTTPS reverse proxy in front of that loopback endpoint;
-proxy `/api` and `/media` with WebSocket support. Keep MediaMTX HTTP, RTSP and
-management listeners on loopback. Do not publish the plain HTTP port to the LAN.
-The local proxy must set `X-Forwarded-Proto: https` and preserve the external Host
-header; forwarded headers are trusted only from `127.0.0.1` and `::1`. Allow UDP
-8189 for WebRTC media between the installation host and viewer devices.
+FlintEye accepts local connections at `http://127.0.0.1:18080` by default. For other LAN or VPN devices, enable built-in HTTPS in **Settings → Basic → Runtime & access**, save and restart, then trust the installation's CA on each viewing device. The HTTPS listener serves login, API and media requests. Keep the local HTTP and internal MediaMTX listeners on loopback, and permit the configured HTTPS TCP port and WebRTC UDP 8189 from the selected sources. [LAN and certificate setup](LAN_ACCESS.md)
+
+Administrator-managed reverse proxies are an alternative described in [existing proxy deployments](LAN_ACCESS.md#headless-and-existing-proxy-deployments).
 
 ## Recording lifecycle
 
@@ -119,7 +113,7 @@ user/group. Install `packaging/flinteye.service` under `/etc/systemd/system/`.
 The host `video` group is required for USB capture; adapt this on hosts that use
 another device group.
 
-For LAN HTTPS on a new service profile, set the network in the [systemd environment](LAN_ACCESS.md#network-selection-and-external-players-next-development-build) before the first start. USB microphones additionally require the host audio group.
+For LAN HTTPS on a new service profile, set the network in the [systemd environment](LAN_ACCESS.md#network-selection-and-external-players) before the first start. USB microphones additionally require the host audio group.
 
 ```sh
 sudo systemctl daemon-reload
@@ -127,7 +121,7 @@ sudo systemctl enable --now flinteye
 sudo cat /var/lib/flinteye/setup-token
 ```
 
-On the next development build, get the actual URL with `sudo -u flinteye /opt/flinteye/FlintEye --headless --data-dir /var/lib/flinteye --connection-info`. Open that address and enter the owner’s one-use code.
+Get the actual URL with `sudo -u flinteye /opt/flinteye/FlintEye --headless --data-dir /var/lib/flinteye --connection-info`. Open that address and enter the owner’s one-use code.
 
 Desktop and systemd instances must not share a running data directory or ports.
 The service starts without login; the desktop application starts after login.
@@ -183,7 +177,7 @@ a newer glibc requirement; build DEBs against their minimum target. Linux deskto
 systems need a graphical session, Tk/X11 libraries. Native
 ARM64 availability of the complete toolchain must be verified before publishing.
 
-Preview installers check for newer published previews or stable releases in Settings; stable installers ignore previews. Source checkouts are updated with Git. FlintEye never downloads or installs updates automatically, and checking for updates never restarts recording. Choose **Quit FlintEye**,
+Preview installers check for newer published previews or stable releases in **Information → Check for updates**; stable installers ignore previews. Source checkouts are updated with Git. FlintEye never downloads or installs updates automatically, and checking for updates never restarts recording. Choose **Quit FlintEye**,
 back up configuration/inventory, install the replacement package and restart.
 Keep the previous package for rollback. Preserve all data directories/volumes.
 Existing configuration is preserved during an upgrade. If an earlier development
@@ -208,8 +202,8 @@ Test Pi performance with real cameras; do not promise a uniform camera count.
 
 ## Validation and development status
 
-**UNDER DEVELOPMENT.** This repository starts from a current source snapshot. Public installers and GHCR images are being prepared; old private artifacts are not public releases. Follow [Releases](https://github.com/noguhiro2002/FlintEye/releases) and the [Docker guide](DOCKER.md) for availability.
+**UNDER DEVELOPMENT.** [Preview 10 installers](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.2.0-preview.10) and [versioned GHCR images](DOCKER.md) are public. The [device checklist](RELEASE_CHECKLIST_1_2_0.md) records the tested commit, build and public-installation results, and the pending physical-device checks.
 
 Automated checks cover setup/authentication, storage retention, playback boundaries, worker loading, media process cleanup, installer/release integrity and preview-version comparison. The frontend is compiled from the shared source for every platform. Native build jobs test installed packages with synthetic media; they cannot certify real camera behavior or every minimum OS.
 
-Before public preview distribution, complete the [acceptance checklist](ACCEPTANCE.md) on Windows x64, M1 Mac and Linux x64, and review the corresponding sources/licenses. Keep untested targets and [known UI issues](KNOWN_ISSUES.md) explicit. Closing the browser keeps monitoring active; explicit application quit must stop owned API and media processes.
+Public previews require a complete successful build and review of the corresponding sources/licenses. The [acceptance checklist](ACCEPTANCE.md) must be complete before stable distribution. Record pending macOS first-launch and physical-device checks in public preview results. Closing the browser keeps monitoring active; application Quit must stop owned API and media processes.

@@ -15,15 +15,17 @@ Windowsでは、対応する `FlintEye-<version>-windows-<arch>-setup.exe` を�
 
 プレビュー6から、デスクトップ版はブラウザを開き、一度限りのセットアップ許可を渡します。`admin` のパスワードを12〜1024文字で決め、確認欄にも入力します。途中で閉じた場合は、アプリの **Open FlintEye** から再開してください。トークンを手動で入力する場合は **Address and setup assistance** を使います。パスワードはローカルでハッシュ化し、インストーラーの引数やログから除外します。
 
-セットアップ後は **Settings → Cameras** でUSB・IPカメラを設定します。英語の入門ガイドは、スキップしても後から開けます。閲覧者を追加するときは **Settings → Runtime & access → Viewer access** で `viewer` のパスワードを設定します。パスワードを変更すると既存のセッションが無効になります。
+セットアップ後は **Settings → Basic → Cameras** で USB・IP カメラを設定します。入門ガイドは **Information → Getting started** から開き直せます。閲覧者を追加するときは **Settings → Basic → Runtime & access → Viewer access** で viewer のパスワードを設定します。変更すると既存のセッションが無効になります。
 
-Settings インターフェースは、Windows、macOS、Linux、Docker、およびソースインストール間で共有されます。録画の保存場所、クォータ、および保持期間は **Settings → 録画** にあり、アップデートの確認は **Settings → 全般** にあります。古いインストーラーには、再ビルドおよび再インストールされるまで、組み込みのインターフェースが保持されます。ローカルのApple Siliconビルドについては、[DMGビルドガイド](LOCAL_MACOS_BUILD.ja.md)に従ってください。
+Settings はデスクトップ、Docker、ソース版で共通です。**Settings → Basic → Recording** で保存先・容量・保持期間を設定します。イベント録画と API キーは **Settings → Advanced → Integrations & API**、更新確認と診断情報は **Information** にあります。Apple Silicon 上のローカルビルドは [DMG ビルドガイド](LOCAL_MACOS_BUILD.ja.md)を参照してください。
 
 ブラウザを閉じても監視は実行されたままになります。Windows/macOSのデスクトップメニューから、FlintEyeを開く、開始/停止/Restart monitoring、ログ、ログイン時起動、および Quit FlintEye を利用できます。Linuxには、コンパクトなコントロールウィンドウと、サポートされている環境でのトレイアイコンがあります。Stop monitoring により設定とAPIが利用可能な状態に維持され、「終了」ですべてが終了します。「起動時に常に監視を再開する」が有効になっていない限り、停止の設定は記憶されます。[監視コントロール](MONITORING.ja.md)を参照してください。
 
 ログイン時の自動起動は、現在のデスクトップユーザーとインストールに属します。監視中/ファイナライズ中は自動スリープが禁止され、停止時に解除されます。手動でのスリープ/ログアウト/シャットダウンにより監視が中断されます。Linuxでの禁止には、動作中のsystemd/logindセッションが必要です。Docker/systemd/ヘッドレス実行では、デスクトップコントロールやログイン登録は作成されません。
 
-FlintEyeはデフォルトで `http://127.0.0.1:18080` でローカル接続を受け入れます。他のLANデバイスからアクセスするには、そのループバックエンドポイントの前段にHTTPSリバースプロキシを配置し、WebSocketサポート付きでプロキシ `/api` および `/media` を設定してください。MediaMTXのHTTP、RTSP、および管理リスナーはループバック上に維持してください。通常のHTTPポートをLANに公開しないでください。ローカルプロキシは `X-Forwarded-Proto: https` を設定し、外部のHostヘッダーを保持する必要があります。転送されたヘッダーは、`127.0.0.1` および `::1` からのもののみが信頼されます。インストールホストとビューアーデバイス間のWebRTCメディア用に、UDP 8189を許可してください。
+FlintEye は通常 `http://127.0.0.1:18080` でローカル接続を受け付けます。LAN・VPN の別端末から見る場合は **Settings → Basic → Runtime & access** で HTTPS を有効にし、保存して再起動します。閲覧端末にこのインストールの CA を登録すると、HTTPS の接続先でログイン・API・映像を利用できます。ローカル HTTP と内部 MediaMTX はループバックに保ち、選んだ接続元から HTTPS の TCP ポートと WebRTC の UDP 8189 を許可します。[LAN と証明書の設定](LAN_ACCESS.ja.md)
+
+管理者が用意するリバースプロキシを使う場合は、[既存プロキシの手順](LAN_ACCESS.ja.md#headless-and-existing-proxy-deployments)を参照してください。
 
 <a id="recording-lifecycle"></a>
 ## 録画のライフサイクル
@@ -69,7 +71,7 @@ SSHトンネル（`ssh -L 18080:127.0.0.1:18080 <server>`）を使用し、`http
 
 `/opt/flinteye` にあるネイティブLinuxバンドルをインストールし、`flinteye` システムユーザー/グループを作成します。`/etc/systemd/system/` の下に `packaging/flinteye.service` をインストールします。USBキャプチャにはホストの `video` グループが必要です。別のデバイスグループを使用するホストではこれを適宜変更してください。
 
-次期版の初回起動時からLAN HTTPSを利用する場合は、[サービスに接続先の環境変数を設定](LAN_ACCESS.ja.md)します。USBマイクを使う場合は、ホストのaudioグループへのアクセスも必要です。
+新規プロファイルの初回起動時から LAN HTTPS を利用する場合は、[サービスに接続先の環境変数を設定](LAN_ACCESS.ja.md)します。USBマイクを使う場合は、ホストのaudioグループへのアクセスも必要です。
 
 ```sh
 sudo systemctl daemon-reload
@@ -77,7 +79,7 @@ sudo systemctl enable --now flinteye
 sudo cat /var/lib/flinteye/setup-token
 ```
 
-次期版の接続先は `sudo -u flinteye /opt/flinteye/FlintEye --headless --data-dir /var/lib/flinteye --connection-info` で確認できます。そのURLを開き、使い捨てコードを入力します。
+稼働中の接続先は `sudo -u flinteye /opt/flinteye/FlintEye --headless --data-dir /var/lib/flinteye --connection-info` で確認できます。そのURLを開き、使い捨てコードを入力します。
 
 デスクトップインスタンスとsystemdインスタンスの間で、実行中のデータディレクトリやポートを共有してはなりません。サービスはログインなしで起動し、デスクトップアプリケーションはログイン後に起動します。
 
@@ -111,7 +113,7 @@ VERSION=$(python packaging/release.py version) ARCH=amd64 nfpm package --config 
 
 ARMビルドには `ARCH=arm64` を使用してください。より新しいglibc要件の導入を避けるため、RPMはRocky Linux 9上でビルドしてください。DEBはその最小ターゲットに対してビルドしてください。Linuxデスクトップシステムには、グラフィカルセッションとTk/X11ライブラリが必要です。完全なツールチェーンのネイティブARM64での可用性は、公開前に検証する必要があります。
 
-プレビューインストーラーは Settings でより新しい公開済みプレビューまたは安定版リリースを確認します。安定版インストーラーはプレビューを無視します。ソースチェックアウトはGitで更新されます。FlintEyeがアップデートを自動的にダウンロードまたはインストールすることは決してなく、アップデートの確認によって録画が再起動されることもありません。Quit FlintEyeでの終了、設定/インベントリのバックアップ、代替パッケージのインストール、および再起動を行ってください。ロールバックのために以前のパッケージを保持してください。すべてのデータディレクトリ/ボリュームを維持してください。アップグレード中も既存の設定は維持されます。以前の開発版インストールで `api.host` が `0.0.0.0` に設定されている場合は、それを `127.0.0.1` に変更して再起動し、LANアクセスには前述のHTTPSプロキシを使用してください。録画を再開する前に、FlintEyeが停止している状態で古い共有の `.playback_cache` を削除してください。
+プレビュー版は **Information → Check for updates** で、より新しいプレビューや安定版を確認します。安定版インストーラーはプレビューを無視します。ソースチェックアウトはGitで更新されます。FlintEyeがアップデートを自動的にダウンロードまたはインストールすることは決してなく、アップデートの確認によって録画が再起動されることもありません。Quit FlintEyeでの終了、設定/インベントリのバックアップ、代替パッケージのインストール、および再起動を行ってください。ロールバックのために以前のパッケージを保持してください。すべてのデータディレクトリ/ボリュームを維持してください。アップグレード中も既存の設定は維持されます。以前の開発版インストールで `api.host` が `0.0.0.0` に設定されている場合は、それを `127.0.0.1` に変更して再起動し、LANアクセスには前述のHTTPSプロキシを使用してください。録画を再開する前に、FlintEyeが停止している状態で古い共有の `.playback_cache` を削除してください。
 
 <a id="release-acceptance-matrix-not-a-claim-of-completed-certification"></a>
 ## リリース受入マトリックス（完了した認証の主張ではありません）
@@ -127,8 +129,8 @@ ARMビルドには `ARCH=arm64` を使用してください。より新しいgli
 <a id="validation-and-development-status"></a>
 ## 検証および開発ステータス
 
-**UNDER DEVELOPMENT.** このリポジトリは現在のソーススナップショットから始まっています。公開インストーラーとGHCRイメージの準備が進められており、古いプライベートアーティファクトは公開リリースではありません。可用性については、[リリース](https://github.com/noguhiro2002/FlintEye/releases)および[Dockerガイド](DOCKER.ja.md)に従ってください。
+**UNDER DEVELOPMENT.** [Preview 10 のインストーラー](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.2.0-preview.10)と[固定版の GHCR イメージ](DOCKER.ja.md)を公開しています。[実機チェックリスト](RELEASE_CHECKLIST_1_2_0.ja.md)に、テスト対象のコミット、ビルド・公開経路の結果、残る実機確認を記録しています。
 
 自動化されたチェックでは、セットアップ/認証、ストレージの保持期間、再生の境界、ワーカーの読み込み、メディアプロセスのクリーンアップ、インストーラー/リリースの整合性、およびプレビューバージョンの比較がカバーされています。フロントエンドはすべてのプラットフォームで共有ソースからコンパイルされます。ネイティブビルドジョブは合成メディアを使用してインストール済みパッケージをテストしますが、実際のカメラの動作やすべての最小OSを保証することはできません。
 
-公開プレビューの配布前に、Windows x64、M1 Mac、Linux x64で[受入チェックリスト](ACCEPTANCE.ja.md)を完了し、対応するソース/ライセンスを確認してください。未テストのターゲットと[既知のUI問題](KNOWN_ISSUES.ja.md)を明示しておいてください。ブラウザを閉じても監視はアクティブなまま維持され、明示的なアプリケーションの終了によって所有するAPIおよびメディアプロセスが停止されなければなりません。
+公開プレビューには、完全なビルドの成功と対応ソース・ライセンスの確認が必要です。安定版の配布前には[受け入れチェックリスト](ACCEPTANCE.ja.md)を完了します。公開プレビューでは、macOS の初回起動承認や実機の未確認項目を結果に記載します。ブラウザーを閉じても監視は続き、アプリの終了時には所属する API とメディア処理が停止する必要があります。

@@ -2,11 +2,11 @@
 
 [English](LAN_ACCESS.md) · [インストール](INSTALL.ja.md) · [監視](MONITORING.ja.md)
 
-**UNDER DEVELOPMENT。これらの変更には1.2.0パッケージの再ビルドが必要です。公開されている1.1.3-preview.1には含まれていません。物理LANおよびモバイルでの承認は保留中です。**
+**UNDER DEVELOPMENT.** [Preview 10](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.2.0-preview.10) には LAN 用 HTTPS が含まれます。接続設定の保存後に FlintEye を再起動し、閲覧端末で CA を信頼してください。別の PC やスマートフォンでの実機確認は未完了です。
 
 ## アクセスの有効化
 
-サーバー上でFlintEyeを開き、ブラウザで管理者セットアップを完了します。**Settings → Runtime & access → LAN connection and certificate trust** で **Allow access from other devices on LAN or VPN (HTTPS)** を選びます。サーバーに割り当てられたIPv4アドレスと、接続を許可する端末の範囲（例 `192.168.1.0/24`）を入力します。サーバー上の操作には **This computer (HTTP)** の接続先を使います。
+サーバー上でFlintEyeを開き、ブラウザで管理者セットアップを完了します。**Settings → Basic → Runtime & access → LAN connection and certificate trust** で **Allow access from other devices on LAN or VPN (HTTPS)** を選びます。サーバーに割り当てられたIPv4アドレスと、接続を許可する端末の範囲（例 `192.168.1.0/24`）を入力します。サーバー上の操作には **This computer (HTTP)** の接続先を使います。
 
 接続設定を保存し、FlintEye を再起動します。**Active address for other devices (HTTPS)** にサーバーのアドレスが表示されたら、**Save public certificate and connection guide** を選びます。フォルダーには公開 CA 証明書、そのフィンガープリント、iPhone・iPad 用プロファイルと手順書が入ります。USB ストレージ、AirDrop、認証済みのファイル共有などで転送してください。証明書を信頼する前に、ガイドの SHA-256 フィンガープリントをサーバーの表示と照合します。
 
@@ -56,6 +56,7 @@ HTTPSリスナーを閉じるには、LANアクセスを無効にして再起動
 
 Windowsの削除プロセスでは、このFlintEyeインストールによって保存されたファイアウォールの所有権記録もチェックされます。これには、すでに停止または削除されたカスタムプロファイルも含まれます。明示的なUAC（ユーザーアカウント制御）と確認を経て、このインストールに属するプログラムパスを持つ認識済みのHTTPS/WebRTCルールのみが削除されます（中断されたステージングルールも含みます）。他のインストールや手動で名前が付けられたルールは保持されます。承認またはクリーンアップが失敗した場合、削除は停止し、記録は再試行のためにそのまま残ります。ローカルリカバリコマンドは `FlintEye.exe --remove-installation-firewall-rules` です。これは新しいカメラプロファイルを初期化するものではありません。これらの所有権記録がない以前の試験的な1.2ビルドをテストした場合は、アンインストールする前に、更新されたインストールからこのリカバリコマンドを実行してください。
 
+<a id="headless-and-existing-proxy-deployments"></a>
 ## ヘッドレスおよび既存のプロキシ環境
 
 明示的なヘッドレス環境のオプトインとして、サービスが使用するのと同じデータディレクトリを指定して、インストールされた実行ファイルを通常のサービスユーザーとして実行します。
@@ -74,8 +75,8 @@ Windowsの削除プロセスでは、このFlintEyeインストールによっ�
 
 Docker Desktopで提供されるブリッジComposeは、ホストブラウザー専用です。LAN Dockerサーバーの場合は、ホストネットワーク設定と上記の明示的なLAN設定を使用してLinux Engineを使用してください。[Docker ](DOCKER.ja.md)
 
-### ネットワークの選択と外部プレーヤー（次期開発版）
+### ネットワークの選択と外部プレーヤー
 
-デスクトップで初めて起動したときに、信頼するネットワークか **This computer only**（この端末のみ）を選びます。起動後の案内に表示されるHTTPSの接続先と証明書の手順を確認してください。新規のsystemdプロファイルでは、サービスの環境変数 `FLINTEYE_LAN_ADDRESS` と `FLINTEYE_LAN_SOURCES`（複数の場合はカンマ区切り）を設定してから起動します。接続先は `sudo -u flinteye /opt/flinteye/FlintEye --headless --data-dir /var/lib/flinteye --connection-info` で確認できます。VPNなどの割り当て済みアドレスは、サーバー上の **Settings → Runtime & access** でIPと許可する接続元を指定できます。
+デスクトップで初めて起動したときに、信頼するネットワークか **This computer only**（この端末のみ）を選びます。起動後の案内に表示されるHTTPSの接続先と証明書の手順を確認してください。新規のsystemdプロファイルでは、サービスの環境変数 `FLINTEYE_LAN_ADDRESS` と `FLINTEYE_LAN_SOURCES`（複数の場合はカンマ区切り）を設定してから起動します。接続先は `sudo -u flinteye /opt/flinteye/FlintEye --headless --data-dir /var/lib/flinteye --connection-info` で確認できます。VPNなどの割り当て済みアドレスは、サーバー上の **Settings → Basic → Runtime & access** でIPと許可する接続元を指定できます。
 
-外部プレーヤーを使うには、同じ設定にある **Allow external players (RTSPS)** を有効にして保存し、閲覧専用のパスワードを作ります。表示された資格情報を控えてから画面を閉じ、FlintEyeを再起動します。Windowsでは更新済みのファイアウォール規則を適用します。LinuxやmacOSのファイアウォールで受信を制限している場合は、許可した接続元からのTCP 8322のみ通します。**Information** に表示された `rtsps://…:8322/…` を、証明書を検証できるRTSPS対応プレーヤーで開き、閲覧用の資格情報を入力します。FFmpegでは `-tls_verify 1` を有効にし、`-ca_file` でFlintEyeの公開CAを指定します。RTSPSを無効にして再起動すると、この待受は終了します。
+外部プレーヤーを使うには、**Settings → Advanced → Runtime & access** の **Allow external players (RTSPS)** を有効にして保存し、閲覧専用のパスワードを作ります。表示された資格情報を控えてから画面を閉じ、FlintEyeを再起動します。Windowsでは更新済みのファイアウォール規則を適用します。LinuxやmacOSのファイアウォールで受信を制限している場合は、許可した接続元からのTCP 8322のみ通します。**Information** に表示された `rtsps://…:8322/…` を、証明書を検証できるRTSPS対応プレーヤーで開き、閲覧用の資格情報を入力します。FFmpegでは `-tls_verify 1` を有効にし、`-ca_file` でFlintEyeの公開CAを指定します。RTSPSを無効にして再起動すると、この待受は終了します。

@@ -1,4 +1,4 @@
-# Advanced reference: Api
+# Advanced reference: API
 
 [日本語](API.ja.md)
 
@@ -11,7 +11,7 @@
 
 ## REST API keys
 
-Sign in as an administrator with local authentication and open **Settings → Runtime & access → API access**. Name the integration, choose its permissions, and create a key. Copy the key from the creation form and store it with the integration. Settings shows the name, permission and revocation status after the key is hidden. Revoke lost or unused keys and create a replacement as needed.
+Sign in as an administrator with local authentication and open **Settings → Advanced → Integrations & API → API access**. Name the integration, choose its permissions, and create a key. Copy the key from the creation form and store it with the integration. Settings shows the name, permission and revocation status after the key is hidden. Revoke lost or unused keys and create a replacement as needed.
 
 Both permission levels allow GET requests to these paths under `/api/v1`:
 
@@ -43,7 +43,7 @@ Use the server's active HTTPS address and trust its CA when calling from another
 <a id="equipment-recording-events"></a>
 ### Equipment recording events
 
-Enable event recordings and obtain the dedicated token in [Settings → Recording](../USER_GUIDE.md#event-recordings). Use local HTTP on the FlintEye server or the trusted LAN HTTPS address from another device.
+Enable event recordings and obtain the dedicated token in [Settings → Advanced → Integrations & API → Event recordings](../USER_GUIDE.md#event-recordings). Use local HTTP on the FlintEye server or the trusted LAN HTTPS address from another device.
 
 ```bash
 curl --fail-with-body http://127.0.0.1:18080/api/v1/recording-events \
@@ -62,9 +62,7 @@ The event token can submit events and read their status. Sign in to play or down
 ### 11.1 Install dependencies
 
 ```bash
-python3 -m pip install fastapi uvicorn
-# or
-python3 -m pip install -r requirements.txt
+python3 -m pip install -c packaging/constraints.txt -r requirements.txt
 ```
 
 ### 11.2 Required `.env` keys
@@ -157,6 +155,12 @@ Legacy token mode is still supported:
 - `API_VIEWER_AUTH_REQUIRED=true|false`
 - `API_BEARER_TOKEN` (legacy fallback)
 
+Public endpoints include `GET /api/v1/health` and `GET /api/v1/status`.
+
+With the default `AUTH_PROVIDER=local`, protected routes use a signed-in session. `AUTH_VIEWER_AUTH_REQUIRED` controls anonymous viewer access. Configuration changes and unrestricted administration require an administrator session.
+
+The issued [REST API keys](#rest-api-keys) allow only their listed monitoring and metadata routes. Equipment events use a separate event token. In `legacy_token` mode, `API_ADMIN_TOKEN` and `API_VIEWER_TOKEN` provide the configured bearer credentials, and `API_VIEWER_AUTH_REQUIRED` controls viewer access.
+
 ### 11.5 Logging
 
 Current implementation writes:
@@ -176,22 +180,8 @@ Main logging keys:
 - `UVC_LOGLEVEL=error`
 - `MV_LOGLEVEL=error`
 
-Public (no token required) endpoints:
-
-- `GET /api/v1/health`
-- `GET /api/v1/status`
-
-Viewer endpoints:
-
-- monitor/view/snapshot/recording APIs
-- token is optional only when `API_VIEWER_AUTH_REQUIRED=false`
-
-Admin endpoints:
-
-- configuration/control/write APIs
-- always require `API_ADMIN_TOKEN` when it is set
-
-### 11.5 API documents (Swagger / ReDoc)
+<a id="115-api-documents-swagger--redoc"></a>
+### 11.6 API documents (Swagger / ReDoc)
 
 When the API server is running:
 
@@ -199,13 +189,12 @@ When the API server is running:
 - ReDoc: `http://127.0.0.1:18080/redoc`
 - OpenAPI JSON: `http://127.0.0.1:18080/openapi.json`
 
-If auth is enabled, click `Authorize` in Swagger UI and enter:
+For local authentication, sign in to FlintEye in the same browser before opening Swagger UI; it uses the session cookie. An issued REST API key works only for its permitted routes. For `legacy_token` mode, use Swagger's **Authorize** control with the configured admin or viewer bearer token.
 
-- `Bearer <API_ADMIN_TOKEN>` (or viewer token for viewer-only endpoints)
+<a id="116-main-endpoints"></a>
+### 11.7 Main endpoints
 
-### 11.6 Main endpoints
-
-- `camera_id` is exactly the MediaMTX path name (for example `uvc_cam1`, `ipcam2`)
+- `camera_id` is the camera's saved `id` from `GET /api/v1/cameras`. The MediaMTX `path` can differ after configuration changes.
 - `GET /api/v1/health`
 - `GET /api/v1/status`
 - `GET /api/v1/status/processes`
@@ -248,14 +237,18 @@ If auth is enabled, click `Authorize` in Swagger UI and enter:
 - `GET /api/v1/recordings`
 - `GET /api/v1/recordings/files/{file_id}`
 
-### 11.7 Quick API examples
+<a id="117-quick-api-examples"></a>
+### 11.8 Quick API examples
+
+These examples use the default local authentication. Enter the administrator password at the prompt. The cookie file is private and is removed when the shell exits. Use the configured viewer username instead of `admin` to exercise viewer-only access. The names such as `uvc_cam1` are example IDs; replace them with IDs from your camera list.
 
 ```bash
-ADMIN_TOKEN="change-this-token"
-VIEWER_TOKEN="change-this-viewer-token"
 BASE="http://127.0.0.1:18080"
-ADMIN_AUTH="Authorization: Bearer ${ADMIN_TOKEN}"
-VIEWER_AUTH="Authorization: Bearer ${VIEWER_TOKEN}"
+COOKIE_JAR="$(mktemp)"
+trap 'rm -f -- "$COOKIE_JAR"' EXIT
+python3 -c 'import getpass, json; print(json.dumps({"username": "admin", "password": getpass.getpass("FlintEye password: ")}))' |
+  curl --fail-with-body --cookie-jar "$COOKIE_JAR" \
+    -H "Content-Type: application/json" --data-binary @- "$BASE/api/v1/auth/login"
 ```
 
 Health/status:
@@ -268,14 +261,14 @@ curl "$BASE/api/v1/status"
 List detected UVC cameras:
 
 ```bash
-curl -H "$ADMIN_AUTH" "$BASE/api/v1/uvc/devices"
+curl --cookie "$COOKIE_JAR" "$BASE/api/v1/uvc/devices"
 ```
 
 Get suggestion for one UVC device:
 
 ```bash
 curl -X POST "$BASE/api/v1/uvc/devices/<device_id>/suggest" \
-  -H "$AUTH" \
+  --cookie "$COOKIE_JAR" \
   -H "Content-Type: application/json" \
   -d '{"profile":"cam3","path":"uvc_cam3","camera_name":"UVC-CAM-03","use_device_index":false}'
 ```
@@ -284,7 +277,7 @@ Apply detected UVC device directly to runtime + process:
 
 ```bash
 curl -X POST "$BASE/api/v1/uvc/devices/<device_id>/apply" \
-  -H "$AUTH" \
+  --cookie "$COOKIE_JAR" \
   -H "Content-Type: application/json" \
   -d '{"profile":"cam3","path":"uvc_cam3","camera_name":"UVC-CAM-03"}'
 ```
@@ -292,22 +285,22 @@ curl -X POST "$BASE/api/v1/uvc/devices/<device_id>/apply" \
 Disable/enable one camera:
 
 ```bash
-curl -X POST -H "$ADMIN_AUTH" "$BASE/api/v1/cameras/uvc_cam1/disable"
-curl -X POST -H "$ADMIN_AUTH" "$BASE/api/v1/cameras/uvc_cam1/enable"
+curl -X POST --cookie "$COOKIE_JAR" "$BASE/api/v1/cameras/uvc_cam1/disable"
+curl -X POST --cookie "$COOKIE_JAR" "$BASE/api/v1/cameras/uvc_cam1/enable"
 ```
 
 Disable/enable multiview:
 
 ```bash
-curl -X POST -H "$ADMIN_AUTH" "$BASE/api/v1/multiview/disable"
-curl -X POST -H "$ADMIN_AUTH" "$BASE/api/v1/multiview/enable"
+curl -X POST --cookie "$COOKIE_JAR" "$BASE/api/v1/multiview/disable"
+curl -X POST --cookie "$COOKIE_JAR" "$BASE/api/v1/multiview/enable"
 ```
 
 Patch runtime config (example: change multiview bitrate):
 
 ```bash
 curl -X PATCH "$BASE/api/v1/config/runtime" \
-  -H "$AUTH" \
+  --cookie "$COOKIE_JAR" \
   -H "Content-Type: application/json" \
   -d '{"multiview":{"quality":{"bitrate":"2M","maxrate":"2M","bufsize":"2M"}}}'
 ```
@@ -316,14 +309,14 @@ Patch MediaMTX managed settings (example: enable API listener and set per-path s
 
 ```bash
 curl -X PATCH "$BASE/api/v1/mediamtx/config" \
-  -H "$AUTH" \
+  --cookie "$COOKIE_JAR" \
   -H "Content-Type: application/json" \
   -d '{
     "managed": {
       "enabled": true,
       "global": {
         "api": true,
-        "apiAddress": ":9997"
+        "apiAddress": "127.0.0.1:9997"
       },
       "paths": {
         "ipcam1": {
@@ -343,22 +336,22 @@ curl -X PATCH "$BASE/api/v1/mediamtx/config" \
 Get/apply current MediaMTX config state:
 
 ```bash
-curl -H "$ADMIN_AUTH" "$BASE/api/v1/mediamtx/config"
-curl -X POST -H "$ADMIN_AUTH" "$BASE/api/v1/mediamtx/config/apply"
+curl --cookie "$COOKIE_JAR" "$BASE/api/v1/mediamtx/config"
+curl -X POST --cookie "$COOKIE_JAR" "$BASE/api/v1/mediamtx/config/apply"
 ```
 
 Take snapshots:
 
 ```bash
-curl -H "$VIEWER_AUTH" "$BASE/api/v1/cameras/uvc_cam1/snapshot" --output cam1.jpg
-curl -H "$VIEWER_AUTH" "$BASE/api/v1/multiview/views/multiview_1/snapshot" --output mv1.jpg
+curl --cookie "$COOKIE_JAR" "$BASE/api/v1/cameras/uvc_cam1/snapshot" --output cam1.jpg
+curl --cookie "$COOKIE_JAR" "$BASE/api/v1/multiview/views/multiview_1/snapshot" --output mv1.jpg
 ```
 
 Increase snapshot timeout at runtime (example: 8 seconds):
 
 ```bash
 curl -X PATCH "$BASE/api/v1/config/runtime" \
-  -H "$AUTH" \
+  --cookie "$COOKIE_JAR" \
   -H "Content-Type: application/json" \
   -d '{"snapshot":{"timeout_sec":8.0}}'
 ```
@@ -366,13 +359,13 @@ curl -X PATCH "$BASE/api/v1/config/runtime" \
 Get RTSP/WebRTC addresses:
 
 ```bash
-curl -H "$VIEWER_AUTH" "$BASE/api/v1/cameras/uvc_cam1/addresses"
-curl -H "$VIEWER_AUTH" "$BASE/api/v1/streams/multiview_1/addresses"
+curl --cookie "$COOKIE_JAR" "$BASE/api/v1/cameras/uvc_cam1/addresses"
+curl --cookie "$COOKIE_JAR" "$BASE/api/v1/streams/multiview_1/addresses"
 ```
 
 Recordings list/playback:
 
 ```bash
-curl -H "$VIEWER_AUTH" "$BASE/api/v1/recordings/streams"
-curl -H "$VIEWER_AUTH" "$BASE/api/v1/recordings?stream_id=uvc_cam1&limit=20"
+curl --cookie "$COOKIE_JAR" "$BASE/api/v1/recordings/streams"
+curl --cookie "$COOKIE_JAR" "$BASE/api/v1/recordings?stream_id=uvc_cam1&limit=20"
 ```

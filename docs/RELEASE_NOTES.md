@@ -17,7 +17,7 @@ Download the installer for your system from this release's Assets:
 | Ubuntu / Raspberry Pi OS (64-bit) | `FlintEye-@VERSION@-linux-amd64.deb` / `FlintEye-@VERSION@-linux-arm64.deb` |
 | Rocky Linux | `FlintEye-@VERSION@-linux-amd64.rpm` / `FlintEye-@VERSION@-linux-arm64.rpm` |
 
-Windows/macOS packages are unsigned/not notarized. Follow the per-application OS confirmation in `documentation.zip`. Choose **Quit FlintEye** before upgrading; settings and recordings are retained. Camera access, recording, playback, tray/GUI behavior and minimum-OS support still need the applicable real-device acceptance checks.
+Windows packages have no publisher signature. macOS apps have an ad-hoc integrity signature, without Developer ID signing or notarization. Follow the per-application OS confirmation in `documentation.zip`. Choose **Quit FlintEye** before upgrading; settings and recordings are retained. Camera access, recording, playback, tray/GUI behavior and minimum-OS support still need the applicable real-device acceptance checks.
 
 The archives include English/Japanese installation and acceptance guides, the exact applicable LICENSE, third-party notices and corresponding sources. `SHA256SUMS` covers every attached file except itself; `build-manifest.json` records the original tested bundle. `distribution-manifest.json` identifies this release's selected files and GHCR image digests. Public one-command installation scripts are omitted from private testing releases.
 
@@ -37,6 +37,8 @@ Use `ghcr.io/noguhiro2002/flinteye:@IMAGE_VERSION@` for `linux/amd64` or `linux/
 - The Linux quick-install command downloads and runs the pinned installer for the current user. The Actions checks and the local verification command share the same test definitions. [Installation guide](INSTALL.md) [Test inventory](testing/CI_ACCEPTANCE.md)
 
 ## Earlier previews
+
+The paths below describe the corresponding earlier previews. For current settings locations, use the [Preview 10 user guide](USER_GUIDE.md).
 
 - Multiview uses the same sources for its video and camera list. Automatic layouts place two cameras side by side. Set positions for the live and recorded composite in **Settings → Multiview → Camera layout**.
 - Live audio waits for the camera stream to publish an audio track and keeps the main video available. ONVIF checks candidate endpoints and reports connection, trust and authentication failures.

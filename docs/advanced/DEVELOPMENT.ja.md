@@ -121,10 +121,7 @@ Vite開発サーバーのプロキシ:
 
 ### 12.1.2 同一LAN上の他のデバイスからのアクセス
 
-APIとViteの開発サーバーは `127.0.0.1` に維持してください。他のデバイスからアクセスする場合は、
-WebSocketサポートを含め、`/api` および `/media` をループバックAPIへのHTTPSリバースプロキシ経由でパッケージ版Web UIを公開してください。
-サーバーの設定については、[コミュニティ配信ガイド](../DISTRIBUTION.ja.md)を参照してください。
-管理者の一時的なアクセスには、`127.0.0.1:18080` へのSSHトンネルが適しています。
+API と Vite の開発サーバーは `127.0.0.1` に維持してください。別端末からは、パッケージ版 UI の組み込み LAN HTTPS、または既存の HTTPS リバースプロキシを使用します。手順は [LAN アクセスガイド](../LAN_ACCESS.ja.md)を参照してください。一時的な管理には `127.0.0.1:18080` への SSH トンネルを利用できますが、TCP の転送では WebRTC の UDP は運べません。
 
 <a id="122-ui-features"></a>
 
@@ -140,15 +137,15 @@ WebSocketサポートを含め、`/api` および `/media` をループバック
   - `/api/v1/uvc/devices` からのUVC検出
   - UVCの提案/適用ワークフロー
   - IPカメラのドラフトテーブル
-  - 共通フィールド用のBasicタブ（`ui`、`api`、`snapshot`、`mediamtx`、`recording`、`multiview`、`cameras`）
-  - 完全な `runtime.json` 編集用のAdvancedタブ（置換 + 適用）
-  - 管理者トークンが有効でない限り非表示
+  - Basic タブは Cameras、Recording、Multiview、Runtime & access を表示
+  - Advanced タブはカメラ・メディアの詳細設定、General、MediaMTX、Logging、Integrations & API、Runtime JSON を追加
+  - サインイン済みの管理者が利用可能。発行する REST API キーの権限は別に制限
 - Live View:
   - すべてのカメラのサムネイルグリッド（スナップショット）
-  - サムネイルをクリックして単一カメラのWebRTC（iframe）を開く
+  - サムネイルをクリックして単一カメラの WebRTC を `WebRtcPlayer` と `<video>` 要素で開く
 - Multiview:
   - APIからのビューリスト
-  - 選択した単一マルチビューのWebRTC（iframe）
+  - 選択したマルチビューの WebRTC を同じ `WebRtcPlayer` で表示
 - Recordings:
   - ストリームフィルター + APIからの録画ファイルリスト
   - 保存された動画ファイルのビルトインプレーヤー

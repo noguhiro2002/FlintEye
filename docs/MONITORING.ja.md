@@ -48,7 +48,7 @@ FlintEyeは、同梱するMediaMTXの状態確認APIを、このコンピュー�
 <a id="startup-preferences"></a>
 ## 起動時の設定
 
-**Settings → Quick settings → Monitoring and startup** を開きます。これらの設定は即座に保存されます。
+**Settings → Basic → Runtime & access → Monitoring and startup** を開きます。これらの設定は即座に保存されます。
 
 - **Always resume monitoring when FlintEye starts:** デフォルトではオフです。オフの場合、明示的な停止はアプリとコンピュータの再起動をまたいで停止状態を維持します。実行中に終了すると実行中の設定が維持されるため、再オープン時に監視が再開されます。以前の停止後も監視を開始するには、このオプションをオンにします。
 - **Start FlintEye when I log in:** 現在のユーザー向けにデスクトップアプリケーションを起動します。これは監視設定とは独立しています。この設定は、ローカルのデスクトップインストールを使用している管理者のみが利用可能です。別のプロファイルやインストールに属する登録は保持されます。
@@ -65,4 +65,4 @@ FlintEyeは、同梱するMediaMTXの状態確認APIを、このコンピュー�
 
 `GET /api/v1/status/monitoring` にはビューアーアクセスが必要であり、デスクトップコントロールと同じ状態を報告します。既存の管理者専用の `POST /api/v1/control/start`、`stop`、`restart` ルートは共有コントローラーを使用します。`GET /api/v1/health` はAPIが応答していることを示しますが、カメラの受信を証明するものではありません。
 
-**Information**には、アプリケーションのバージョン、開発チャネル、バンドルされたソースコミットが表示されます。パッケージ化されたビルドメタデータのないソースチェックアウトでは、コミットが記録されていないことが明示的に表示されます。Recordings の日付は、検証済みのキャプチャ開始タイムスタンプではなく、現在のところファイルの変更時刻に由来するため、**Updated（更新日時）**というラベルが付けられています。
+**Information** にバージョン、開発チャネル、ビルド元のコミットが表示されます。ビルド情報のないソース版では、コミットが記録されていないと表示します。録画一覧の **Date basis → Recording time** は、保存完了時に登録した撮影時刻を使います。**File update time** はファイルの更新時刻を使い、**Updated** と表示します。撮影時刻がないファイルは **Recording time unavailable** と表示します。

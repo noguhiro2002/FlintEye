@@ -6,7 +6,7 @@ This procedure builds the current committed source on an Apple Silicon Mac witho
 
 The result is a local test build. Nothing is uploaded, published, installed into Applications, or changed in your existing FlintEye data. Existing GitHub installers remain unchanged. This procedure targets your own Mac; it does not establish compatibility with every supported macOS version.
 
-Build 1.2.0-preview.3 from `main`. Record the source commit printed by the build and use an isolated test profile.
+Build the current Preview 10 source from `main`. Record the source commit printed by the build and use an isolated test profile.
 
 ## 1. Prepare the Mac once
 
@@ -94,7 +94,7 @@ If a step fails, the helper stops and prints the working directory. Keep its `bu
 1. Ensure the old FlintEye is stopped. Open the newly verified DMG, replace `/Applications/FlintEye.app` with the complete app, and eject the DMG. Open the installed app. Do not delete `~/Library/Application Support/FlintEye`.
 2. Sign in with your existing administrator password. Check that your cameras and recording settings remain present. If macOS requests confirmation, use the app-specific **Privacy & Security → Open Anyway** action described in the [installation guide](INSTALL.md).
 3. Check that MediaMTX starts and **Live View** displays video. An old saved `AppTranslocation` executable path should be repaired automatically. Verify that the camera no longer cycles on and off, then record and play a short clip.
-4. Open **Settings**. The separate **Recording storage and viewer access** panel should be gone. Use **Recording** for the folder, quota and retention, **Runtime & access** for the viewer password, and **General** for update checks. Save recording changes with **Save changes**. Check `/docs` and `/redoc` for the title **FlintEye API**.
+4. Open **Settings**. The separate **Recording storage and viewer access** panel should be gone. Use **Basic → Recording** for the folder, quota and retention, **Basic → Runtime & access** for the viewer password, and **Information** for update checks. Save recording changes with **Save changes**. Check `/docs` and `/redoc` for the title **FlintEye API**.
 5. Quit and reopen the app, then check login autostart separately. Keep these physical-camera and desktop checks distinct from the automated build result.
 
 If video still fails, inspect `orchestrator.log` and `mediamtx.log` under `~/Library/Application Support/FlintEye/logs/`. A fixed startup path does not rule out a camera permission, port conflict or capture-format problem.
@@ -112,9 +112,9 @@ Check that `runtime.json` appears in the new folder and use `http://127.0.0.1:18
 
 Windows, macOS, Linux packages, Docker and source installations use the same `frontend/src` interface. The old oversized panel has been removed there for all platforms. The native bundle builder and Docker builder both rebuild that interface from source.
 
-An already downloaded installer or already built Docker image keeps its old interface. Rebuild and install the corresponding platform's package, or rebuild the container, to get the change. Reopening an old installer cannot update its embedded screen. This M1 procedure creates an ARM64 macOS DMG only; Windows and Linux builds use their own [native build instructions](RELEASING.md#local-native-build).
+Preview 10 includes these interface changes. Older downloaded installers and previously built Docker images retain their own interface; install the matching Preview 10 package or image to update. This M1 procedure produces only an ARM64 macOS DMG. For Windows and Linux, use their [native build procedures](RELEASING.md#local-native-build).
 
-The current Windows source also suppresses console windows for camera discovery, thumbnail updates and other background media processes while preserving their error output. That fix requires a newly built Windows installer; it does not change existing `.exe` downloads.
+Preview 10 also suppresses console windows for camera discovery, thumbnail updates and other background media processes on Windows while preserving their error output. Earlier installers retain their original behavior.
 
 The current source also includes [complete shutdown and uninstall fixes](STOP_AND_UNINSTALL.md). The installed-bundle test requests shutdown and checks that the API and MediaMTX listening ports close. On your Mac, additionally choose **Quit FlintEye** while a camera is streaming, verify that its indicator turns off and the icon disappears, then reopen FlintEye and check that the saved configuration still works.
 

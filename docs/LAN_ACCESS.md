@@ -2,11 +2,11 @@
 
 [日本語](LAN_ACCESS.ja.md) · [Installation](INSTALL.md) · [Monitoring](MONITORING.md)
 
-**UNDER DEVELOPMENT. These changes require a rebuilt 1.2.0 package. Public 1.1.3-preview.1 does not include them. Physical LAN and mobile acceptance is pending.**
+**UNDER DEVELOPMENT.** Built-in LAN HTTPS is included in [Preview 10](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.2.0-preview.10). Save the connection settings, restart FlintEye and trust its CA on each viewing device. Physical LAN and mobile acceptance is pending.
 
 ## Enable access
 
-On the server computer, open FlintEye and complete administrator setup in the browser. In **Settings → Runtime & access → LAN connection and certificate trust**, select **Allow access from other devices on LAN or VPN (HTTPS)**. Enter an IPv4 address assigned to the server and the permitted client networks, such as `192.168.1.0/24`. Use **This computer (HTTP)** for local access.
+On the server computer, open FlintEye and complete administrator setup in the browser. In **Settings → Basic → Runtime & access → LAN connection and certificate trust**, select **Allow access from other devices on LAN or VPN (HTTPS)**. Enter an IPv4 address assigned to the server and the permitted client networks, such as `192.168.1.0/24`. Use **This computer (HTTP)** for local access.
 
 Save the connection settings and restart FlintEye. Confirm that **Active address for other devices (HTTPS)** shows your server address. Select **Save public certificate and connection guide**. The displayed folder contains the public CA certificate, its fingerprint, an iOS/iPadOS certificate profile and these instructions. Transfer the folder over USB storage, AirDrop or an authenticated file share. Compare the CA SHA-256 fingerprint with the active fingerprint shown on the server before adding trust.
 
@@ -74,8 +74,9 @@ Use `--disable-lan` with that same profile to return to local-only operation. Th
 
 Docker Desktop's supplied bridge Compose is for its host browser only. For a LAN Docker server use Linux Engine with the host-network configuration and the explicit LAN settings above. See [Docker](DOCKER.md).
 
-### Network selection and external players (next development build)
+<a id="network-selection-and-external-players-next-development-build"></a>
+### Network selection and external players
 
-On first desktop launch, select a trusted network, or choose **This computer only**. Check the actual HTTPS address and trust guide shown after startup. On a new Linux service profile set `FLINTEYE_LAN_ADDRESS` and the comma-separated `FLINTEYE_LAN_SOURCES` in its systemd environment, then start the service. Check the address with `sudo -u flinteye /opt/flinteye/FlintEye --headless --data-dir /var/lib/flinteye --connection-info`. An assigned private or shared-address VPN IPv4 can also be selected by entering its address and the exact allowed sources in **Settings → Runtime & access** on the server.
+On first desktop launch, select a trusted network, or choose **This computer only**. Check the actual HTTPS address and trust guide shown after startup. On a new Linux service profile set `FLINTEYE_LAN_ADDRESS` and the comma-separated `FLINTEYE_LAN_SOURCES` in its systemd environment, then start the service. Check the address with `sudo -u flinteye /opt/flinteye/FlintEye --headless --data-dir /var/lib/flinteye --connection-info`. An assigned private or shared-address VPN IPv4 can also be selected by entering its address and the exact allowed sources in **Settings → Basic → Runtime & access** on the server.
 
-To view with an external player, enable **Allow external players (RTSPS)** in the same settings, save, and create the separate reader password. Copy the shown credentials before closing Settings. Restart FlintEye to apply the listener setting. On Windows, apply this installation's updated Firewall rules. If your Linux or macOS firewall filters inbound traffic, allow TCP 8322 from the selected sources only. Use the `rtsps://…:8322/…` address in **Information** and enter the reader credentials in your player. Use a player with RTSPS over TCP and CA verification. The same FlintEye certificate trust applies. For FFmpeg, enable `-tls_verify 1` and supply the public CA with `-ca_file`. The URL does not carry the credentials. Disabling RTSPS and restarting closes that listener.
+To view with an external player, open **Settings → Advanced → Runtime & access** and enable **Allow external players (RTSPS)**, save, and create the separate reader password. Copy the shown credentials before closing Settings. Restart FlintEye to apply the listener setting. On Windows, apply this installation's updated Firewall rules. If your Linux or macOS firewall filters inbound traffic, allow TCP 8322 from the selected sources only. Use the `rtsps://…:8322/…` address in **Information** and enter the reader credentials in your player. Use a player with RTSPS over TCP and CA verification. The same FlintEye certificate trust applies. For FFmpeg, enable `-tls_verify 1` and supply the public CA with `-ca_file`. The URL does not carry the credentials. Disabling RTSPS and restarting closes that listener.

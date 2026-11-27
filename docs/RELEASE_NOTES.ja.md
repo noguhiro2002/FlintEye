@@ -19,7 +19,7 @@ Application version: `@VERSION@` · Source commit: `@COMMIT@` · Build run: `@RU
 | Ubuntu / Raspberry Pi OS (64-bit) | `FlintEye-@VERSION@-linux-amd64.deb` / `FlintEye-@VERSION@-linux-arm64.deb` |
 | Rocky Linux | `FlintEye-@VERSION@-linux-amd64.rpm` / `FlintEye-@VERSION@-linux-arm64.rpm` |
 
-Windows/macOSパッケージは未署名であり、公証されていません。`documentation.zip`にあるアプリケーションごとのOS確認手順に従ってください。アップグレード前に **Quit FlintEye** でアプリを終了してください。設定と録画データは保持されます。カメラアクセス、録画、再生、トレイ/GUIの動作、および最小サポートOSについては、引き続き実際のデバイスでの受入確認が必要です。
+Windows パッケージには発行元の署名がありません。macOS アプリは整合性確認用のアドホック署名を使い、Developer ID による署名・公証はありません。`documentation.zip`にあるアプリケーションごとのOS確認手順に従ってください。アップグレード前に **Quit FlintEye** でアプリを終了してください。設定と録画データは保持されます。カメラアクセス、録画、再生、トレイ/GUIの動作、および最小サポートOSについては、引き続き実際のデバイスでの受入確認が必要です。
 
 アーカイブには、英語および日本語のインストール・受入ガイド、該当する正確なLICENSE、サードパーティの通知、および対応するソースが含まれています。`SHA256SUMS`は、それ自身を除くすべての添付ファイルを網羅しています。`build-manifest.json`には、テストされた元のバンドルが記録されています。`distribution-manifest.json`は、このリリースで選択されたファイルとGHCRイメージダイジェストを識別します。公開用のワンコマンドインストールスクリプトは、プライベートなテストリリースでは省略されています。
 
@@ -41,6 +41,8 @@ Windows/macOSパッケージは未署名であり、公証されていません�
 - Linux のクイックインストールは、公開版を指定したコマンド1行でユーザーアカウントに導入できます。GitHub Actions とプッシュ前の検証は同じテスト定義を使います。[インストール手順](INSTALL.ja.md) [テスト項目](testing/CI_ACCEPTANCE.md)
 
 ## 以前のプレビューでの変更
+
+以下の設定の場所は、各プレビュー当時のものです。現在の操作場所は [Preview 10 のユーザーガイド](USER_GUIDE.ja.md)を参照してください。
 
 - Multiview の映像と入力一覧が同じ配置を使うようにしました。自動配置では2台を横に並べ、**Settings → Multiview → Camera layout** では録画にも使う配置を指定できます。
 - IP カメラの音声を使う場合、入力の準備を待ってから音声処理を起動します。ONVIF PTZ は検出候補を確認し、応答や認証に問題があるときは画面に案内を出します。

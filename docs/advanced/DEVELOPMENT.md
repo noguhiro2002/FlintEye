@@ -111,11 +111,7 @@ The Vite dev server proxies:
 
 ### 12.1.2 Access from other devices on the same LAN
 
-Keep the API and Vite development server on `127.0.0.1`. For another device,
-publish the packaged Web UI through an HTTPS reverse proxy to the loopback API,
-including `/api` and `/media` with WebSocket support. See
-[Community distribution](../DISTRIBUTION.md) for the server setup. An SSH
-tunnel to `127.0.0.1:18080` is suitable for an administrator's temporary access.
+Keep the API and Vite development server on `127.0.0.1`. For another device, use the packaged UI with built-in LAN HTTPS or an existing HTTPS reverse proxy, as described in the [LAN access guide](../LAN_ACCESS.md). An SSH tunnel to `127.0.0.1:18080` is suitable for temporary administration; its TCP forwarding does not carry WebRTC UDP.
 
 ### 12.2 UI features
 
@@ -129,15 +125,15 @@ tunnel to `127.0.0.1:18080` is suitable for an administrator's temporary access.
   - UVC discovery from `/api/v1/uvc/devices`
   - UVC suggestion/apply workflow
   - IP camera draft table
-  - Basic tab for common fields (`ui`, `api`, `snapshot`, `mediamtx`, `recording`, `multiview`, `cameras`)
-  - Advanced tab for full `runtime.json` editing (replace + apply)
-  - hidden unless admin token is valid
+  - Basic tab: Cameras, Recording, Multiview, Runtime & access
+  - Advanced tab: additional camera/media controls, General, MediaMTX, Logging, Integrations & API, and Runtime JSON
+  - Available to signed-in administrators; issued REST API keys have a separate, limited scope
 - Live View:
   - Snapshot thumbnail grid for all cameras
-  - Click thumbnail to open single camera WebRTC (iframe)
+  - Click thumbnail to open single-camera WebRTC using `WebRtcPlayer` and a `<video>` element
 - Multiview:
   - View list from API
-  - Single selected multiview WebRTC (iframe)
+  - Selected multiview WebRTC using the same `WebRtcPlayer`
 - Recordings:
   - Stream filter + recorded file list from API
   - Built-in player for saved video files

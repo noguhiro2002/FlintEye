@@ -2,9 +2,9 @@
 
 [日本語](INSTALLATION_QA.ja.md) · [Documentation](README.md)
 
-GitHub Actions checks **install → API and browser operation → Quit → uninstall → reinstall with retained data**. For **1.2.0-preview.5**, 24 of 32 build-time cases passed all seven stages. The other eight macOS installer cases passed installation, integrity and removal. First-launch approval is required to test the installed API, browser, Quit and retained-data reinstall. Physical-device checks are pending. [Build results](https://github.com/noguhiro2002/FlintEye/actions/runs/44712701442)
+GitHub Actions checks **install → API and browser operation → Quit → uninstall → reinstall with retained data**. Preview 10 uses commit `6508296ff967bbb5505dc51936fe0c85d144a8c7`. **28 of 36 build-time cases** passed all seven stages. The eight macOS installer cases passed installation, integrity and removal and require first-launch approval before API/GUI, Quit and retained-data reinstall can be exercised. [Preview 10 build results](https://github.com/noguhiro2002/FlintEye/actions/runs/45609459603)
 
-In the first Windows ARM64 EXE case, recording completion could not be verified during Stop. The repeat with the same installer passed all seven stages. [Windows ARM64 recheck](https://github.com/noguhiro2002/FlintEye/actions/runs/44712701442/job/136250360304)
+**12 of 14 public-installation cases** passed all seven stages, including both Windows scripts, Linux DEB/RPM in system and user modes, and both GHCR architectures. The two macOS script cases require first-launch approval. Physical-device acceptance is pending. [Preview 10 public-installation results](https://github.com/noguhiro2002/FlintEye/actions/runs/45624057667)
 
 ## What the browser checks
 
@@ -57,6 +57,12 @@ Assembly requires the complete matrix and matching commit/release evidence. Miss
 Diagnose existing installers reuses archived EXE, DMG or Linux packages while the harness or installer scripts are corrected. It verifies that compiled application and native compiler inputs have not changed and records any diagnostic script overlay. These receipts are explicitly rejected by publication validation. A fresh complete Build release run is still required before publication.
 
 After an authorized public publication, **Published installation lifecycle** runs another **14 cases**. It downloads scripts/packages anonymously from real Release URLs, verifies checksums, tag and commit, and runs scripts without a local package override. It also anonymously pulls both GHCR CPU images, checks their published digest/commit and runs the Compose lifecycle. Recommend new Quick Install URLs only after reviewing these results; successful upload alone is not an online install pass. The workflow can also be dispatched for a published release matching the selected checkout.
+
+## Earlier Preview 5 results
+
+GitHub Actions checks **install → API and browser operation → Quit → uninstall → reinstall with retained data**. For **1.2.0-preview.5**, 24 of 32 build-time cases passed all seven stages. The other eight macOS installer cases passed installation, integrity and removal. First-launch approval is required to test the installed API, browser, Quit and retained-data reinstall. Physical-device checks are pending. [Build results](https://github.com/noguhiro2002/FlintEye/actions/runs/44712701442)
+
+In the first Windows ARM64 EXE case, recording completion could not be verified during Stop. The repeat with the same installer passed all seven stages. [Windows ARM64 recheck](https://github.com/noguhiro2002/FlintEye/actions/runs/44712701442/job/136250360304)
 
 The public-installation recheck used the published one-command scripts and GHCR images for **1.2.0-preview.5**. Eight of ten cases passed the full lifecycle. The macOS Intel and Apple Silicon script cases passed install, integrity and removal. They require OS approval before the installed API, browser, Quit and retained-data reinstall can be tested. [Public installation results](https://github.com/noguhiro2002/FlintEye/actions/runs/44729094734)
 

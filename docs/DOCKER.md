@@ -38,7 +38,7 @@ ssh -L 18080:127.0.0.1:18080 your-server
 ```
 
 Do not post the setup token in an issue or put a password into command arguments.
-For other LAN users, configure the [HTTPS reverse proxy](DISTRIBUTION.md#user-installation).
+For other LAN users, configure [built-in HTTPS and client certificate trust](LAN_ACCESS.md#enable-access).
 The HTTP/API/MediaMTX listeners stay on loopback; WebRTC also needs UDP 8189.
 
 ### Finish setup over HTTPS
@@ -133,4 +133,4 @@ Keep `FLINTEYE_VENDOR_CACHE` set when rebuilding with this cache. Without it, Co
 
 ## 1.2.0 development: Docker Desktop
 
-For a rebuilt 1.2.0 image, use `docker compose -f deploy/compose.desktop.yaml up -d` from the checkout; after distribution use the same release’s `compose.desktop.yaml` and its exact image tag. This separate bridge configuration publishes HTTP TCP 18080 and WebRTC UDP 8189 on the host loopback only. The container binds its HTTP listener to its own interfaces and advertises the host-loopback ICE candidate. Open http://127.0.0.1:18080 in the host browser. USB forwarding and ONVIF multicast discovery are not included; manually configure reachable IP cameras. It is not the LAN-server configuration. The existing root Compose keeps Linux host networking and its volume. Do not switch project names or erase volumes when updating. Both routes allow 60 seconds for normal recording finalization on stop; verify the stop receipt and decode the last recording, rather than treating exit 143 alone as proof of completion. [LAN server setup](LAN_ACCESS.md) · [Required acceptance](DEVELOPMENT_1_2_0.md)
+Download [compose.desktop.yaml](https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.10/compose.desktop.yaml) from Preview 10 and run `docker compose -f compose.desktop.yaml up -d`. From a checkout, use `docker compose -f deploy/compose.desktop.yaml up -d`. This bridge configuration publishes HTTP TCP 18080 and WebRTC UDP 8189 to the host loopback only. Open `http://127.0.0.1:18080` in the host browser. Configure reachable IP cameras manually; USB forwarding and ONVIF multicast discovery require another setup. The Linux host-network deployment uses the root Compose file. Both files allow up to 60 seconds for normal recording finalization on stop. Check the stop receipt and decode the final recording. [LAN server setup](LAN_ACCESS.md) · [Device acceptance](DEVELOPMENT_1_2_0.md)

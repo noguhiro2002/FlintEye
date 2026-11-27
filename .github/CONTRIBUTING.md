@@ -6,18 +6,16 @@ FlintEye is under active development. Please read the [known issues](../docs/KNO
 
 For a change, describe the user-visible problem, make a focused pull request, and explain how you checked it. Keep English and Japanese documentation consistent. Do not add generated frontend files, runtime configuration, recordings, credentials or local audit evidence. Preserve the license and third-party notices.
 
-Run the applicable checks before submitting:
+Run the [common pre-push gate](../docs/testing/CI_ACCEPTANCE.md#run-the-same-distribution-checks-before-pushing) before submitting. It uses the same groups as Distribution checks in Actions. Prepare Node.js 22, FFmpeg, FFprobe, and Docker with Compose, then run:
 
 ```sh
-python -m pip install -c packaging/constraints.txt -r requirements.txt -r tests/requirements.txt
-python -m unittest discover -s tests -v
-python packaging/check_docs.py
+python -m pip install -c packaging/constraints.txt -r requirements.txt -r tests/requirements.txt coverage==7.17.3
 npm --prefix frontend ci
-npm --prefix frontend run build
-(cd frontend && npx playwright install chromium && npm test)
+(cd frontend && npx playwright install --with-deps chromium firefox webkit)
+python tools/verify_before_push.py
 ```
 
-Use synthetic cameras/accounts in automated tests. Native installers are built by the manual **Build release** workflow; do not claim that an automated smoke test proves physical-camera or minimum-OS compatibility. Public previews require the separate [release acceptance process](../docs/RELEASING.md).
+Use synthetic cameras/accounts in automated tests. Native installers are built by **Build release** on relevant default-branch changes or a manual workflow run; do not claim that an automated smoke test proves physical-camera or minimum-OS compatibility. Public previews require the separate [release acceptance process](../docs/RELEASING.md).
 
 This is source-available software under the [Sustainable Use License with additional permission](../LICENSE). A public repository does not remove its conditions. Contributions must be yours to submit and compatible with these terms; third-party components keep their own licenses.
 

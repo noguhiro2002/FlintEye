@@ -2,7 +2,7 @@
 
 [日本語](KNOWN_ISSUES.ja.md) · [Documentation](README.md)
 
-FlintEye is **UNDER DEVELOPMENT**, not a stable release. The 2026-11-15 Terra browser review identified 26 groups of interface defects. The changes below address those groups in the current source. Installer artifacts built before these changes still contain the earlier interface; rebuild from the updated source before testing on Windows or macOS.
+The current public build is [Preview 10](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.2.0-preview.10). The 2026-11-15 browser review identified the 26 groups below; their fixes are included in this preview. Use the [current device checklist](RELEASE_CHECKLIST_1_2_0.md) for validation results and remaining checks.
 
 ## Changes from the review
 
@@ -22,11 +22,13 @@ FlintEye is **UNDER DEVELOPMENT**, not a stable release. The 2026-11-15 Terra br
 
 ## Physical-device follow-up
 
-The later Windows/Mac/Linux review adds packaging, startup and shutdown findings. See the [device QA follow-up](DEVICE_QA_FOLLOWUP.md) for fixes, evidence boundaries and the remaining acceptance checks. Windows media-child termination and macOS Developer ID/notarization remain explicit limits.
+The later Windows/Mac/Linux review adds packaging, startup and shutdown findings. See the [device QA follow-up](DEVICE_QA_FOLLOWUP.md) for fixes, evidence boundaries and the remaining acceptance checks. Physical Windows Quit/uninstall acceptance and macOS Developer ID/notarization remain pending.
 
 ## Validation and remaining limits
 
-The 1.2.0-preview.5 [installed API/browser lifecycle suite](INSTALLATION_QA.md) completed 24 cases through all seven stages in its [32-case Actions run](https://github.com/noguhiro2002/FlintEye/actions/runs/44712701442). The 8 macOS installer cases require first-launch OS approval; their API/GUI checks are not run. macOS ad-hoc integrity does not establish OS permission: the reported M1 launch refusal came from `amfid`, despite a valid executable/signature. Approved first launch and physical-device gates remain pending. Earlier published installers are unchanged.
+Preview 10 completed 28 of 36 build-time lifecycle cases and 12 of 14 public-installation cases through all seven stages. The remaining 8 build-time and 2 public macOS installer cases passed installation, integrity and removal and require first-launch approval before exercising the installed app. [Build results](https://github.com/noguhiro2002/FlintEye/actions/runs/45609459603) · [Public installation results](https://github.com/noguhiro2002/FlintEye/actions/runs/45624057667)
+
+Physical-device acceptance, including the originally affected Windows PC, macOS permissions, other LAN clients and continuous operation, remains pending. A valid ad-hoc signature verifies file integrity; macOS launch approval is recorded separately.
 
 The regression suite uses a built frontend, Chromium and synthetic API responses. It exercises delayed and failed requests, draft protection, camera switching, keyboard interaction and narrow layouts. It blocks requests to external hosts and does not connect to physical cameras. See [Contributing](../.github/CONTRIBUTING.md) for the test commands.
 
@@ -35,13 +37,15 @@ The regression suite uses a built frontend, Chromium and synthetic API responses
 - **Deployment guidance differs:** closing the browser keeps monitoring running. Desktop users pause cameras through **Stop monitoring** or exit the application through **Quit FlintEye**; Docker/systemd users stop their server service.
 - **Release status:** public development previews require a complete successful build and corresponding source/license review, with incomplete macOS first-launch and physical-device checks disclosed. Stable promotion also requires the [physical-device acceptance checklist](ACCEPTANCE.md). CI success does not complete those device checks.
 
+- **API access help:** the event-token hint still names the previous Recording settings location. Use **Settings → Advanced → Integrations & API → Event recordings**. The in-app wording needs a future application update.
+
 Report new reproducible problems through [Issues](https://github.com/noguhiro2002/FlintEye/issues). Remove credentials, setup tokens, private camera URLs and personal footage from reports. Use the [private security channel](../.github/SECURITY.md) for vulnerabilities.
 
-## Monitoring controls in 1.1.3
+## Monitoring controls
 
-The tray and WebApp share monitoring state. See [monitoring controls](MONITORING.md) and the [acceptance checklist](ACCEPTANCE.md). Native menu clicks, sleep/resume, physical USB reconnects and 24-hour operation must be recorded separately for each target computer. Automated process tests do not certify those behaviors. Timeline, bulk export, diagnostic ZIP and a fully Japanese UI remain deferred.
+The tray and WebApp share monitoring state. See [monitoring controls](MONITORING.md) and the [acceptance checklist](ACCEPTANCE.md). Native menu clicks, sleep/resume, physical USB reconnects and 24-hour operation must be recorded separately for each target computer. Automated process tests do not certify those behaviors. Timeline, bulk export and a fully Japanese UI remain deferred. Administrators can export diagnostics from **Information → Save diagnostics**.
 
 
 ## 1.2.0 source follow-up
 
-The [rev11 follow-up matrix](DEVELOPMENT_1_2_0.md) describes this source’s next development changes and pending acceptance. It supersedes the older statement that no diagnostic ZIP exists: the new export is allowlisted and excludes raw logs/configuration, camera URLs, footage and secrets. The Web UI remains English. Signing/notarization, a recording timeline and bulk export remain deferred. The owner’s WinError 2 and Error 32 are not declared recovered by source changes. Built-in LAN access and Docker Desktop require the new build and dedicated real-device acceptance; public 1.1.3 packages do not acquire these changes automatically.
+The [1.2.0 follow-up matrix](DEVELOPMENT_1_2_0.md) records the original findings and pending device acceptance. Preview 10 includes LAN HTTPS, diagnostics and camera audio. The diagnostics export excludes raw logs/configuration, camera URLs, footage and secrets. The Web UI is English. Developer ID signing/notarization, a recording timeline and bulk export remain deferred.

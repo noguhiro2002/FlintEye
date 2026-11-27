@@ -25,7 +25,7 @@ USBカメラやIPカメラの監視、ライブ映像の視聴、録画の検索
 
 ![Live View、2台のMultiview、および録画再生](images/camera-workflow.gif)
 
-*2台の実USBカメラ：**Live View → Multiview → Recordings**。現在の開発ビルドからLinux上でキャプチャしました。[MP4の視聴/ダウンロード](images/camera-workflow.mp4?raw=true)。*
+*2台の実USBカメラ：**Live View → Multiview → Recordings**。2026-11-15 に 1.1.3 のソースから Linux 上で撮影しました。[MP4の視聴/ダウンロード](images/camera-workflow.mp4?raw=true)。*
 
 <a id="quick-install"></a>
 ## クイックインストール
@@ -52,7 +52,7 @@ bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap clean
 bash -c 'set -e; script=$(mktemp); cleanup() { rm -f -- "$script"; }; trap cleanup EXIT; curl -fsSL "$1" -o "$script"; bash "$script"' -- https://github.com/noguhiro2002/FlintEye/releases/download/v1.2.0-preview.10/install.sh
 ```
 
-また、選択したリリースからスクリプトをダウンロードして内容を確認し、ローカルで実行することもできます。パッケージ版にはPython、FFmpeg、FFprobe、MediaMTXが含まれています。別途インストールする必要はありません。Windows/macOSパッケージは署名なし/公証されていません。[OS確認画面](docs/INSTALL.ja.md#unsigned-packages)をご覧ください。
+また、選択したリリースからスクリプトをダウンロードして内容を確認し、ローカルで実行することもできます。パッケージ版にはPython、FFmpeg、FFprobe、MediaMTXが含まれています。別途インストールする必要はありません。Windows パッケージには発行元の署名がありません。macOS アプリは整合性確認用のアドホック署名を使い、Developer ID による署名・公証はありません。[OS確認画面](docs/INSTALL.ja.md#unsigned-packages)をご覧ください。
 
 <a id="macos-trust"></a>
 **macOSでの初回起動:** このコミュニティプレビューを開こうとした後、要求があれば **システム設定 → プライバシーとセキュリティ → このまま開く → 開く** を使用してください。このアプリはアドホック署名されており、公証されていません。インストールしただけでは実行権限が付与されません。[macOSでファイルが見つからないと言われた場合 →](docs/INSTALL.ja.md#unsigned-packages)
@@ -103,11 +103,15 @@ pipアプリケーションパッケージは最初のリリースには含ま�
 
 1. **FlintEyeが表示した接続先を開きます。** インストールした端末ではローカルのアドレスを使えます。初回起動時に信頼するネットワークを選んでください。FlintEyeは準備ができた時点でHTTPSのアドレスを表示します。別端末では[証明書を信頼](docs/LAN_ACCESS.ja.md)してから開きます。
 2. **管理者を作成します。** デスクトップ版では、FlintEyeが開いたブラウザでパスワードを設定します。閉じた場合はアプリのメニューから **Open FlintEye** を選ぶと再開できます。Dockerやヘッドレスサーバーでは、サーバーの `setup-token` ファイルにある使い捨てコードを入力します。作成後は `admin` でログインします。
-3. **Settingsでカメラを追加します。** 入門ガイドに沿って、USBカメラやIPカメラを登録します。
+3. **Settings → Basic → Cameras でカメラを追加します。** 入門ガイドに沿って、USBカメラやIPカメラを登録します。案内を開き直す場合は **Information → Getting started** を使います。
 4. **Live Viewを開きます。** 必要に応じて録画を有効にし、**Recordings**で録画した映像を再生します。
 
+[Preview 10 はじめかた（画像付き）](docs/PREVIEW_10_FIRST_RUN.ja.md)
+
+Settings は **Basic** から開き、カメラ、録画、Multiview、接続の設定を表示します。詳しい設定や、イベント録画・APIキーを扱う **Integrations & API** は **Advanced** にあります。右上のテーマアイコンから **System**（システムに合わせる）、**Light**、**Dark** を選べます。
+
 <details>
-<summary>5ステップの初回実行ガイド</summary>
+<summary>以前の5ステップツアー — 1.1.3</summary>
 
 ![FlintEyeの5ステップの英語初回実行ガイド](images/getting-started.gif)
 

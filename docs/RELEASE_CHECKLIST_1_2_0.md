@@ -146,9 +146,9 @@ These checks happen after the selected preview or stable publication; they are n
 - [ ] GitHub Release downloads, sources/licenses, guides, Compose and checksums are accessible. The exact GHCR version pulls on amd64/arm64 and matches the recorded image identities; repeat the documented update/rollback route.
 - [ ] Preview status is explicit, no stable/latest promotion occurred, and the older version's assets/tags remain unchanged.
 
-## Additional checks for the next development build
+## Additional checks for Preview 10
 
-Record the actual candidate commit and package checksums above before applying these checks. The earlier 1.2.0 build does not attest to these changes.
+Use the Preview 10 commit and package checksums recorded above. Record each physical-device result separately from the automated build and installation checks.
 
 - [ ] Start from a clean profile using the one-command installer, native package, Docker Compose and systemd. Confirm that the printed address works after certificate trust on another device and that the browser setup accepts the owner’s one-use code. Confirm local recovery when there is no eligible LAN or firewall permission is refused.
 - [ ] Use a separate physical client and an RTSPS-capable player. Confirm a verified certificate and authenticated read for the intended camera. Try a wrong password, an unapproved source and publish access. Confirm the relay closes when disabled.

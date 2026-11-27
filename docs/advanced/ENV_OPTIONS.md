@@ -7,7 +7,7 @@
 > These are low-level source/development commands, run from the repository root.
 > Keep listeners on loopback; LAN access uses the authenticated HTTPS proxy described in the [distribution guide](../DISTRIBUTION.md).
 
-This document lists the environment variables currently read by the codebase.
+This reference covers the runtime and worker environment variables read by the modules below. Packaged launcher options for LAN access and certificates are documented in the [LAN access guide](../LAN_ACCESS.md); it is a separate configuration layer.
 It is based on:
 
 - `flinteye_app/orchestrator_store.py`
@@ -38,7 +38,7 @@ It is based on:
 - `UVC_LATENCY_PRESET`
   - `flinteye_app/workers/uvc_to_rtsp.py` currently accepts only `low`
   - To get normal/default behavior, leave it unset
-  - `normal` is mentioned in README, but the current UVC parser does not accept it
+  - The UVC parser does not accept `normal`; leave the variable unset for default behavior
 
 ## API / auth
 
@@ -294,7 +294,7 @@ Examples:
 - `MTX_IP_<TOKEN>_ENABLED`
   - Boolean
 
-The Settings > IP Cameras screen adds per-camera runtime settings that are stored in
+The **Settings → Advanced → Cameras → IP Cameras** controls add per-camera runtime settings stored in
 `runtime.json` rather than environment variables:
 
 - `timestamp_mode`

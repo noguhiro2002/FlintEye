@@ -14,7 +14,7 @@
 <a id="rest-api-keys"></a>
 ## REST API キー
 
-ローカル認証の管理者でサインインし、**Settings → Runtime & access → API access** を開きます。連携先の名前と権限を指定し、キーを発行します。発行時に表示されるキーをコピーして、連携先で保管してください。Settings で発行済みの名前、権限、失効状態を確認できます。キーをなくした場合は失効させ、再発行します。
+ローカル認証の管理者でサインインし、**Settings → Advanced → Integrations & API → API access** を開きます。連携先の名前と権限を指定し、キーを発行します。発行時に表示されるキーをコピーして、連携先で保管してください。Settings で発行済みの名前、権限、失効状態を確認できます。キーをなくした場合は失効させ、再発行します。
 
 どちらの権限でも、`/api/v1` 以下の次のパスに GET でアクセスできます。
 
@@ -33,7 +33,7 @@ curl --fail-with-body \
 <a id="equipment-recording-events"></a>
 ## 設備の異常を受け付けて直前の映像を保存する
 
-[Settings → Recording](../USER_GUIDE.ja.md#event-recordings) でイベント録画を有効にし、専用トークンを取得します。FlintEye を動かしている端末からはローカルの HTTP、別端末からは証明書を信頼済みの LAN HTTPS アドレスを使います。
+[Settings → Advanced → Integrations & API → Event recordings](../USER_GUIDE.ja.md#event-recordings) でイベント録画を有効にし、専用トークンを取得します。FlintEye を動かしている端末からはローカルの HTTP、別端末からは証明書を信頼済みの LAN HTTPS アドレスを使います。
 
 ```bash
 curl --fail-with-body http://127.0.0.1:18080/api/v1/recording-events \
@@ -73,9 +73,7 @@ HTTP 202 が返ったら、応答の ID を使い `GET /api/v1/recording-events/
 ### 11.1 依存関係のインストール
 
 ```bash
-python3 -m pip install fastapi uvicorn
-# or
-python3 -m pip install -r requirements.txt
+python3 -m pip install -c packaging/constraints.txt -r requirements.txt
 ```
 
 <a id="112-required-env-keys"></a>
@@ -174,6 +172,12 @@ python3 -m tools.manage_auth init-local --runtime-file runtime.json
 - `API_VIEWER_AUTH_REQUIRED=true|false`
 - `API_BEARER_TOKEN`（レガシーフォールバック）
 
+認証なしで利用できるエンドポイントには `GET /api/v1/health` と `GET /api/v1/status` があります。
+
+既定の `AUTH_PROVIDER=local` では、サインイン済みのセッションで保護された操作を利用します。匿名の閲覧を許可するかは `AUTH_VIEWER_AUTH_REQUIRED` で指定します。設定変更には管理者セッションが必要です。
+
+[REST API キー](#rest-api-keys)は、上記の監視操作と情報取得の範囲で使います。機器のイベントには専用トークンを使います。`legacy_token` モードでは `API_ADMIN_TOKEN` と `API_VIEWER_TOKEN` を Bearer 認証に使い、閲覧の認証は `API_VIEWER_AUTH_REQUIRED` で指定します。
+
 <a id="115-logging"></a>
 
 ### 11.5 ロギング
@@ -195,24 +199,10 @@ python3 -m tools.manage_auth init-local --runtime-file runtime.json
 - `UVC_LOGLEVEL=error`
 - `MV_LOGLEVEL=error`
 
-パブリック（トークン不要）エンドポイント:
-
-- `GET /api/v1/health`
-- `GET /api/v1/status`
-
-Viewer エンドポイント:
-
-- 監視／表示／スナップショット／録画 API
-- `API_VIEWER_AUTH_REQUIRED=false` の場合のみトークンは任意です
-
-Admin エンドポイント:
-
-- 設定／制御／書き込み API
-- 設定されている場合、常に `API_ADMIN_TOKEN` が必要です
-
 <a id="115-api-documents-swagger--redoc"></a>
 
-### 11.5 API ドキュメント（Swagger / ReDoc）
+<a id="115-api-ドキュメントswagger--redoc"></a>
+### 11.6 API ドキュメント（Swagger / ReDoc）
 
 API サーバーが稼働している場合:
 
@@ -220,15 +210,14 @@ API サーバーが稼働している場合:
 - ReDoc: `http://127.0.0.1:18080/redoc`
 - OpenAPI JSON: `http://127.0.0.1:18080/openapi.json`
 
-認証が有効な場合は、Swagger UI で `Authorize` をクリックし、以下を入力してください。
-
-- `Bearer <API_ADMIN_TOKEN>`（または閲覧専用エンドポイント用の Viewer トークン）
+ローカル認証では、同じブラウザーで FlintEye にサインインしてから Swagger UI を開きます。セッション Cookie を使って操作できます。発行した REST API キーは、その権限で許された操作に使えます。`legacy_token` モードでは **Authorize** に設定済みの管理者または閲覧者の Bearer トークンを入力します。
 
 <a id="116-main-endpoints"></a>
 
-### 11.6 主なエンドポイント
+<a id="116-主なエンドポイント"></a>
+### 11.7 主なエンドポイント
 
-- `camera_id` は MediaMTX のパス名と完全に一致します（例: `uvc_cam1`, `ipcam2`）
+- `camera_id` には `GET /api/v1/cameras` の保存済み `id` を使います。設定変更後は MediaMTX の `path` と異なる場合があります。
 - `GET /api/v1/health`
 - `GET /api/v1/status`
 - `GET /api/v1/status/processes`
@@ -273,14 +262,18 @@ API サーバーが稼働している場合:
 
 <a id="117-quick-api-examples"></a>
 
-### 11.7 クイック API 例
+<a id="117-クイック-api-例"></a>
+### 11.8 クイック API 例
+
+既定のローカル認証を使う例です。プロンプトで管理者パスワードを入力します。Cookie は非公開の一時ファイルに保存し、シェル終了時に削除します。閲覧者の操作を確認する場合は、`admin` を設定済みの閲覧者名に置き換えます。`uvc_cam1` などの ID は、カメラ一覧で確認した値に置き換えてください。
 
 ```bash
-ADMIN_TOKEN="change-this-token"
-VIEWER_TOKEN="change-this-viewer-token"
 BASE="http://127.0.0.1:18080"
-ADMIN_AUTH="Authorization: Bearer ${ADMIN_TOKEN}"
-VIEWER_AUTH="Authorization: Bearer ${VIEWER_TOKEN}"
+COOKIE_JAR="$(mktemp)"
+trap 'rm -f -- "$COOKIE_JAR"' EXIT
+python3 -c 'import getpass, json; print(json.dumps({"username": "admin", "password": getpass.getpass("FlintEye password: ")}))' |
+  curl --fail-with-body --cookie-jar "$COOKIE_JAR" \
+    -H "Content-Type: application/json" --data-binary @- "$BASE/api/v1/auth/login"
 ```
 
 ヘルス／ステータス:
@@ -293,14 +286,14 @@ curl "$BASE/api/v1/status"
 検出された UVC カメラの一覧取得:
 
 ```bash
-curl -H "$ADMIN_AUTH" "$BASE/api/v1/uvc/devices"
+curl --cookie "$COOKIE_JAR" "$BASE/api/v1/uvc/devices"
 ```
 
 1 台の UVC デバイスに対する推奨設定の取得:
 
 ```bash
 curl -X POST "$BASE/api/v1/uvc/devices/<device_id>/suggest" \
-  -H "$AUTH" \
+  --cookie "$COOKIE_JAR" \
   -H "Content-Type: application/json" \
   -d '{"profile":"cam3","path":"uvc_cam3","camera_name":"UVC-CAM-03","use_device_index":false}'
 ```
@@ -309,7 +302,7 @@ curl -X POST "$BASE/api/v1/uvc/devices/<device_id>/suggest" \
 
 ```bash
 curl -X POST "$BASE/api/v1/uvc/devices/<device_id>/apply" \
-  -H "$AUTH" \
+  --cookie "$COOKIE_JAR" \
   -H "Content-Type: application/json" \
   -d '{"profile":"cam3","path":"uvc_cam3","camera_name":"UVC-CAM-03"}'
 ```
@@ -317,22 +310,22 @@ curl -X POST "$BASE/api/v1/uvc/devices/<device_id>/apply" \
 1 台のカメラの無効化／有効化:
 
 ```bash
-curl -X POST -H "$ADMIN_AUTH" "$BASE/api/v1/cameras/uvc_cam1/disable"
-curl -X POST -H "$ADMIN_AUTH" "$BASE/api/v1/cameras/uvc_cam1/enable"
+curl -X POST --cookie "$COOKIE_JAR" "$BASE/api/v1/cameras/uvc_cam1/disable"
+curl -X POST --cookie "$COOKIE_JAR" "$BASE/api/v1/cameras/uvc_cam1/enable"
 ```
 
 マルチビューの無効化／有効化:
 
 ```bash
-curl -X POST -H "$ADMIN_AUTH" "$BASE/api/v1/multiview/disable"
-curl -X POST -H "$ADMIN_AUTH" "$BASE/api/v1/multiview/enable"
+curl -X POST --cookie "$COOKIE_JAR" "$BASE/api/v1/multiview/disable"
+curl -X POST --cookie "$COOKIE_JAR" "$BASE/api/v1/multiview/enable"
 ```
 
 ランタイム設定のパッチ適用（例: マルチビューのビットレート変更）:
 
 ```bash
 curl -X PATCH "$BASE/api/v1/config/runtime" \
-  -H "$AUTH" \
+  --cookie "$COOKIE_JAR" \
   -H "Content-Type: application/json" \
   -d '{"multiview":{"quality":{"bitrate":"2M","maxrate":"2M","bufsize":"2M"}}}'
 ```
@@ -341,14 +334,14 @@ MediaMTX 管理設定のパッチ適用（例: API リスナーを有効化し�
 
 ```bash
 curl -X PATCH "$BASE/api/v1/mediamtx/config" \
-  -H "$AUTH" \
+  --cookie "$COOKIE_JAR" \
   -H "Content-Type: application/json" \
   -d '{
     "managed": {
       "enabled": true,
       "global": {
         "api": true,
-        "apiAddress": ":9997"
+        "apiAddress": "127.0.0.1:9997"
       },
       "paths": {
         "ipcam1": {
@@ -368,22 +361,22 @@ curl -X PATCH "$BASE/api/v1/mediamtx/config" \
 現在の MediaMTX 設定状態の取得／適用:
 
 ```bash
-curl -H "$ADMIN_AUTH" "$BASE/api/v1/mediamtx/config"
-curl -X POST -H "$ADMIN_AUTH" "$BASE/api/v1/mediamtx/config/apply"
+curl --cookie "$COOKIE_JAR" "$BASE/api/v1/mediamtx/config"
+curl -X POST --cookie "$COOKIE_JAR" "$BASE/api/v1/mediamtx/config/apply"
 ```
 
 スナップショットの取得:
 
 ```bash
-curl -H "$VIEWER_AUTH" "$BASE/api/v1/cameras/uvc_cam1/snapshot" --output cam1.jpg
-curl -H "$VIEWER_AUTH" "$BASE/api/v1/multiview/views/multiview_1/snapshot" --output mv1.jpg
+curl --cookie "$COOKIE_JAR" "$BASE/api/v1/cameras/uvc_cam1/snapshot" --output cam1.jpg
+curl --cookie "$COOKIE_JAR" "$BASE/api/v1/multiview/views/multiview_1/snapshot" --output mv1.jpg
 ```
 
 実行時にスナップショットのタイムアウトを延長（例: 8 秒）:
 
 ```bash
 curl -X PATCH "$BASE/api/v1/config/runtime" \
-  -H "$AUTH" \
+  --cookie "$COOKIE_JAR" \
   -H "Content-Type: application/json" \
   -d '{"snapshot":{"timeout_sec":8.0}}'
 ```
@@ -391,13 +384,13 @@ curl -X PATCH "$BASE/api/v1/config/runtime" \
 RTSP/WebRTC アドレスの取得:
 
 ```bash
-curl -H "$VIEWER_AUTH" "$BASE/api/v1/cameras/uvc_cam1/addresses"
-curl -H "$VIEWER_AUTH" "$BASE/api/v1/streams/multiview_1/addresses"
+curl --cookie "$COOKIE_JAR" "$BASE/api/v1/cameras/uvc_cam1/addresses"
+curl --cookie "$COOKIE_JAR" "$BASE/api/v1/streams/multiview_1/addresses"
 ```
 
 録画の一覧取得／再生:
 
 ```bash
-curl -H "$VIEWER_AUTH" "$BASE/api/v1/recordings/streams"
-curl -H "$VIEWER_AUTH" "$BASE/api/v1/recordings?stream_id=uvc_cam1&limit=20"
+curl --cookie "$COOKIE_JAR" "$BASE/api/v1/recordings/streams"
+curl --cookie "$COOKIE_JAR" "$BASE/api/v1/recordings?stream_id=uvc_cam1&limit=20"
 ```

@@ -30,6 +30,8 @@
 - [M1 / Apple Silicon Mac でのローカル DMG のビルドと検証](LOCAL_MACOS_BUILD.ja.md)
 - [ご自身のコンピュータでの最終チェック](ACCEPTANCE.ja.md)
 - [自動インストール、実際の API/GUI、アンインストールと再インストールのチェック](INSTALLATION_QA.ja.md)
+- [GitHub Actions とプッシュ前のテスト項目](testing/CI_ACCEPTANCE.md)
+- [Preview 10 公開後の文章監査](testing/PREVIEW_10_DOCUMENTATION_AUDIT.ja.md)
 - [Preview 10 改修計画書](testing/PREVIEW_10_PLAN.ja.md)
 - [Preview 8 の検証で見つかった問題と Preview 9 の修正](testing/PREVIEW_8_FINDINGS.ja.md)
 - [安定版配布 1.2.0 前の必須実機チェック](RELEASE_CHECKLIST_1_2_0.ja.md)

@@ -2,12 +2,13 @@
 
 [日本語](DEVELOPMENT_1_2_0.ja.md) · [Acceptance](ACCEPTANCE.md) · [Required device checklist](RELEASE_CHECKLIST_1_2_0.md) · [LAN access](LAN_ACCESS.md)
 
-**UNDER DEVELOPMENT. Public 1.1.3-preview.1 is unchanged. This source is not a claim that the reported Windows failures have recovered on the owner's machine.**
+**UNDER DEVELOPMENT. [Preview 10 is public](https://github.com/noguhiro2002/FlintEye/releases/tag/v1.2.0-preview.10).** Its application commit is `6508296ff967bbb5505dc51936fe0c85d144a8c7`. Use the [device checklist](RELEASE_CHECKLIST_1_2_0.md) for current results and remaining acceptance. The original Windows startup/removal symptoms still require retesting on the affected computer.
 
-Baseline: application build `25718ed3f06833a1f291992753b4f0538d7dc939`, published tag `v1.1.3-preview.1`; implementation starts from main `8e13378`. Input: the owner's QA rev11 dated 2026-11-15 and macOS installer follow-up.
-Use the 1.2.0-preview.10 candidate for the latest fixes. Download the appropriate OS and CPU artifact from the [candidate build](https://github.com/noguhiro2002/FlintEye/actions/runs/45609459603) and record the tested commit and results in the [device checklist](RELEASE_CHECKLIST_1_2_0.md).
+## Original development baseline
 
-## Preview.3: macOS installation follow-up
+Development began from main `8e13378`, following application build `25718ed3f06833a1f291992753b4f0538d7dc939` and tag `v1.1.3-preview.1`. The findings came from the owner’s QA rev11 dated 2026-11-15 and the macOS installer follow-up. The following fixes began in Preview 3 and remain in Preview 10.
+
+## macOS installation follow-up included since Preview 3
 
 - The public one-command URLs install 1.2.0-preview.10. README also links the matching Actions packages for artifact-based testing. Each OS artifact includes its own version-pinned scripts, `validation-build.json` and `SHA256SUMS`, so testing no longer requires the multi-GB complete release bundle.
 - macOS camera discovery excludes `Capture screen` before querying modes. Worker startup resolves a saved index to an available camera name and rejects displays and disconnected selections before capture. Capability queries use names to avoid a camera-unplug race selecting a display. This targets the repeated Screen Recording request; native permission behavior still needs the owner's Mac retest.
@@ -21,7 +22,7 @@ Use the 1.2.0-preview.10 candidate for the latest fixes. Download the appropriat
 | 12–13, 16–17 | Media executable/config/cwd preflight, bundled path repair and protected upgrade backups. Compare the same installer and one-command path with clean, retained and incomplete profiles. Owner WinError 2 is **unresolved pending reproduction and retest**. Camera exit 4294967291 remains a separate input-device investigation. |
 | 14–15 | Windows removal entry adds per-installation exclusion, graceful stop and file-lock diagnostics before Inno opens its uninstall data. No forced process termination by default. Owner Error 32 is **unresolved pending Windows retest**. |
 | 19 | Coalesced thumbnails and a bounded capture pool; stale-image timestamp/error remains separate from camera health. Long-GOP and concurrent live/multiview tests are required. |
-| 20–23, 28–30 | Opt-in built-in LAN HTTPS, source restrictions, private CA export, token ownership and explicit firewall action. Desktop/mobile trust, daily operations and restart must pass on separate physical clients before public 1.2.0 distribution. |
+| 20–23, 28–30 | Opt-in built-in LAN HTTPS, source restrictions, private CA export, token ownership and explicit firewall action. Desktop/mobile trust, daily operations and restart must pass on separate physical clients before stable 1.2.0 distribution. |
 | 24 | Inline viewer password feedback and backend bounds. No real user password is collected. |
 | 25 | Symbol-only icon assets across native packages, tray, launchers and favicon. OS icon-cache/high-DPI/theme checks are pending. |
 | 26–27 | Linux preflight before download, desktop versus SSH Quick Usage, token location, tunnel limits, normal shutdown and systemd instructions. OS install/remove acceptance remains separate. |
@@ -40,7 +41,7 @@ Use dedicated profiles, recording folders and container volumes. Preserve existi
 
 ## Build, review and rollback
 
-Run the Python suite, frontend build/browser suites, documentation checks and exact native-package/container smoke tests. Keep secrets and footage outside committed evidence. A source-only unit test or an emulator does not replace required hardware acceptance. Terra reviews the changed authentication and lifecycle boundaries.
+Run the Python suite, frontend build/browser suites, documentation checks and exact native-package/container smoke tests. Keep secrets and footage outside committed evidence. A source-only unit test or an emulator does not replace required hardware acceptance. Review changed authentication and lifecycle boundaries alongside those checks.
 
 Before migration, runtime/monitoring backups are stored privately under `backup-before-1.2.0` in the profile. They contain sensitive configuration: never attach them to issues. Stop the new application before restoring a matching old backup and reinstalling the pinned 1.1.3 package. Preserve existing recordings and inventory. Remove the new Windows firewall rules and obsolete client trust if rolling back LAN access. No automatic downgrade or data erasure is performed.
 
@@ -62,7 +63,7 @@ macOS or Linux, from the extracted bundle directory:
 bash public/install.sh --version 1.2.0-preview.10 --package-directory public
 ```
 
-Compare this installation with the standalone installer from the same folder and verify both SHA-256 values match. Keep the version and source commit fixed. Public download commands pin the matching 1.2.0-preview.10 development release; stable promotion waits for physical acceptance. To test the container before GHCR publication, load the matching `containers/container-amd64.tar.gz` or `container-arm64.tar.gz`, then set `FLINTEYE_IMAGE=flinteye:release-amd64` or `flinteye:release-arm64` before using Compose. Do not mistake a downloaded Compose file's future GHCR tag for an already published image.
+Compare this installation with the standalone installer from the same folder and verify both SHA-256 values match. Keep the version and source commit fixed. Public download commands pin the matching 1.2.0-preview.10 development release; stable promotion waits for physical acceptance. To test the container before GHCR publication, load the matching `containers/container-amd64.tar.gz` or `container-arm64.tar.gz`, then set `FLINTEYE_IMAGE=flinteye:release-amd64` or `flinteye:release-arm64` before using Compose. The Preview 10 GHCR image is already published. Future candidate images must be loaded locally until their publication succeeds.
 
 ## Archived automated verification before the preview.2 changes
 

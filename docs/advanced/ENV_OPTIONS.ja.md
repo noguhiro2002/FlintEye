@@ -11,7 +11,7 @@
 > 単体 MediaMTX の保持期間およびサービス設定は、FlintEye 管理下のストレージには適用されません。
 > リスナーはループバックに維持してください。LAN アクセスには、[配布ガイド](../DISTRIBUTION.ja.md)で説明されている認証付き HTTPS プロキシを使用します。
 
-このドキュメントでは、コードベースが現在読み取る環境変数の一覧を示します。
+以下のモジュールが読むランタイム・ワーカー用の環境変数を記載します。パッケージ版ランチャーの LAN アクセス・証明書の設定は別の層で扱い、[LAN アクセスガイド](../LAN_ACCESS.ja.md)で説明しています。
 ベースとなるファイル：
 
 - `flinteye_app/orchestrator_store.py`
@@ -46,7 +46,7 @@
 - `UVC_LATENCY_PRESET`
   - `flinteye_app/workers/uvc_to_rtsp.py` は現在 `low` のみを受け付けます
   - 通常/デフォルトの動作にするには、未設定のままにしてください
-  - `normal` は README に記載されていますが、現在の UVC パーサーでは受け付けられません
+  - UVC パーサーは `normal` を受け付けません。通常の動作では未設定にしてください
 
 <a id="api--auth"></a>
 
@@ -314,7 +314,7 @@
 - `MTX_IP_<TOKEN>_ENABLED`
   - ブール値
 
-Settings > IP Cameras 画面では、環境変数ではなく `runtime.json` に保存されるカメラごとのランタイム設定を追加できます：
+**Settings → Advanced → Cameras → IP Cameras** では、環境変数とは別に、カメラごとのランタイム設定を `runtime.json` に保存します。
 
 - `timestamp_mode`
   - `auto`: ライブRTSPタイムスタンプのリレー開始時の計測、および `source`、`wallclock`、`cfr` の選択を行う

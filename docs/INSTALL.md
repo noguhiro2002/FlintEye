@@ -35,7 +35,7 @@ If the one-command script reports `curl (23)` during download, check the tempora
 
 ### Screen Recording requests in older previews
 
-FlintEye does not record your desktop. Older camera discovery included FFmpeg's `Capture screen` inputs and opened them while querying camera modes, causing repeated **Screen Recording** permission dialogs. In **1.2.0-preview.3**, screen inputs are excluded before probing. Saved camera indices are checked before capture too, so a removed camera cannot make its old index select the screen. OBS virtual cameras remain supported as camera inputs. You do not need to grant Screen Recording permission to FlintEye; microphone access is separate and is used only when camera audio is enabled. Confirm absence of repeated prompts on your Mac as part of physical-device QA.
+FlintEye does not record your desktop. Older camera discovery included FFmpeg's `Capture screen` inputs and opened them while querying camera modes, causing repeated **Screen Recording** permission dialogs. Since **1.2.0-preview.3**, screen inputs have been excluded before probing. Saved camera indices are checked before capture too, so a removed camera cannot make its old index select the screen. OBS virtual cameras remain supported as camera inputs. You do not need to grant Screen Recording permission to FlintEye; microphone access is separate and is used only when camera audio is enabled. Confirm absence of repeated prompts on your Mac as part of physical-device QA.
 
 Desktop packages include **MediaMTX, FFmpeg and FFprobe**. No separate Homebrew or MediaMTX installation is required. In the macOS app, the executables are in `FlintEye.app/Contents/Frameworks/bin/`. Earlier private ARM64 builds were inspected and contained all three.
 
@@ -44,7 +44,7 @@ Earlier private 1.1.0/1.1.1 macOS installers (not public downloads) can retain a
 For these existing installers:
 
 1. Quit FlintEye using its menu-bar icon. Place the complete `FlintEye.app` in `/Applications`, eject the DMG, and open the installed app. Closing the browser alone does not stop FlintEye.
-2. Sign in as administrator and open **Settings → Advanced**. In the runtime JSON, change only the first item of `mediamtx.direct.command` to `/Applications/FlintEye.app/Contents/Frameworks/bin/mediamtx`. Keep the second item (your `mediamtx.yml` path) and all other settings unchanged. For a personal Applications folder, use the full `/Users/YOUR_NAME/Applications/...` path, not `~`.
+2. Sign in as administrator and open **Settings → Advanced → Runtime JSON**. In the runtime JSON, change only the first item of `mediamtx.direct.command` to `/Applications/FlintEye.app/Contents/Frameworks/bin/mediamtx`. Keep the second item (your `mediamtx.yml` path) and all other settings unchanged. For a personal Applications folder, use the full `/Users/YOUR_NAME/Applications/...` path, not `~`.
 3. Click **Replace Runtime & Restart**. Check the MediaMTX status and retry Live View, recording and playback. Keep the app at that location while using this workaround.
 
 Do not delete `runtime.json` or the data directory to recover: they contain your accounts and settings. Logs are under `~/Library/Application Support/FlintEye/logs/` unless you chose another data directory. If startup still fails, inspect `orchestrator.log` and, if present, `mediamtx.log` for the new error.
@@ -53,7 +53,8 @@ The source fix resolves the bundled executable from the current app location on 
 
 To test the updated source on your own M1 Mac without GitHub Actions, follow the [local DMG build guide](LOCAL_MACOS_BUILD.md). It includes the startup repair and consolidated Settings interface, and keeps existing release downloads unchanged.
 
-## Unsigned packages
+<a id="unsigned-packages"></a>
+## Publisher trust and first-launch approval
 
 Initial Windows packages have no publisher signature. Check that you downloaded the expected package from this repository.
 If Windows permits it, use the per-application confirmation presented by SmartScreen.
